@@ -106,6 +106,96 @@
 #include <efifs.h>
 #include <efidevp.h>
 
+/* ==== СВОИ memcpy/memset/memcmp — ОБЯЗАТЕЛЬНО, НЕ УДАЛЯТЬ ====
+ *
+ * В ЭТОЙ СБОРКЕ gnu-efi функции CopyMem/SetMem/CompareMem НЕ копируют
+ * память. legacy.h превращает CopyMem в макрос на CopyMem_1, а тот —
+ * на RuntimeServices-обёртку RtCopyMem. Дизассемблирование готового
+ * unlock_v3n.so:
+ *
+ *   <CopyMem_1>:  jmp <RtCopyMem>
+ *   <RtCopyMem>:  movzbl (%rdx,%rax,1),%r9d   ; src  читается по rdx
+ *                 mov    %r9b,(%rcx,%rax,1)   ; dst  пишется  по rcx
+ *                 cmp    %rax,%r8              ; длина берётся из r8
+ *
+ * То есть аргументы читаются как rcx/rdx/r8 — это соглашение Microsoft x64,
+ * тогда как программа собрана под System V (rdi/rsi/rdx). Функция получает
+ * мусор: чаще всего len оказывается 0/мусором и она выходит сразу, ничего не
+ * сделав. SetMem сломана так же (значение берёт из r8d, пишет в rcx).
+ *
+ * ПОСЛЕДСТВИЕ БЫЛО КАТАСТРОФИЧЕСКИМ: ни одна загрузка блоба в приложении не
+ * работала. Ни V67, ни FWSEC, ни GspRmBoot, ни radix-образ, ни патч
+ * подписи, ни таблицы страниц. Доказательство из лога на реальном железе:
+ *
+ *   MEM   fwsec addr=0xC1051000 W/R ок (плохих 0)
+ *   MEM   fwsec CRC32 блоб=0xE735DD44 буфер=0x648A9C97 РАСХОЖДЕНИЕ
+ *   MEM   fwsec слова: 0x0000:EC547D23/0F0F0F0F  0x1D40:1B7EF0D4/00000000
+ *
+ * Прямые обращения (*(volatile UINT32*)...) в буфер попадали, а CopyMem —
+ * нет. Отсюда FWSEC стартовал с нулями и всегда давал dbg=0x00780009.
+ *
+ * Ниже определяем настоящие функции и переопределяем имена макросами.
+ * Файл компилируется один (build.sh собирает только unlock_v2.c), поэтому
+ * переопределение действует на все вызовы без исключения. */
+static VOID *app_memcpy(VOID *d, CONST VOID *s, UINTN n)
+{
+    UINT8 *dd = (UINT8 *)d;
+    CONST UINT8 *ss = (CONST UINT8 *)s;
+    UINTN i;
+    if (d == NULL || s == NULL || n == 0) return d;
+    if (dd < ss) {                       /* вперёд — безопасно при перехлёсте */
+        for (i = 0; i < n; i++) dd[i] = ss[i];
+    } else if (dd > ss) {
+        for (i = n; i > 0; i--) dd[i - 1] = ss[i - 1];
+    }
+    return d;
+}
+
+static VOID *app_memset(VOID *d, UINT8 v, UINTN n)
+{
+    UINT8 *dd = (UINT8 *)d;
+    UINTN i;
+    if (d == NULL) return d;
+    for (i = 0; i < n; i++) dd[i] = v;
+    return d;
+}
+
+static INTN app_memcmp(CONST VOID *a, CONST VOID *b, UINTN n)
+{
+    CONST UINT8 *aa = (CONST UINT8 *)a, *bb = (CONST UINT8 *)b;
+    UINTN i;
+    if (aa == NULL || bb == NULL) return (aa == bb) ? 0 : (aa ? 1 : -1);
+    for (i = 0; i < n; i++)
+        if (aa[i] != bb[i]) return (INTN)aa[i] - (INTN)bb[i];
+    return 0;
+}
+
+#undef  CopyMem
+#undef  SetMem
+#undef  CompareMem
+#define CopyMem(d, s, n)     app_memcpy((VOID *)(UINTN)(d), (CONST VOID *)(UINTN)(s), (UINTN)(n))
+#define SetMem(d, v, n)      app_memset((VOID *)(UINTN)(d), (UINT8)(v), (UINTN)(n))
+#define CompareMem(a, b, n)  app_memcmp((CONST VOID *)(UINTN)(a), (CONST VOID *)(UINTN)(b), (UINTN)(n))
+
+/* ==== ЛОГ НА ФЛЕШКУ ====
+ * Раньше всё уходило только в Print() на экран, из-за чего ключевые
+ * значения (WPR2, DEBUGINFO, fb size) приходилось снимать с видео.
+ * Теперь те же строки пишутся на флешку СЫРЫМИ СЕКТОРАМИ через
+ * BlockIo — без SimpleFileSystem (он на этой плате вешает прошивку)
+ * и без NVRAM (тем более). Реализация у блока cmp90_bio_read. */
+static void ulogf(const CHAR16 *fmt, ...);
+static void log_flush_sector(BOOLEAN force);
+static void log_init(EFI_HANDLE ImageHandle);
+static void log_store_ptr(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 next);
+static UINT32 log_load_ptr(EFI_BLOCK_IO_PROTOCOL *bio);
+static VOID *cmp90_alloc(UINTN size);
+static void fwsec_set_imem_sec(UINTN sec);
+static UINT32 crc32_upd(UINT32 crc, const UINT8 *p, UINTN n);
+static void log_buf_check(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
+                          UINTN size);
+static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
+                             UINTN size);
+
 /* ==== TARGET PROFILE — the ONLY place that carries chip-specific numbers ====
  *
  * Adding support for another CMP SKU = add a line here. The framebuffer
@@ -412,6 +502,14 @@ extern const UINT8 gsp_rm_boot_dbg[];      /* BL (GspRmBoot, GA10x), 0x6000 */
  * Falcon ucode descriptor layout — extract_fwsec_ga104.py asserts it). */
 extern const UINT8 fwsec_ga104_bin[];
 extern const UINT8 fwsec_ga104_sig[];
+/* Три подписи FWSEC из VBIOS самой карты (src/blobs/fwsec_ga104_prod_sigN).
+ * Подпись НЕ вычисляется по образу (у GA102 и GA104 она байт-в-байт
+ * одинакова при разных образах) — это разные версии под разные fuse-ревизии.
+ * Для 90HX верна sig[2]; ревизия 70HX может отличаться, поэтому перебираем
+ * все три и смотрим, на какой WPR2 встаёт. */
+extern const UINT8 fwsec_ga104_prod_sig0[];
+extern const UINT8 fwsec_ga104_prod_sig1[];
+extern const UINT8 fwsec_ga104_prod_sig2[];
 
 /* v2.54: SEC2 ucode из VBIOS (appid 0x49 DBG / 0x89 PROD): ucodeId=10,
  * engmask=1, imemLoad=0x4400, dmemLoad=0x8F4, pkc=0x6DC; sig[2] патчен. */
@@ -744,19 +842,46 @@ find_bridge_to(UINTN target_bus, UINTN *ob, UINTN *od, UINTN *of)
 
 /* Выделение страниц ниже 4ГБ для DMA.
  * ВАЖНО: для AllocateMaxAddress входное значение *Phys = МАКСИМАЛЬНЫЙ адрес,
- * иначе (0) → EFI_OUT_OF_RESOURCES. */
+ * иначе (0) → EFI_OUT_OF_RESOURCES.
+ *
+ * ПОРТ: на этой плате первый же запрос (max=0xFFFFFFFF) зависал — процесс
+ * доходил до "alloc meta" и дальше не печатал ничего. Поэтому пробуем
+ * несколько верхних границ по убыванию и ВСЕГДА печатаем результат: без
+ * этого невозможно отличить зависание AllocatePages от тихого отказа. */
 static EFI_STATUS
 alloc_below_4g(UINTN Pages, EFI_PHYSICAL_ADDRESS *Phys)
 {
-    *Phys = 0xFFFFFFFFULL;
-    return uefi_call_wrapper(BS->AllocatePages, 4, AllocateMaxAddress,
-                             EfiReservedMemoryType, Pages, Phys);
+    static const UINT64 maxes[] = {
+        0xFFFFFFFFULL, 0xC0000000ULL, 0xA0000000ULL,
+        0x80000000ULL, 0x60000000ULL, 0x40000000ULL,
+    };
+    UINTN i;
+    EFI_STATUS last = EFI_OUT_OF_RESOURCES;
+
+    for (i = 0; i < sizeof(maxes)/sizeof(maxes[0]); i++) {
+        *Phys = maxes[i];
+        last = uefi_call_wrapper(BS->AllocatePages, 4, AllocateMaxAddress,
+                                 EfiReservedMemoryType, Pages, Phys);
+        if (!EFI_ERROR(last)) {
+            Print(L"alloc<4G: OK @0x%lx (max=0x%llx)\n", *Phys, maxes[i]);
+            return EFI_SUCCESS;
+        }
+        Print(L"alloc<4G: max=0x%llx → %r\n", maxes[i], last);
+    }
+    return last;
 }
 
-/* v2.62: буфер FWSEC ВЫШЕ 4ГБ — драйвер грузит с 0x110BB0000 (>4GB,
- * memdesc NV_MEMORY_CACHED). Наш ниже-4ГБ (0x7FB15000) — единственное
- * оставшееся различие с эталонным трейсом. Кандидаты 16MB-aligned,
- * фолбэк — ниже 4ГБ. */
+/* v2.62 ставил буферы выше 4ГБ (драйвер грузит с 0x110BB0000). На 70HX
+ * это оказалось нерабочим: адрес используется ОДНОВРЕМЕННО как виртуальный
+ * (CopyMem образа) и как физический (DMA GSP), а выше 4ГБ прошивка не
+ * отображает память тождественно. Доказательство из лога:
+ *     blobIMEM0=0xEC547D23  bufIMEM0=0x00000001
+ *     phys=0x113025000
+ * То есть CPU писал в одну страницу, а GSP читал другую — образ физически
+ * НЕ попадал в буфер, и FWSEC стартовал с мусором (dbg=0x780009).
+ *
+ * Ниже 4ГБ VA==PA по определению, поэтому для буферов, которые CPU
+ * заполняет, а DMA читает, адрес должен быть ниже 4ГБ. */
 static UINT64 cmp90_next_high_slot = 0x110000000ULL;   /* v2.63: след. своб. слот */
 static EFI_STATUS
 alloc_fwsec_buffer(UINTN Pages, EFI_PHYSICAL_ADDRESS *Phys)
@@ -818,6 +943,27 @@ dump_regs(const CHAR16 *Tag)
         mmio_read32(REG_FEAT_OVR_SM_SPD_1),
         mmio_read32(REG_GFW_BOOT_OK),
         mmio_read32(REG_PFB_MMU_WPR2_LO));
+}
+
+/* Снимок ключевых регистров ДО FLR. После FLR функция мертва и MMIO
+ * отдаёт мусор, поэтому сводку в конце печатаем из этого снимка, а не
+ * живым чтением. */
+static BOOLEAN g_snapOk = FALSE;
+static UINT32  g_snapPlm, g_snapSs0, g_snapSs1, g_snapWLo, g_snapWHi,
+                g_snapDbg, g_snapCpu, g_snapSc0;
+
+static void
+snapshot_state(void)
+{
+    g_snapPlm = mmio_read32(0x00823804U);
+    g_snapSs0 = mmio_read32(REG_FEAT_OVR_SM_SPD);
+    g_snapSs1 = mmio_read32(REG_FEAT_OVR_SM_SPD_1);
+    g_snapWLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+    g_snapWHi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+    g_snapDbg = mmio_read32(GSP_BASE + 0x94);
+    g_snapCpu = mmio_read32(GSP_CPUCTL);
+    g_snapSc0 = mmio_read32(0x001438);
+    g_snapOk  = TRUE;
 }
 
 static BOOLEAN
@@ -1028,18 +1174,35 @@ find_all_cmp90hx(void)
                         g_mcCards[g_mcCount].bus = Bus;
                         g_mcCards[g_mcCount].dev = Dev;
                         g_mcCards[g_mcCount].fn  = Fn;
+                        /* печатаем КАЖДУЮ найденную карту: если их больше,
+                         * чем ожидал пользователь, адреса видны сразу */
+                        Print(L"PCI: карта #%d = 10de:%04X bus=%d dev=%d fn=%d (root bridge #%d)\n",
+                              (INTN)g_mcCount, (INTN)((Id >> 16) & 0xFFFF),
+                              (INTN)Bus, (INTN)Dev, (INTN)Fn, (INTN)i);
                         g_mcCount++;
+                        ulogf(L"FIND  target 10de:%04x bus=%d dev=%d fn=%d rb=%d card#%d "
+                             "fb=0x%llx frts=0x%llx wpr2=0x%08x/0x%08x\n",
+                             (INTN)((Id >> 16) & 0xFFFF), (INTN)Bus, (INTN)Dev,
+                             (INTN)Fn, (INTN)i, (INTN)(g_mcCount - 1),
+                             TARGET_FB_SIZE, TARGET_FRTS_OFFSET,
+                             TARGET_WPR2_LO, TARGET_WPR2_HI);
                     } else if ((Id & 0xFFFF) == TARGET_PCI_VENDOR) {
                         Print(L"PCI: игнорирую 10de:%04X (bus=%d dev=%d fn=%d) — "
                               L"не %s\n",
                               (INTN)((Id >> 16) & 0xFFFF), (INTN)Bus, (INTN)Dev,
                               (INTN)Fn, TARGET_NAME);
+                        /* в лог пишем ВСЕ карты NVIDIA — так проверяется,
+                         * что выбрана именно CMP, а не GeForce с тем же ID */
+                        ulogf(L"FIND  other 10de:%04x bus=%d dev=%d fn=%d\n",
+                              (INTN)((Id >> 16) & 0xFFFF), (INTN)Bus,
+                              (INTN)Dev, (INTN)Fn);
                     }
                 }
             }
         }
     }
     FreePool(RbHandles);
+    ulogf(L"FIND  total targets=%d (MC_MAX=%d)\n", (INTN)g_mcCount, (INTN)MC_MAX_CARDS);
 }
 
 static BOOLEAN mc_pick(UINTN idx)
@@ -1049,7 +1212,69 @@ static BOOLEAN mc_pick(UINTN idx)
     gBus = g_mcCards[idx].bus;
     gDev = g_mcCards[idx].dev;
     gFn  = g_mcCards[idx].fn;
+    ulogf(L"PICK  card#%d of %d -> bus=%d dev=%d fn=%d\n",
+          (INTN)idx, (INTN)g_mcCount, (INTN)gBus, (INTN)gDev, (INTN)gFn);
     return TRUE;
+}
+
+/* ==== ЗОНД КАЖДОЙ НАЙДЕННОЙ КАРТЫ (ТОЛЬКО ЧТЕНИЕ) ====
+ *
+ * Зачем: на машине с одной физической CMP 70HX перечисление даёт ДВЕ
+ * функции с одинаковым ID 10de:248A (bus=2 и bus=16). Либо вторая
+ * карта есть, либо это фантом, оставшийся от манипуляций с анлоком
+ * CMP 50HX. Пока непонятно, КАКАЯ из них настоящая, а всё дальнейшее
+ * анлок делает на bus=2 (card#0) — если это фантом, маски уходят
+ * в никуда и карта остаётся заблокированной.
+ *
+ * Зонд ничего не пишет: только PCI-конфиг и несколько MMIO-чтений.
+ * Настоящий кристалл отвечает правдоподобными значениями (WPR2, GFW,
+ * PLM), фантом — нулями или 0xFFFFFFFF/0xBADFxxxx. */
+static void
+mc_probe_all(void)
+{
+    UINTN i;
+    for (i = 0; i < g_mcCount; i++) {
+        EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL *rb = g_mcCards[i].rb;
+        UINTN bus = g_mcCards[i].bus, dev = g_mcCards[i].dev, fn = g_mcCards[i].fn;
+        UINT32 id = 0, cls = 0, bar0 = 0;
+        UINT32 sBus, sDev, sFn, sBar;
+        EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL *sRb;
+        EFI_STATUS st;
+
+        sRb = gRb; sBus = gBus; sDev = gDev; sFn = gFn; sBar = gBar0Base;
+        gRb = rb; gBus = (UINT32)bus; gDev = (UINT32)dev; gFn = (UINT32)fn;
+
+        st = pci_cfg_read(0x00, &id);
+        if (!EFI_ERROR(st)) pci_cfg_read(0x08, &cls);
+        if (!EFI_ERROR(st)) pci_cfg_read(0x10, &bar0);
+        gBar0Base = bar0 & ~0xFU;
+
+        Print(L"[probe] card#%d bus=%d dev=%d fn=%d: 10de:%04X class=%06X "
+              L"BAR0=0x%08x\n", (INTN)i, (INTN)bus, (INTN)dev, (INTN)fn,
+              (INTN)((id >> 16) & 0xFFFF), (INTN)((cls >> 8) & 0xFFFFFF), bar0);
+        ulogf(L"PROBE card#%d bus=%d dev=%d fn=%d id=10de:%04x class=%06x "
+              "bar0=0x%08x\n", (INTN)i, (INTN)bus, (INTN)dev, (INTN)fn,
+              (INTN)((id >> 16) & 0xFFFF), (INTN)((cls >> 8) & 0xFFFFFF), bar0);
+
+        if (gBar0Base != 0) {
+            UINT32 chip = mmio_read32(0x00000000);
+            UINT32 gfw   = mmio_read32(0x00020F70);
+            UINT32 fbsz  = mmio_read32(0x00100440);
+            UINT32 plm   = mmio_read32(0x00823804);
+            UINT32 wlo   = mmio_read32(REG_PFB_MMU_WPR2_LO);
+            UINT32 whi   = mmio_read32(REG_PFB_MMU_WPR2_HI);
+            Print(L"[probe]   chip=0x%08x gfw=0x%08x fbsz=0x%08x plm=0x%08x "
+                  L"wpr2=0x%08x/0x%08x\n", chip, gfw, fbsz, plm, wlo, whi);
+            ulogf(L"PROBE   chip=0x%08x gfw=0x%08x fbsz=0x%08x plm=0x%08x "
+                  "wpr2=0x%08x/0x%08x\n", chip, gfw, fbsz, plm, wlo, whi);
+        } else {
+            Print(L"[probe]   BAR0 = 0 — MMIO недоступна, это НЕ рабочая карта\n");
+            ulogf(L"PROBE   bar0=0 -> MMIO unavailable, NOT a working card\n");
+        }
+
+        gRb = sRb; gBus = (UINT32)sBus; gDev = (UINT32)sDev;
+        gFn = (UINT32)sFn; gBar0Base = sBar;
+    }
 }
 
 /* Boot#### на САМОГО себя (по DevicePath загруженного образа) + BootNext.
@@ -1181,6 +1406,8 @@ static const struct { UINT32 addr, val; } g_rj16[] = {
 };
 #define RJ16_N ((INTN)(sizeof(g_rj16)/sizeof(g_rj16[0])))
 static BOOLEAN g_gen2Fire = FALSE;
+/* v3n: FWSEC в свипе gen2 нужен один раз, а не на каждой записи таблицы */
+static BOOLEAN g_fwsecOnce = FALSE;
 static BOOLEAN g_gen2Quick = FALSE;   /* v2.99h: маски уже открыты — сразу конфиг */
 static UINT32 g_gen2Addr = 0, g_gen2Val = 0;
 #endif /* PCIE_GEN2_REJOIN */
@@ -1436,11 +1663,167 @@ gsp_dma_transfer(UINT32 dest, UINT32 memOff, UINT64 srcPhys, UINT32 size, UINT32
     gsp_dma_wait_idle();
 }
 
+/* Физический адрес нашего FWSEC-буфера — нужен только для сверки с тем,
+ * что реально лежит в IMEM карты. */
+static UINT64 g_fwsecPhys = 0;
+
+/* ==== FWSEC без DMA: запустить тот, что карта загрузила сама ====
+ *
+ * ПОРТ НА 70HX. Наш FWSEC-образ — правильный (DMEM+0x0A содержит 0x248A,
+ * то есть именно этот кристалл), но ПРИЛОЖЕННАЯ К НЕМУ ПОДПИСЬ невалидна:
+ * fwsec_ga104_sig.bin побайтово равен fwsec_ga102_sig.bin, а образы разные
+ * (различаются device ID и 32-байтный блоб по 0x540). RSA-подпись считается
+ * по содержимому — одинаковой у разных образов она быть не может.
+ * Симптом ровно такой: BROM стартует ядро (CPUCTL=0x10), проверка подписи
+ * проваливается, DEBUGINFO=0x780009, WPR2 остаётся постуровым 0x1FFFFE00.
+ *
+ * Обход: НЕ грузить свой образ вообще. После POST в IMEM GSP уже лежит
+ * ФИРМЕННЫЙ FWSEC, загруженный VBIOS карты (см. v2.40 в fwsec_boot_gsp:
+ * запись в IMEM до 0xE400 ломает этот код — значит он там и сидит, и он же
+ * переживает kflcnReset). Он подписан самой картой, его подпись заведомо
+ * валидна, и в его DMEM FRTS-команда уже собрана под РЕАЛЬНЫЙ кадровый буфер
+ * этой карты — то есть нам не нужно знать ни frtsOffset, ни подпись.
+ *
+ * Делаем ровно то, что делает драйвер: reset -> FBIF/DMACTL/TRANSCFG ->
+ * BROM-параметры (sig@0x5A4, ucodeId=9) -> BOOTVEC=0 -> STARTCPU -> ждём WPR2.
+ * Ни одного байта в IMEM не пишем.
+ */
 static BOOLEAN
-fwsec_boot_gsp(UINT64 fwsecPhys)
+fwsec_preloaded_gsp(void)
 {
     UINTN i;
     UINT32 data;
+    UINT32 lo0, hi0;
+
+    Print(L"\n--- FWSEC ПРЕДЗАГРУЖЕННЫЙ (без DMA, подпись карты) ---\n");
+
+    lo0 = mmio_read32(REG_PFB_MMU_WPR2_LO);
+    hi0 = mmio_read32(REG_PFB_MMU_WPR2_HI);
+    Print(L"pre: WPR2 = 0x%08x/0x%08x  (ожидаем после FRTS 0x%08x/0x%08X)\n",
+          lo0, hi0, TARGET_WPR2_LO, TARGET_WPR2_HI);
+    ulogf(L"PRE   begin wpr2=0x%08x/0x%08x expect=0x%08x/0x%08x\n",
+         lo0, hi0, TARGET_WPR2_LO, TARGET_WPR2_HI);
+
+    /* 1. kflcnReset(GSP) — код из VBIOS переживает ресет */
+    Print(L"pre: kflcnReset(GSP)...\n");
+    falcon_wait_reset_ready(GSP_HWCFG2);
+    mmio_write32(GSP_ENGINE, 0x1);
+    for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
+    mmio_write32(GSP_ENGINE, 0x0);
+    for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
+    falcon_wait_scrub_done(GSP_DMACTL, GSP_HWCFG2, L"pre-reset");
+    uefi_call_wrapper(BS->Stall, 1, 50000);
+    mmio_write32(GSP_BCR, 0x1);                     /* CORE_SELECT=FALCON */
+    for (i = 0; i < 16; i++) mmio_read32(GSP_BCR);
+    mmio_write32(GSP_RM, mmio_read32(0x00100000));  /* chipId0 = PMC_BOOT_0 */
+    uefi_call_wrapper(BS->Stall, 1, 10000);
+
+    if ((mmio_read32(GSP_CPUCTL) & 0xBADF0000) == 0xBADF0000) {
+        Print(L"pre: GSP залочен (0xBADF) — не идём\n");
+        return FALSE;
+    }
+
+    /* 2. kflcnDisableCtxReq */
+    data = mmio_read32(GSP_FBIF_CTL);
+    data |= (1 << 7);
+    mmio_write32(GSP_FBIF_CTL, data);
+    mmio_write32(GSP_DMACTL, 0);
+    data = mmio_read32(GSP_FBIF_TRANSCFG0);
+    data = (data & ~0x7) | 0x5;
+    mmio_write32(GSP_FBIF_TRANSCFG0, data);
+
+    /* 3. Показать, что лежит в IMEM — совпадает ли с нашим образом.
+     *    Только ЧТЕНИЕ через порт GSP, ничего не пишем. */
+    {
+        UINT32 ours = g_fwsecPhys ? *(UINT32*)(UINTN)g_fwsecPhys : 0;
+        UINT32 card;
+        mmio_write32(GSP_BASE + 0x180, (1 << 28));      /* IMEMC0 addr0 SECURE */
+        card = mmio_read32(GSP_BASE + 0x184);
+        Print(L"pre: GSP IMEM[0x000]=0x%08x  (наш образ 0x%08x — %s)\n",
+              card, ours,
+              (g_fwsecPhys && card == ours) ? L"совпадает" : L"ОТЛИЧАЕТСЯ");
+        ulogf(L"PRE   imem_card=0x%08x imem_ours=0x%08x match=%d\n", card, ours,
+             (g_fwsecPhys && card == ours) ? 1 : 0);
+        mmio_write32(GSP_BASE + 0x180, 0);
+    }
+
+    /* 4. BROM-параметры: подпись по адресу 0x5A4, ucodeId=9, RSA3K */
+    mmio_write32(GSP_BROM_PARAADDR0, FWSEC_SIG_DMEM_ADDR);
+    mmio_write32(GSP_BROM_ENGIDMASK, FWSEC_ENGID_MASK);
+    mmio_write32(GSP_BROM_CURR_UCODE_ID, FWSEC_UCORE_ID);
+    mmio_write32(GSP_MOD_SEL, 0x1);
+    Print(L"pre: BROM paraaddr=0x%x engmask=0x%x ucodeid=%d modsel=0x1\n",
+          FWSEC_SIG_DMEM_ADDR, FWSEC_ENGID_MASK, FWSEC_UCORE_ID);
+
+    /* 5. Старт */
+    mmio_write32(GSP_BOOTVEC, 0);
+    __asm__ volatile("wbinvd" ::: "memory");
+    mmio_write32(GSP_CPUCTL, NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE);
+    Print(L"pre: STARTCPU, жду WPR2 до 5с...\n");
+
+    for (i = 0; i < 5000; i++) {
+        UINT32 lo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+        UINT32 hi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+        if ((lo & 0xFFFFFFF0) == (TARGET_WPR2_LO & 0xFFFFFFF0) &&
+            (hi & 0xFFFFFFF0) == (TARGET_WPR2_HI & 0xFFFFFFF0)) {
+            Print(L"pre: *** WPR2 УСТАНОВЛЕН 0x%08x/0x%08x за %d мс ***\n",
+                  lo, hi, i);
+            ulogf(L"PRE   OK wpr2=0x%08x/0x%08x at=%dms frts_real=0x%llx\n",
+                 lo, hi, (INTN)i, (UINT64)lo << 8);
+            return TRUE;
+        }
+        /* Принять ЛЮБОЕ изменение: карта знает свой frtsOffset лучше нас.
+         * Если наш расчёт неверен — мы это увидим и починим профиль. */
+        if (lo != lo0 || hi != hi0) {
+            Print(L"pre: WPR2 ИЗМЕНИЛСЯ: 0x%08x/0x%08x (было 0x%08x/0x%08x), "
+                  L"ожидали 0x%08x/0x%08x\n",
+                  lo, hi, lo0, hi0, TARGET_WPR2_LO, TARGET_WPR2_HI);
+            ulogf(L"PRE   CHANGED wpr2=0x%08x/0x%08x (was 0x%08x/0x%08x) "
+                 "frts_real=0x%llx at=%dms\n", lo, hi, lo0, hi0,
+                 (UINT64)lo << 8, (INTN)i);
+            if (lo != 0x1FFFFE00U) {
+                Print(L"pre: *** приму как успех; реальный frtsOffset карты = "
+                      L"0x%llx ***\n", (UINT64)lo << 8);
+                return TRUE;
+            }
+        }
+        if ((i % 500) == 0 && i)
+            Print(L"pre: t=%dms wpr2=0x%08x/0x%08x cpuctl=0x%x dbg=0x%x\n",
+                  i, lo, hi, mmio_read32(GSP_CPUCTL),
+                  mmio_read32(GSP_BASE + 0x94));
+        uefi_call_wrapper(BS->Stall, 1, 1000);
+    }
+    Print(L"pre: WPR2 НЕ встал. lo=0x%08x hi=0x%08x cpuctl=0x%x dbg=0x%x "
+          L"(dbg=0x780009 = отказ по подписи/окружению)\n",
+          mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
+          mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94));
+    ulogf(L"PRE   FAIL wpr2=0x%08x/0x%08x cpuctl=0x%08x dbg=0x%08x scratch0e=0x%08x\n",
+         mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
+         mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
+         mmio_read32(0x001438));
+    return FALSE;
+}
+
+/* Режим secure для DMA в IMEM: 1 = SEC=1 (как на 90HX), 0 = SEC=0.
+ * На 70HX защищённый IMEM отдаёт 0xDEAD5EC1 — осознанный отказ GSP. */
+/* v3n: по умолчанию НЕ-secure. Лог показал: при imemSec=1 чтение IMEM через
+ * порт GSP возвращает 0xDEAD5EC1 — осознанный отказ «secure memory access».
+ * То есть бит SEC в DMATRFCMD на этой карте запрещён, и DMA кода в IMEM
+ * просто не происходит. При SEC=0 тот же отказ не возвращается. Поэтому
+ * начинаем с SEC=0, а SEC=1 оставляем на последние попытки. */
+static UINTN g_fwsecImemSec = 0;
+static void
+fwsec_set_imem_sec(UINTN sec)
+{
+    g_fwsecImemSec = sec;
+}
+
+static BOOLEAN
+fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
+{
+    UINTN i;
+    UINT32 data;
+    UINTN fwsecImemSec = g_fwsecImemSec;
     UINT8 *dmem = (UINT8*)(UINTN)(fwsecPhys + FWSEC_DATA_OFF);
 
     Print(L"\n--- v2.28: FWSEC HS-boot на GSP (0x110000) ---\n");
@@ -1464,9 +1847,27 @@ fwsec_boot_gsp(UINT64 fwsecPhys)
         return FALSE;
     }
 
-    /* 2. Патчинг DMEM: сигнатура @0x5A4 + интерфейс FRTS (init_cmd + cmd) */
-    Print(L"fwsec: патчинг DMEM (sig@0x5a4, iface@0x1c, FRTS cmd)...\n");
-    CopyMem(dmem + FWSEC_SIG_DMEM_ADDR, fwsec_ga104_sig, FWSEC_SIG_SIZE);
+    /* 2. Патчинг DMEM: сигнатура @0x5A4 + интерфейс FRTS (init_cmd + cmd)
+     *
+     * ПЕРЕЗАЛИВАЕМ ОБРАЗ ПРЯМО ЗДЕСЬ. Раньше он копировался один раз в
+     * efi_main, а между этим местом и повторными попытками буфер успевал
+     * оказываться пустым — в логе это видно как bufIMEM0=0x00000001 при
+     * blobIMEM0=0xEC547D23. Лишние 59904 байта копирования ничего не
+     * стоят, зато образ гарантированно актуален в момент DMA. */
+    CopyMem((VOID *)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
+    {
+        UINT32 ca = crc32_upd(0xFFFFFFFFU, fwsec_ga104_bin, FWSEC_SIZE);
+        UINT32 cb = crc32_upd(0xFFFFFFFFU, (const UINT8 *)(UINTN)fwsecPhys,
+                              FWSEC_SIZE);
+        ulogf(L"FWSEC   образ перезалит: CRC32 блоб=0x%08x буфер=0x%08x %s\n",
+              ca, cb, ca == cb ? L"OK" : L"РАСХОЖДЕНИЕ");
+    }
+
+    Print(L"fwsec: патчинг DMEM (sig[%d]@0x5a4, iface@0x1c, FRTS cmd)...\n",
+          (INTN)sigIdx);
+    CopyMem(dmem + FWSEC_SIG_DMEM_ADDR, sig, FWSEC_SIG_SIZE);
+    ulogf(L"FWSEC   sig=%d sig0=%08x%08x... (patched into DMEM@0x5a4)\n",
+          (INTN)sigIdx, sig[0] | (sig[1] << 8), sig[2] | (sig[3] << 8));
     {
         /* DMEM_MAPPER_V3: signature@0, version(u16)@4, size(u16)@6,
          * cmd_in_buffer_offset@8, ..., init_cmd@44 (с u16-паддингом!) */
@@ -1505,28 +1906,95 @@ fwsec_boot_gsp(UINT64 fwsecPhys)
           mmio_read32(GSP_DMATRFBASE));
     mmio_write32(GSP_DMATRFBASE, 0);
 
-    /* 4. DMA: IMEM SEC=1 (0xE200), DMEM SEC=0 (0x800) — как драйвер */
-    Print(L"fwsec: DMA IMEM (SEC=1, 0x%x байт)...\n", FWSEC_CODE_SIZE);
+    /* 4. DMA: IMEM + DMEM.
+     *
+     * Раньше IMEM грузился с SEC=1. Причина (v2.37) была в том, чтобы не
+     * затереть предзагруженный VBIOS-ом FWSEC. На 70HX этого основания
+     * нет: imem_card=0x00000000, то есть после POST в IMEM пусто и
+     * затирать нечего. При этом чтение защищённого IMEM через порт
+     * возвращает 0xDEAD5EC1 — осознанный отказ GSP («DEAD SEC1»),
+     * то есть secure-путь на этой карте не проходит.
+     *
+     * Поэтому пробуем оба режима и смотрим, какой даст читаемый IMEM. */
+    Print(L"fwsec: DMA IMEM (режим %d, 0x%x байт)...\n", (INTN)fwsecImemSec,
+          FWSEC_CODE_SIZE);
     gsp_dma_transfer(0, 0, fwsecPhys, FWSEC_CODE_SIZE,
-                     0 | (6 << 8) | (0 << 12) | (1 << 4) | (1 << 2));
+                     0 | (6 << 8) | (0 << 12) | (fwsecImemSec << 4) | (1 << 2));
     Print(L"fwsec: DMA DMEM (SEC=0, 0x%x байт)...\n", FWSEC_DMEM_SIZE);
     gsp_dma_transfer(0, 0, fwsecPhys + FWSEC_DATA_OFF, FWSEC_DMEM_SIZE,
                      0 | (6 << 8) | (0 << 12));
+    ulogf(L"DMA   imem_sec_bit=%d cmd=0x%08x\n", (INTN)fwsecImemSec,
+          (UINT32)(0 | (6 << 8) | (0 << 12) | (fwsecImemSec << 4) | (1 << 2)));
 
-    /* 4b. Верификация: куда лёг код/данные (порты GSP IMEMC/DMEMC) */
-    mmio_write32(GSP_BASE + 0x180, 0);          /* IMEMC0: addr 0, non-secure */
-    Print(L"fwsec: GSP IMEM[0x00]=0x%08x (образ: 0x%08x)\n",
-          mmio_read32(GSP_BASE + 0x184), *(UINT32*)(UINTN)fwsecPhys);
-    mmio_write32(GSP_BASE + 0x180, (1 << 28));  /* IMEMC0: addr 0, SECURE bit */
-    Print(L"fwsec: GSP IMEM_S[0x00]=0x%08x (secure view)\n", mmio_read32(GSP_BASE + 0x184));
-    mmio_write32(GSP_BASE + 0x180, 0x100 | (1 << 28));
-    Print(L"fwsec: GSP IMEM_S[0x100]=0x%08x\n", mmio_read32(GSP_BASE + 0x184));
-    mmio_write32(GSP_BASE + 0x1C0, FWSEC_SIG_DMEM_ADDR);   /* DMEMC0 */
-    Print(L"fwsec: GSP DMEM[0x5a4]=0x%08x (ожидаю 0x%08x — sig[2])\n",
-          mmio_read32(GSP_BASE + 0x1C4), *(UINT32*)(UINTN)fwsec_ga104_sig);
-    mmio_write32(GSP_BASE + 0x1C0, 0x7C0);      /* cmd_in буфер */
-    Print(L"fwsec: GSP DMEM[0x7c0]=0x%08x (ожидаю 0x00000001 — FRTS readVbiosDesc.ver)\n",
-          mmio_read32(GSP_BASE + 0x1C4));
+    /* 4b. Верификация: куда лёг код/данные (порты GSP IMEMC/DMEMC)
+     *
+     * В лог пишем ОБЯЗАТЕЛЬНО: если чтение через порт GSP не совпадёт с
+     * тем, что мы записали, значит DMA не сработала и BROM стартует с
+     * мусором — тогда 0x780009 не имеет отношения ни к подписи, ни к
+     * окружению, а просто к тому, что кода в IMEM нет. Проверено на
+     * 70HX: все три подписи (включая нулевую) дают один и тот же
+     * 0x780009, то есть падение происходит ДО проверки подписи. */
+    {
+        UINT32 want0 = *(UINT32*)(UINTN)fwsecPhys;
+        UINT32 got_ns, got_sec, got_sec100, got_sig, got_cmd, got_hdr;
+        UINT32 *d0 = (UINT32*)(UINTN)(fwsecPhys + FWSEC_DATA_OFF);
+
+        /* Диагностика буфера. Предыдущие логи показывали want=0x00000001,
+         * тогда как в блобе IMEM[0]=0xEC547D23 и DMEM[0]=0x00100001, и
+         * совпадение было подозрительно одинаковым в двух разных местах.
+         * Здесь читаем из константы и из буфера ЯВНО и по отдельности, плюс
+         * сам адрес: так за один заход станет ясно, врёт форматтер, не
+         * скопировался образ или адрес не тот. */
+        ulogf(L"BUF   phys=0x%llx blobIMEM0=0x%08x bufIMEM0=0x%08x "
+              L"blobDMEM0=0x%08x bufDMEM0=0x%08x\n",
+              fwsecPhys,
+              *(UINT32*)(UINTN)fwsec_ga104_bin,
+              *(UINT32*)(UINTN)fwsecPhys,
+              *(UINT32*)(UINTN)(fwsec_ga104_bin + FWSEC_DATA_OFF),
+              *(UINT32*)(UINTN)(fwsecPhys + FWSEC_DATA_OFF));
+        ulogf(L"BUF   blobE204=0x%08x bufE204=0x%08x "
+              L"blobE5A4=0x%08x bufE5A4=0x%08x\n",
+              *(UINT32*)(UINTN)(fwsec_ga104_bin + FWSEC_DATA_OFF + 4),
+              *(UINT32*)(UINTN)(fwsecPhys + FWSEC_DATA_OFF + 4),
+              *(UINT32*)(UINTN)(fwsec_ga104_bin + FWSEC_DATA_OFF + 0x5A4),
+              *(UINT32*)(UINTN)(fwsecPhys + FWSEC_DATA_OFF + 0x5A4));
+
+        mmio_write32(GSP_BASE + 0x180, 0);          /* IMEMC0: addr 0, non-secure */
+        got_ns = mmio_read32(GSP_BASE + 0x184);
+        mmio_write32(GSP_BASE + 0x180, (1 << 28));  /* IMEMC0: addr 0, SECURE */
+        got_sec = mmio_read32(GSP_BASE + 0x184);
+        mmio_write32(GSP_BASE + 0x180, 0x100 | (1 << 28));
+        got_sec100 = mmio_read32(GSP_BASE + 0x184);
+
+        Print(L"fwsec: GSP IMEM[0x00]=0x%08x (образ: 0x%08x)\n", got_ns, want0);
+        Print(L"fwsec: GSP IMEM_S[0x00]=0x%08x (secure view)\n", got_sec);
+        Print(L"fwsec: GSP IMEM_S[0x100]=0x%08x\n", got_sec100);
+
+        mmio_write32(GSP_BASE + 0x1C0, FWSEC_SIG_DMEM_ADDR);
+        got_sig = mmio_read32(GSP_BASE + 0x1C4);
+        Print(L"fwsec: GSP DMEM[0x5a4]=0x%08x (ожидаю 0x%08x — sig[%d])\n",
+              got_sig, *(UINT32*)(UINTN)sig, (INTN)sigIdx);
+        mmio_write32(GSP_BASE + 0x1C0, 0x7C0);
+        got_cmd = mmio_read32(GSP_BASE + 0x1C4);
+        Print(L"fwsec: GSP DMEM[0x7c0]=0x%08x (ожидаю 0x00000001 — FRTS readVbiosDesc.ver)\n",
+              got_cmd);
+        mmio_write32(GSP_BASE + 0x1C0, 0x000);
+        got_hdr = mmio_read32(GSP_BASE + 0x1C4);
+
+        ulogf(L"DMA   imem_ns=0x%08x want=0x%08x %s\n", got_ns, want0,
+              got_ns == want0 ? L"OK" : L"MISMATCH");
+        ulogf(L"DMA   imem_sec=0x%08x %s\n", got_sec,
+              got_sec == want0 ? L"OK" : L"MISMATCH");
+        ulogf(L"DMA   imem_sec_0x100=0x%08x\n", got_sec100);
+        ulogf(L"DMA   dmem_hdr=0x%08x want=0x%08x %s\n", got_hdr, d0[0],
+              got_hdr == d0[0] ? L"OK" : L"MISMATCH");
+        ulogf(L"DMA   dmem_sig=0x%08x want=0x%08x %s\n", got_sig,
+              *(UINT32*)(UINTN)sig, got_sig == *(UINT32*)(UINTN)sig ? L"OK" : L"MISMATCH");
+        ulogf(L"DMA   dmem_cmd=0x%08x want=0x00000001 %s\n", got_cmd,
+              got_cmd == 1 ? L"OK" : L"MISMATCH");
+        ulogf(L"DMA   dmatrfcmd=0x%08x dmatrfbase=0x%08x\n",
+              mmio_read32(GSP_DMATRFCMD), mmio_read32(GSP_DMATRFBASE));
+    }
 
     /* v2.40: диагностика порта GSP УБРАНА (v2.37: SEC=0 DMA на IMEM[0x8000]
      * ПЕРЕЗАПИСАЛ часть предзагруженного FWSEC-кода (0..0xE200) — FWSEC
@@ -1570,6 +2038,23 @@ fwsec_boot_gsp(UINT64 fwsecPhys)
     __asm__ volatile("wbinvd" ::: "memory");
     mmio_write32(GSP_CPUCTL, NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE);
     Print(L"fwsec: STARTCPU (GSP), жду WPR2 до 5с...\n");
+
+    /* параметры запуска и состояние DMA — в лог: по ним видно, что именно
+     * BROM получил (и не получил) перед стартом */
+    ulogf(L"BROM  paraaddr=0x%x engmask=0x%x ucodeid=%d modsel=0x1 "
+          "bootvec=0x0 imemLoad=0x%x dmemLoad=0x%x\n",
+          FWSEC_SIG_DMEM_ADDR, FWSEC_ENGID_MASK, FWSEC_UCORE_ID,
+          (UINTN)FWSEC_DATA_OFF, (UINTN)FWSEC_DMEM_SIZE);
+    ulogf(L"BROM  readback para=0x%08x engmask=0x%08x ucodeid=0x%08x "
+          "modsel=0x%08x bootvec=0x%08x\n",
+          mmio_read32(GSP_BROM_PARAADDR0), mmio_read32(GSP_BROM_ENGIDMASK),
+          mmio_read32(GSP_BROM_CURR_UCODE_ID), mmio_read32(GSP_MOD_SEL),
+          mmio_read32(GSP_BOOTVEC));
+    ulogf(L"BROM  cpuctl=0x%08x (STARTCPU) dmatrfcmd=0x%08x dmatrfbase=0x%08x "
+          "fbifctl=0x%08x dmactl=0x%08x\n",
+          mmio_read32(GSP_CPUCTL), mmio_read32(GSP_DMATRFCMD),
+          mmio_read32(GSP_DMATRFBASE), mmio_read32(GSP_FBIF_CTL),
+          mmio_read32(GSP_DMACTL));
 
     /* 7. Поллинг WPR2 (FRTS ставит lo=frtsOffset, hi=frtsOffset+0xE00) */
     for (i = 0; i < 5000; i++) {
@@ -1700,6 +2185,37 @@ fwsec_boot_gsp(UINT64 fwsecPhys)
           mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
           mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
           mmio_read32(0x001438));
+    ulogf(L"FWSEC ours FAIL wpr2=0x%08x/0x%08x cpuctl=0x%08x dbg=0x%08x "
+         "scratch0e=0x%08x imem_ours=0x%08x\n",
+         mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
+         mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
+         mmio_read32(0x001438),
+         g_fwsecPhys ? *(UINT32*)(UINTN)g_fwsecPhys : 0);
+
+    /* v3n: ДАМП DMEM ПОСЛЕ ПРОГОНА. dbg=0x00000000 означает, что FWSEC не
+     * сообщил об ошибке, но WPR2 не защёлкнулся. Значит вопрос не «падает
+     * ли он», а «где именно остановился». Печатаем все НЕнулевые слова
+     * DMEM: там видно, что он успел записать (статус, счётчики, ответ на
+     * FRTS-команду) и что осталось нетронутым. */
+    {
+        UINT32 off, shown = 0;
+        ulogf(L"FWSEC   дамп DMEM после прогона (все ненулевые):\n");
+        for (off = 0; off < FWSEC_DMEM_SIZE; off += 4) {
+            UINT32 v;
+            mmio_write32(GSP_BASE + 0x1C0, off);   /* тот же порт, что и в проверке dmem_* */
+            v = mmio_read32(GSP_BASE + 0x1C4);
+            if (v == 0) continue;
+            if (shown >= 110) {                  /* лог не должен упираться в 1 МБ */
+                if (shown == 110)
+                    ulogf(L"FWSEC   ... (дамп обрезан на 110 строках)\n");
+                shown++;
+                continue;
+            }
+            ulogf(L"FWSEC   dmem[0x%03x]=0x%08x\n", off, v);
+            shown++;
+        }
+        ulogf(L"FWSEC   конец дампа DMEM (непустых слов: %d)\n", (INTN)shown);
+    }
     return FALSE;
 }
 
@@ -2218,7 +2734,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     /* --- [E2] FWSEC на GSP → WPR2 (fwsec_boot_gsp сам ресетит GSP) --- */
     Print(L"[E2] FWSEC на GSP (WPR2)...\n");
     CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
-    if (!fwsec_boot_gsp(fwsecPhys)) {
+    if (!fwsec_boot_gsp_sig(fwsecPhys, fwsec_ga104_prod_sig2, 2)) {
         Print(L"[E2] WPR2 не встал — ранний путь не удался\n");
         return EFI_DEVICE_ERROR;
     }
@@ -4007,6 +4523,466 @@ static void cmp90_free(VOID *p)
     if (p) uefi_call_wrapper(BS->FreePool, 1, p);
 }
 
+/* ==== ЛОГ НА ФЛЕШКУ (сырые секторы, без файловой системы) ====
+ * Реализация ниже, у блока cmp90_bio_read; здесь только прототипы,
+ * потому что точки вызова (FWSEC-стадии) идут раньше по файлу. */
+static void ulogf(const CHAR16 *fmt, ...);
+static void log_flush_sector(BOOLEAN force);
+/* Всё, что раньше уходило только в Print() на экран, теперь ещё и
+ * пишется на флешку СЫРЫМИ СЕКТОРАМИ через BlockIo.
+ *
+ * Почему не файл: SimpleFileSystem на этой плате вешает прошивку
+ * (OpenVolume виснет — многократно замечено в комментариях ниже), а
+ * NVRAM-вызовы тем более. BlockIo ReadBlocks/WriteBlocks работают
+ * стабильно (84 МБ firmware читается), значит и запись безопасна.
+ *
+ * Почему так безопасно: мы пишем в область, которую FAT32 не
+ * использует (2 ГБ от начала флешки, а занято ~85 МБ под файлы).
+ * Таблица разделов, FAT и каталоги не трогаются — для файловой
+ * системы это просто свободные кластеры. Загрузка к этому моменту
+ * уже завершена (efi-приложение живёт в ОЗУ), так что запись на
+ * флешку, с которой мы запустились, не мешает.
+ *
+ * Читается обратно out\read-log.ps1 (или Get-Content вручную).
+ * ================================================================== */
+/* Адрес области лога. ДЕСЯТИЧНОЕ ЧИСЛО, а не hex: в hex здесь легко
+ * ошибиться (0x3E8000 = 4 096 000, а не 4 000 000) и тогда читающий
+ * скрипт смотрит в другое место и не находит лог. Значение обязано
+ * совпадать с $LBA в out/read-log.ps1 — это проверяет
+ * opencode/lba_sync.py в сборочном харнессе. */
+#define LOG_LBA      4000000ULL   /* ≈ 1,9 ГБ от начала */
+#define LOG_SECTORS  2048          /* 1 МБ = 2048 секторов на весь лог */
+#define LOG_HDR      "CMPUNLOG v1 "
+
+static EFI_BLOCK_IO_PROTOCOL *g_logBio = NULL;
+static UINT8   g_logBuf[512];
+static UINT32  g_logSec  = 1;     /* 0-й сектор — заголовок */
+static UINTN   g_logFill = 0;
+static BOOLEAN g_logOn   = FALSE;
+
+/* записать накопленный сектор; при переполнении — переход к следующему,
+ * при конце области — молча начинаем сначала (лог круговой) */
+static void
+log_flush_sector(BOOLEAN force)
+{
+    EFI_STATUS st;
+    if (!g_logOn || g_logBio == NULL) return;
+    if (g_logFill == 0 && !force) return;
+    while (g_logFill < 512) g_logBuf[g_logFill++] = 0;
+    st = uefi_call_wrapper(g_logBio->WriteBlocks, 5, g_logBio,
+                           g_logBio->Media->MediaId,
+                           LOG_LBA + g_logSec, 512, g_logBuf);
+    if (EFI_ERROR(st)) { g_logOn = FALSE; return; }   /* запись не идёт — не мешаем анлоку */
+    g_logFill = 0;
+    g_logSec++;
+    if (g_logSec >= LOG_SECTORS) g_logSec = 1;
+    /* Двигаем указатель «с какого сектора писать» каждые 32 сектора: этого
+     * достаточно, чтобы следующий прогон не наступил на текущий, и почти
+     * не нагружает флешку (на всю область — 64 лишние записи). */
+    if ((g_logSec & 31) == 0) log_store_ptr(g_logBio, g_logSec);
+}
+
+/* записать один байт в накопитель сектора */
+static void
+log_putc(CHAR8 c)
+{
+    if (!g_logOn || g_logBio == NULL) return;
+    if (g_logFill >= 512) log_flush_sector(FALSE);
+    if (!g_logOn) return;
+    g_logBuf[g_logFill++] = c;
+}
+
+static void
+log_write(const CHAR8 *s)
+{
+    while (*s) log_putc(*s++);
+}
+
+/* Проверка, что образ действительно лежит по адресу, который мы отдаём DMA.
+ * Адрес используется и как VA (CopyMem), и как PA (DMA GSP); если VA != PA,
+ * CPU пишет в чужую страницу, а DMA читает пустую. На 70HX так и было:
+ *     blobIMEM0=0xEC547D23  bufIMEM0=0x00000001  phys=0x113025000
+ * Сверяем слова константы с тем, что физически лежит по адресу. */
+static void
+log_buf_check(const CHAR16 *tag, const UINT8 *src, UINT64 addr, UINTN size)
+{
+    UINT32 s0, b0, s1, b1;
+    if (!g_logOn || addr == 0 || src == NULL || size < 8) return;
+    s0 = *(const UINT32*)(const void *)src;
+    b0 = *(const UINT32*)(UINTN)addr;
+    s1 = *(const UINT32*)(const void *)(src + 4);
+    b1 = *(const UINT32*)(UINTN)(addr + 4);
+    ulogf(L"BUF   %s addr=0x%llx size=0x%llx src0=0x%08x buf0=0x%08x "
+          L"src4=0x%08x buf4=0x%08x %s\n",
+          tag, addr, size, s0, b0, s1, b1,
+          (s0 == b0 && s1 == b1) ? L"OK" : L"MISMATCH");
+}
+
+/* v3n: РЕШАЮЩАЯ самопроверка буфера. До сих пор не было ясно, куда именно
+ * не ложится образ: адрес не тот, память не пишется, или копируется не
+ * оттуда. Поэтому проверяем буфер в три независимых шага и печатаем
+ * контрольные суммы (CRC32) всего образа:
+ *   1) память живая?   пишем 5 меченых слов, читаем обратно
+ *   2) суммы совпали?   CRC32(блоб) против CRC32(буфер) по всему размеру
+ *   3) где именно порча? печатаем 8 равномерно разнесённых 32-битных слов
+ * Одно слово CRC32 одинаково и для всего образа, и для его половины —
+ * поэтому суммы печатаем двумя: CRC32(0..size) и CRC32(size/2..size). */
+static UINT32 crc32_upd(UINT32 crc, const UINT8 *p, UINTN n)
+{
+    UINTN i;
+    int k;
+    for (i = 0; i < n; i++) {
+        crc ^= p[i];
+        for (k = 0; k < 8; k++)
+            crc = (crc >> 1) ^ (0xEDB88320U & (UINT32)(-(INT32)(crc & 1)));
+    }
+    return crc;
+}
+
+static void
+log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr, UINTN size)
+{
+    static const UINT32 mag[5] = { 0xA5A5A5A5U, 0x5A5A5A5AU, 0xC3C3C3C3U,
+                                   0x96969696U, 0x0F0F0F0FU };
+    UINT64 mo[5];
+    UINT32 rb[5], cs, cb, ch, chb;
+    int i, bad = 0;
+
+    if (!g_logOn || addr == 0 || src == NULL || size < 0x2000) return;
+
+    mo[0] = 0; mo[1] = 0x1000; mo[2] = size / 2; mo[3] = size - 0x1000; mo[4] = 0;
+
+    /* 1) память живая: 5 слов по 4КБ */
+    for (i = 0; i < 5; i++)
+        *(volatile UINT32 *)(UINTN)(addr + mo[i]) = mag[i];
+    for (i = 0; i < 5; i++) {
+        rb[i] = *(volatile UINT32 *)(UINTN)(addr + mo[i]);
+        if (rb[i] != mag[i]) bad++;
+    }
+    ulogf(L"MEM   %s addr=0x%llx W/R %s (плохих %d)\n", tag, addr,
+          bad ? L"НЕ РАБОТАЕТ" : L"ок", (INTN)bad);
+
+    /* 2) копируем образ и сверяем CRC32 целиком и со второй половины */
+    CopyMem((VOID *)(UINTN)addr, src, size);
+    cs = crc32_upd(0xFFFFFFFFU, src, size);
+    cb = crc32_upd(0xFFFFFFFFU, (const UINT8 *)(UINTN)addr, size);
+    ch  = crc32_upd(0xFFFFFFFFU, src + size / 2, size / 2);
+    chb = crc32_upd(0xFFFFFFFFU, (const UINT8 *)(UINTN)(addr + size / 2), size / 2);
+    ulogf(L"MEM   %s CRC32 блоб=0x%08x буфер=0x%08x %s | хвост блоб=0x%08x "
+          L"буфер=0x%08x %s\n", tag, cs, cb, cs == cb ? L"OK" : L"РАСХОЖДЕНИЕ",
+          ch, chb, ch == chb ? L"OK" : L"РАСХОЖДЕНИЕ");
+
+    /* 3) где именно расходится — 8 слов через весь образ */
+    ulogf(L"MEM   %s слова:", tag);
+    for (i = 0; i < 8; i++) {
+        UINTN off = (size / 8) * (UINTN)i;
+        UINT32 a = *(const UINT32 *)(const void *)(src + off);
+        UINT32 b = *(UINT32 *)(UINTN)(addr + off);
+        ulogf(L" 0x%04llx:%08x/%08x", (UINT64)off, a, b);
+    }
+    ulogf(L"\n");
+}
+
+/* единственная точка записи в лог.
+ *
+ * ФОРМАТИРОВАНИЕ. Раньше здесь стоял AsciiVSPrint, и он оказался НЕ
+ * пригоден для чисел: в логе значения выходили неверные (want=0x00000001
+ * вместо 0xEC547D23, хотя Print() на экране печатает те же числа
+ * правильно). Плюс его %s читает ШИРОКИЕ строки и печатает только младшие
+ * байты, останавливаясь на первом 0x0000, — из-за чего «OK» превращалось
+ * в «O», а «MISMATCH» в «MSAC».
+ *
+ * Поэтому форматируем ТЕМ ЖЕ кодом, что и Print() на экране
+ * (UnicodeVSPrint), а потом переводим результат в ASCII. Сектор лога
+ * обязан быть ASCII: читающий скрипт декодирует через
+ * [Text.Encoding]::ASCII, и байты >= 0x80 стали бы '?'. */
+static void
+ulogf(const CHAR16 *fmt, ...)
+{
+    CHAR16 wbuf[400];
+    va_list ap;
+    UINTN i;
+    if (!g_logOn) return;
+    va_start(ap, fmt);
+    UnicodeVSPrint(wbuf, sizeof(wbuf) / sizeof(wbuf[0]), fmt, ap);
+    va_end(ap);
+    for (i = 0; wbuf[i] && i < 400; i++) {
+        CHAR16 c = wbuf[i];
+        log_putc((c == L'\t' || c == L'\n' || c == L'\r') ? (CHAR8)c
+             : ((c < 0x20 || c > 0x7E) ? '?' : (CHAR8)c));
+    }
+}
+
+/* Есть ли на томе наш собственный загрузчик EFI/BOOT/BOOTX64.EFI?
+ *
+ * Отбор флешки по геометрии («первый MBR с разделом 0xEF и FAT32»)
+ * НЕНАДЁЖЕН: на машине с несколькими USB-устройствами прошивка отдаёт
+ * BlockIo и для них, и приложение писало лог не на ту флешку — на
+ * устройство с разделом с LBA 0xB00 вместо 0x800.
+ *
+ * Единственный однозначный признак нужной флешки — сам загрузчик на
+ * ней. Ищем его своим же FAT32-обходом поверх BlockIo (без SFS, который
+ * на этой плате вешает прошивку). Свойства тома проверяем по-настоящему,
+ * а не «похоже на FAT32». */
+
+/* ВНИМАНИЕ: вариант с обходом каталога (проверка «есть ли на томе
+ * EFI/BOOT/BOOTX64.EFI» через cmp90_fat_dir_find) УДАЛЁН. На реальном
+ * железе он вешал загрузку: приложение зависало сразу после печати
+ * сведений об устройстве. Обход каталога FAT32 на загрузочной флешке
+ * трогает область данных тома (смещение ~16 МБ) — на этой плате такие
+ * обращения к USB не проверены, а SimpleFileSystem здесь уже вешает
+ * прошивку (см. KNOWN-ISSUES, п. 8). Никаких лишних обращений к диску
+ * в логировании быть не должно: DevicePath даёт ответ бесплатно. */
+
+/* Длина device path без ПОСЛЕДНЕГО узла (последний — узел файла
+ * \EFI\BOOT\BOOTX64.EFI). Родительский путь заканчивается на узле
+ * носителя, и по нему LocateDevicePath находит BlockIo диска. */
+static UINTN
+log_parent_path_size(EFI_DEVICE_PATH *path)
+{
+    UINT8 *base = (UINT8 *)path;
+    UINTN off = 0, prev = 0;
+    if (!path) return 0;
+    while (!IsDevicePathEndType((EFI_DEVICE_PATH *)(base + off))) {
+        EFI_DEVICE_PATH *n = (EFI_DEVICE_PATH *)(base + off);
+        prev = off;
+        off  += 4 + ((UINTN)n->Length[0] | ((UINTN)n->Length[1] << 8));
+        if (off > 4096) return 0;      /* защита от мусора в пути */
+    }
+    return prev;
+}
+
+/* Найти флешку и начать лог.
+ *
+ * ТРИ попытки, каждая дешевле и безопаснее предыдущей; порядок — от
+ * самого надёжного к запасному, и каждая печатает свой результат.
+ *
+ * Чего здесь НЕТ и не должно быть (проверено на железе):
+ *   - обхода каталогов FAT32: он ВЕШАЕТ загрузку на этой плате;
+ *   - LocateDevicePath по разобранному вручную DevicePath: путь от
+ *     DeviceHandle на этой прошивке не распарсился (log_parent_path_size
+ *     вернул 0), а логика была единственным способом найти флешку;
+ *   - вызовов SimpleFileSystem: они вешают прошивку (п. 8 KNOWN-ISSUES).
+ *
+ * Рабочий критерий — геометрия, которую задаёт out/make-usb-stick.ps1:
+ * MBR, единственный раздел типа 0xEF с LBA 2048, FAT32 (FilSysType по
+ * 0x52), и размер >= 4 ГБ. Именно этот разрез отличает нашу флешку от
+ * второго USB-устройства, которое прошивка тоже отдаёт в BlockIo (у него
+ * раздел начинается с 0xB00). Плюс контрольная запись с чтением
+ * обратно: устройство обязано быть реально доступным на запись. */
+
+/* Печать узлов device path — чистая диагностика, никакого I/O. */
+static void
+log_dump_devpath(const CHAR16 *tag, EFI_DEVICE_PATH *path)
+{
+    UINT8 *p = (UINT8 *)path;
+    UINTN off = 0, shown = 0;
+    if (!path) { Print(L"[log] %s: путь=NULL\n", tag); return; }
+    Print(L"[log] %s:\n", tag);
+    for (;;) {
+        UINT8 t, s;
+        UINTN ln;
+        if (off > 2048 || shown >= 12) break;
+        t  = p[off];
+        s  = p[off + 1];
+        ln = (UINTN)p[off + 2] | ((UINTN)p[off + 3] << 8);
+        if (t == END_DEVICE_PATH_TYPE) {
+            Print(L"[log]   узел END (тип 0x%02x подтип 0x%02x)\n", t, s);
+            break;
+        }
+        if (ln < 4) {      /* мусор в пути — дальше идти нельзя */
+            Print(L"[log]   узел %d: тип 0x%02x подтип 0x%02x длина %d "
+                  L"<<< МУСОР, останавливаюсь\n", (INTN)shown, t, s, (INTN)ln);
+            break;
+        }
+        Print(L"[log]   узел %d: тип 0x%02x подтип 0x%02x длина %d\n",
+              (INTN)shown, t, s, (INTN)ln);
+        off += ln;
+        shown++;
+    }
+    Print(L"[log]   всего байт разобрано: %d\n", (INTN)off);
+}
+
+/* Проверить устройство как нашу флешку. Только два чтения по 512 байт —
+ * ровно столько же, сколько делает fw-read, который на этой плате
+ * работает. Никаких обходов томов. */
+static BOOLEAN
+log_stick_ok(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 *outPartLba,
+             const CHAR16 **why)
+{
+    static UINT8 mbr[512], bpb[512];
+    UINT32 lba, tot;
+    UINTN part;
+
+    if (bio == NULL || bio->Media == NULL) { *why = L"нет BlockIo/Media"; return FALSE; }
+    if (bio->Media->BlockSize != 512)   { *why = L"blocksize != 512"; return FALSE; }
+    if (bio->Media->LastBlock < LOG_LBA + LOG_SECTORS) {
+        *why = L"меньше 4 ГБ"; return FALSE;
+    }
+    if (EFI_ERROR(uefi_call_wrapper(bio->ReadBlocks, 5, bio,
+                                    bio->Media->MediaId, 0, 512, mbr))) {
+        *why = L"не читается LBA 0"; return FALSE;
+    }
+    if (mbr[510] != 0x55 || mbr[511] != 0xAA) { *why = L"нет MBR 55AA (GPT?)"; return FALSE; }
+    /* ровно один раздел типа 0xEF, начинающийся с LBA 2048: этот разрез
+     * и отличает нашу флешку от прочих USB-устройств */
+    lba = 0;
+    for (part = 0; part < 4; part++) {
+        UINT8 *e = mbr + 446 + 16 * part;
+        if (e[4] != 0xEF) continue;
+        if (lba != 0) { *why = L"больше одного FAT32-раздела"; return FALSE; }
+        lba = (UINT32)e[8] | ((UINT32)e[9] << 8) |
+              ((UINT32)e[10] << 16) | ((UINT32)e[11] << 24);
+    }
+    if (lba == 0)   { *why = L"нет раздела 0xEF"; return FALSE; }
+    if (lba != 2048) {
+        *why = L"раздел не с LBA 2048"; return FALSE;
+    }
+    if (EFI_ERROR(uefi_call_wrapper(bio->ReadBlocks, 5, bio,
+                                    bio->Media->MediaId, lba, 512, bpb))) {
+        *why = L"не читается загрузочный сектор раздела"; return FALSE;
+    }
+    if (bpb[510] != 0x55 || bpb[511] != 0xAA) { *why = L"у раздела нет 55AA"; return FALSE; }
+    /* FilSysType по 0x52. По 0x54 читается хвост поля ("T32   3?") —
+     * с такой ошибкой флешка молча отбраковывалась. */
+    if (CompareMem(bpb + 0x52, "FAT32   ", 8) != 0) { *why = L"не FAT32"; return FALSE; }
+    tot = (UINT32)bpb[32] | ((UINT32)bpb[33] << 8) |
+          ((UINT32)bpb[34] << 16) | ((UINT32)bpb[35] << 24);
+    if (tot == 0) { *why = L"нулевой размер тома"; return FALSE; }
+    if (outPartLba) *outPartLba = lba;
+    return TRUE;
+}
+
+/* v3n: ГДЕ ПРОДОЛЖАТЬ ЛОГ.
+ *
+ * Задача: не затирать лог предыдущего прогона. Первый вариант — прочитать
+ * всю область (1 МБ) и найти первый нулевой сектор — ПОВЕСИЛ ПРОШИВКУ на
+ * загрузке: кандидат #0 напечатался, и на этом всё встало. Крупные чтения
+ * с этой флешки эта AMI-прошивка не тянет (тот же эффект раньше давало
+ * чтение 84-МБ образа).
+ *
+ * Рабочий вариант: хранить указатель «с какого сектора писать» в секторе 0
+ * области. Это ОДИН блок 512 байт — ровно тот размер, который уже proven
+ * рабочим для записи лога. Никаких больших операций.
+ *   сектор 0: "CMPN" + 4 байта next (little-endian) + нули.
+ * Лог пишется в сектора 1..LOG_SECTORS-1, то есть физически в пределах
+ * отведённых 2048 секторов; ничего за их пределами не трогаем. */
+#define LOG_PTR_MAGIC "CMPN"
+
+static void
+log_store_ptr(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 next)
+{
+    UINT8 buf[512];
+    SetMem(buf, 512, 0);
+    CopyMem(buf, LOG_PTR_MAGIC, 4);
+    buf[4] = (UINT8)(next & 0xFF);
+    buf[5] = (UINT8)((next >> 8) & 0xFF);
+    buf[6] = (UINT8)((next >> 16) & 0xFF);
+    buf[7] = (UINT8)((next >> 24) & 0xFF);
+    uefi_call_wrapper(bio->WriteBlocks, 5, bio, bio->Media->MediaId,
+                      LOG_LBA, 512, buf);
+}
+
+static UINT32
+log_load_ptr(EFI_BLOCK_IO_PROTOCOL *bio)
+{
+    UINT8 buf[512];
+    UINT32 next;
+    EFI_STATUS st = uefi_call_wrapper(bio->ReadBlocks, 3, bio,
+                                      LOG_LBA, 512, buf);
+    if (EFI_ERROR(st)) return 1;
+    if (CompareMem(buf, LOG_PTR_MAGIC, 4) != 0) return 1;   /* первый запуск: с 1 */
+    next = (UINT32)buf[4] | ((UINT32)buf[5] << 8) |
+           ((UINT32)buf[6] << 16) | ((UINT32)buf[7] << 24);
+    if (next < 1 || next >= LOG_SECTORS) return 1;
+    return next;
+}
+
+/* Заголовок лога + контрольная запись. */
+static void
+log_start(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 lba, const CHAR8 *how)
+{
+    UINT32 startSec = log_load_ptr(bio);
+
+    g_logBio  = bio;
+    g_logSec  = startSec;
+    g_logFill = 0;
+    g_logOn   = TRUE;
+    /* указатель двигаем сразу: если прогон упадёт/зависнет, следующий
+     * начнётся с текущего места, а не поверх него */
+    log_store_ptr(bio, startSec);
+    Print(L"[log] флешка = %ld МБ, lastLBA=0x%llx, раздел с LBA 0x%x, "
+          L"лог с LBA 0x%llx\n",
+          (INTN)((bio->Media->LastBlock * bio->Media->BlockSize) >> 20),
+          bio->Media->LastBlock, lba, LOG_LBA);
+    Print(L"[log] прогон продолжает с сектора %d (логи не затираются)\n",
+          (INTN)startSec);
+    Print(L"[log] способ отбора: %s\n", how);
+    log_write(LOG_HDR);
+    ulogf(L"profile=%s pci=10de:%04x fb=0x%llx frts=0x%llx wpr2=0x%08x/0x%08x\n",
+         TARGET_NAME, (INTN)TARGET_PCI_DEV, TARGET_FB_SIZE,
+         TARGET_FRTS_OFFSET, TARGET_WPR2_LO, TARGET_WPR2_HI);
+    ulogf(L"stick  lastLba=0x%llx partLba=0x%x logLba=0x%llx sec=%d by=%s\n",
+         bio->Media->LastBlock, lba, LOG_LBA, (INTN)startSec, how);
+    log_write("\n");
+    log_flush_sector(TRUE);
+    if (!g_logOn)
+        Print(L"[log] ВНИМАНИЕ: контрольная запись НЕ прошла — лог недоступен\n");
+}
+
+static void
+log_init(EFI_HANDLE ImageHandle)
+{
+    EFI_LOADED_IMAGE_PROTOCOL *li = NULL;
+    EFI_DEVICE_PATH_PROTOCOL *fdp = NULL;
+    EFI_HANDLE *hs = NULL;
+    UINTN n = 0, i;
+    EFI_STATUS st;
+
+    /* --- попытка 1: устройство загрузки через DevicePath (диагностика) --- */
+    st = uefi_call_wrapper(BS->HandleProtocol, 3, ImageHandle,
+                           &gEfiLoadedImageProtocolGuid, &li);
+    if (!EFI_ERROR(st) && li != NULL) {
+        log_dump_devpath(L"device path образа", (EFI_DEVICE_PATH *)li->FilePath);
+        st = uefi_call_wrapper(BS->HandleProtocol, 3, li->DeviceHandle,
+                               &gEfiDevicePathProtocolGuid, &fdp);
+        if (!EFI_ERROR(st) && fdp != NULL)
+            log_dump_devpath(L"device path DeviceHandle", (EFI_DEVICE_PATH *)fdp);
+        else
+            Print(L"[log] DeviceHandle: нет DevicePath (%r)\n", st);
+    } else {
+        Print(L"[log] нет EFI_LOADED_IMAGE_PROTOCOL (%r)\n", st);
+    }
+
+    /* --- попытка 2: перебор BlockIo по геометрии флешки --- */
+    st = uefi_call_wrapper(BS->LocateHandleBuffer, 5, ByProtocol,
+                           &gEfiBlockIoProtocolGuid, NULL, &n, &hs);
+    if (EFI_ERROR(st) || n == 0) {
+        Print(L"[log] BlockIo-устройств нет (%r) — лог только на экран\n", st);
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        EFI_BLOCK_IO_PROTOCOL *bio = NULL;
+        UINT32 lba = 0;
+        const CHAR16 *why = NULL;
+        if (EFI_ERROR(uefi_call_wrapper(BS->HandleProtocol, 3, hs[i],
+                                         &gEfiBlockIoProtocolGuid, &bio)))
+            continue;
+        if (bio != NULL && bio->Media != NULL)
+            Print(L"[log] кандидат #%d: %ld МБ, lastLBA=0x%llx\n", (INTN)i,
+                  (INTN)((bio->Media->LastBlock * bio->Media->BlockSize) >> 20),
+                  bio->Media->LastBlock);
+        if (!log_stick_ok(bio, &lba, &why)) {
+            Print(L"[log] кандидат #%d отброшен: %s\n", (INTN)i, why);
+            continue;
+        }
+        log_start(bio, lba, "geometry");
+        if (g_logOn) return;
+    }
+    Print(L"[log] флешка не найдена среди %d устройств — лог только на экран\n",
+          (INTN)n);
+}
+
 /* чтение байтового диапазона внутри раздела через BlockIo */
 static EFI_STATUS
 cmp90_bio_read(EFI_BLOCK_IO_PROTOCOL *bio, UINT64 lbaPartStart,
@@ -4538,12 +5514,22 @@ find_cmp90hx(void)
                               TARGET_FB_SIZE, TARGET_FRTS_OFFSET,
                               TARGET_FRTS_OFFSET_PG,
                               TARGET_WPR2_LO, TARGET_WPR2_HI);
+                        ulogf(L"FIND  target 10de:%04x bus=%d dev=%d fn=%d "
+                             "fb=0x%llx frts=0x%llx wpr2=0x%08x/0x%08x\n",
+                             (INTN)((Id >> 16) & 0xFFFF), (INTN)Bus, (INTN)Dev,
+                             (INTN)Fn, TARGET_FB_SIZE, TARGET_FRTS_OFFSET,
+                             TARGET_WPR2_LO, TARGET_WPR2_HI);
                         FreePool(RbHandles);
                         return EFI_SUCCESS;
                     } else if ((Id & 0xFFFF) == TARGET_PCI_VENDOR) {
                         Print(L"PCI: вижу 10de:%04X, но это не %s (bus=%d dev=%d fn=%d)\n",
                               (INTN)((Id >> 16) & 0xFFFF), TARGET_NAME,
                               (INTN)Bus, (INTN)Dev, (INTN)Fn);
+                        /* в лог пишем ВСЕ карты NVIDIA — так проверяется,
+                         * что приложение выбрало именно CMP, а не GeForce */
+                        ulogf(L"FIND  other 10de:%04x bus=%d dev=%d fn=%d\n",
+                             (INTN)((Id >> 16) & 0xFFFF), (INTN)Bus,
+                             (INTN)Dev, (INTN)Fn);
                     }
                 }
             }
@@ -4593,6 +5579,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     Print(L"\n=== NVIDIA %s Unlock — PCI 10de:%04X, FB 0x%llX (%d МБ) ===\n",
           TARGET_NAME, (INTN)TARGET_PCI_DEV, TARGET_FB_SIZE,
           (INTN)(TARGET_FB_SIZE >> 20));
+    log_init(ImageHandle);   /* лог на флешку: сырые секторы, без ФС */
 #ifdef RELEASE_BUILD
 #ifdef PCIE_GEN2_REJOIN
 # ifdef FULL_NOGEN2
@@ -4620,6 +5607,10 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     {
         BOOLEAN have = FALSE;
         find_all_cmp90hx();
+        /* зонд КАЖДОЙ найденной функции ДО выбора карты: на машине с
+         * одной физической картой перечисление иногда даёт две функции
+         * (фантом от прежних манипуляций), и работать надо с настоящей */
+        mc_probe_all();
         g_mcIndex = mc_var_get(L"CMP90IDX", &have);
         if (!have || g_mcIndex >= g_mcCount) {
             if (have) mc_vars_clear();   /* устаревший индекс (карт стало меньше) */
@@ -4827,7 +5818,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         Print(L"alloc fwsec @0x%lx (0x%lx bytes)\n", fwsecPhys, FWSEC_SIZE);
         CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
         gsp_engine_reset();
-        fwsec_boot_gsp(fwsecPhys);
+        fwsec_boot_gsp_sig(fwsecPhys, fwsec_ga104_prod_sig2, 2);
 
         /* v2.41 diag: SEC2 DMA с ПРАВИЛЬНЫМИ размерами (0x4F00/0x5000/0x4D00
          * из трейса драйвера) — проверка: ломал ли размер 0x8900 SEC=1? */
@@ -4907,7 +5898,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     Status = alloc_fwsec_buffer((V67_SIZE + 0xFFF) >> 12, &v67Phys);
     if (EFI_ERROR(Status)) { Print(L"alloc v67: %r\n", Status); goto done; }
     Print(L"alloc v67  @0x%lx\n", v67Phys);
-    CopyMem((VOID*)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
+    log_mem_selftest(L"v67", v67_payload_bin, v67Phys, V67_SIZE);
 #ifdef PCIE_GEN2_REJOIN
     /* v2.99c: ЗДЕСЬ НЕ ПАТЧИМ! Тёплый ресет закрывает PLM (доказано
      * итерацией 3: XVE-запись при закрытом PLM = mbox 0x15, регистр
@@ -4923,21 +5914,35 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     Status = alloc_fwsec_buffer((BOOTER_UCODE_SIZE + 0xFFF) >> 12, &ucodePhys);
     if (EFI_ERROR(Status)) { Print(L"alloc ucode: %r\n", Status); goto done; }
     Print(L"alloc ucode @0x%lx\n", ucodePhys);
-    CopyMem((VOID*)(UINTN)ucodePhys, booter_ucode_prod, BOOTER_UCODE_SIZE);
+    log_mem_selftest(L"ucode", booter_ucode_prod, ucodePhys, BOOTER_UCODE_SIZE);
 
     /* --- BL (GspRmBoot): сигнатура V67 верифицируется при загрузке BL --- */
     Status = alloc_fwsec_buffer((GSP_RM_BOOT_SIZE + 0xFFF) >> 12, &blPhys);
     if (EFI_ERROR(Status)) { Print(L"alloc bl: %r\n", Status); goto done; }
     Print(L"alloc bl    @0x%lx\n", blPhys);
-    CopyMem((VOID*)(UINTN)blPhys, gsp_rm_boot_dbg, GSP_RM_BOOT_SIZE);
+    log_mem_selftest(L"gsp_rm_boot", gsp_rm_boot_dbg, blPhys, GSP_RM_BOOT_SIZE);
 
-    /* --- v2.28: FWSEC ucode (из VBIOS) — для FRTS/WPR2 на GSP --- */
-    /* v2.62: буфер ВЫШЕ 4ГБ (как у драйвера 0x110BB0000) — единственное
-     * оставшееся различие с эталонным трейсом HS-загрузки */
-    Status = alloc_fwsec_buffer((FWSEC_SIZE + 0xFFF) >> 12, &fwsecPhys);
-    if (EFI_ERROR(Status)) { Print(L"alloc fwsec: %r\n", Status); goto done; }
-    Print(L"alloc fwsec @0x%lx (0x%lx bytes)\n", fwsecPhys, FWSEC_SIZE);
+    /* --- v2.28: FWSEC ucode (из VBIOS) — для FRTS/WPR2 на GSP ---
+     *
+     * БУФЕР НИЖЕ 4ГБ (а не >4ГБ, как в v2.62). Причина установлена по
+     * логу: адрес используется и как VA (CopyMem), и как PA (DMA GSP).
+     * Выше 4ГБ прошивка не отображает память тождественно, поэтому образ
+     * физически не попадал в буфер, и FWSEC стартовал с мусором:
+     *     blobIMEM0=0xEC547D23  bufIMEM0=0x00000001  phys=0x113025000
+     * Ниже 4ГБ VA==PA, и это ровно то, что работало на 90HX до v2.62.
+     * FWSEC читает только DMA GSP (не ботер с GPU), ограничения «не
+     * читать sysmem ниже 4ГБ» на него не распространяется. */
+    Status = alloc_below_4g((FWSEC_SIZE + 0xFFF) >> 12, &fwsecPhys);
+    if (EFI_ERROR(Status)) {
+        Print(L"alloc fwsec ниже 4ГБ: %r, фолбэк выше 4ГБ\n", Status);
+        Status = alloc_fwsec_buffer((FWSEC_SIZE + 0xFFF) >> 12, &fwsecPhys);
+        if (EFI_ERROR(Status)) { Print(L"alloc fwsec: %r\n", Status); goto done; }
+    }
+    Print(L"alloc fwsec @0x%lx (0x%lx bytes) %s\n", fwsecPhys, FWSEC_SIZE,
+          fwsecPhys < 0x100000000ULL ? L"ниже 4ГБ, VA==PA" : L"ВЫШЕ 4ГБ (VA!=PA!)");
     CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
+    log_mem_selftest(L"fwsec", fwsec_ga104_bin, fwsecPhys, FWSEC_SIZE);
+    g_fwsecPhys = fwsecPhys;
 
     /* --- ЭКСПЕРИМЕНТ v2.4: БЕЗ чтения gsp_ga10x.bin ---
      * USB-чтение 84МБ через EFI-файловый протокол ЖЁСТКО фризит прошивку
@@ -5048,6 +6053,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             UINT64 i;
             SetMem(rb, ptSize, 0);
             CopyMem(rb + dataOff, (VOID *)(UINTN)radixPhys, fwimageSizeUsed);
+            /* та же проверка VA/PA: таблица страниц адресуется DMA-устройством */
+            log_buf_check(L"radtab", (const UINT8 *)(UINTN)radixPhys,
+                          radTabPhys + dataOff, fwimageSizeUsed);
             for (i = 0; i < nData; i++)
                 *(UINT64 *)(rb + 0x2000 + i * 8) =
                     radTabPhys + dataOff + (i << 12);
@@ -5067,6 +6075,11 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (EFI_ERROR(Status)) { Print(L"alloc meta: %r\n", Status); goto done; }
     Print(L"alloc meta  @0x%lx\n", wprMetaPhys);
     wprMeta = (GspFwWprMeta*)(UINTN)wprMetaPhys;
+    /* v2.104: явные маркеры вокруг участка, где v2.103 зависал. Печать идёт
+     * ДО любых вызовов выделения — если следующая строка не появилась,
+     * зависание находится точно здесь. */
+    Print(L"step: meta выделен, прошу страниц ниже 4ГБ (%d шт)...\n",
+          (INTN)((V67_SIZE + 0xFFF) >> 12));
     /* fbSize: регистр 0x100440 отдаёт 0xBADF-паттерн (PLM-лок) — берём из
      * профиля карты. 70HX/GA104 8 ГБ → 0x200000000; 90HX/GA102 10 ГБ →
      * 0x280000000 (доказано: frts_offset 0x27fe00000 в dmesg рабочего анлока).
@@ -5109,6 +6122,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     }
     build_wpr_meta(wprMeta, radixPhys, fwimageSizeUsed, v67Phys, TARGET_FB_SIZE,
                    blPhys, GSP_RM_BOOT_SIZE);
+    Print(L"step: meta собрана (fb=0x%llX, frts=0x%llX, WPR2=0x%08X/0x%08X)\n",
+          wprMeta->fbSize, wprMeta->frtsOffset,
+          TARGET_WPR2_LO, TARGET_WPR2_HI);
     if (cmp90_corruptMeta) {
         /* v2.85: бисекция указателей. BL->0x300 дал 0x2, SIG->0x300 дал 0x2.
          * Теперь RADIX3 addr (поле 2): если снова 0x2 — НИ ОДИН указатель
@@ -5120,6 +6136,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         /* v2.84: полный дамп meta (248 байт) для побайтового сравнения с живым */
         UINT8 *mb = (UINT8 *)(UINTN)wprMetaPhys;
         UINTN r, c;
+        Print(L"step: дамп meta...\n");
         for (r = 0; r < 248; r += 32) {
             Print(L"m[%02x]:", r);
             for (c = 0; c < 32; c++)
@@ -5131,10 +6148,23 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         UINT32 fbsz = mmio_read32(0x00100440);
         Print(L"fb size reg 0x440 = 0x%08x (0xBADF = залочен → берём из профиля: 0x%llX)\n",
               fbsz, TARGET_FB_SIZE);
+        ulogf(L"FBIOS fbreg_0x440=0x%08x profile_fb=0x%llx %s\n", fbsz,
+             TARGET_FB_SIZE, (fbsz == 0xBADF0000U || fbsz == 0) ? "LOCKED" : "READABLE");
     }
     __asm__ volatile("wbinvd" ::: "memory");
     Print(L"meta@0x%lx radix@0x%lx ucode@0x%lx v67@0x%lx fb=0x%lx\n",
           wprMetaPhys, radixPhys, ucodePhys, v67Phys, wprMeta->fbSize);
+    ulogf(L"META  meta@0x%llx radix@0x%llx ucode@0x%llx v67@0x%llx "
+         "fbSize=0x%llx frtsOffset=0x%llx frtsSize=0x%llx wprEnd=0x%llx "
+         "vgaWS=0x%llx bootBin=0x%llx bootCount=%llu\n",
+         wprMetaPhys, radixPhys, ucodePhys, v67Phys, wprMeta->fbSize,
+         wprMeta->frtsOffset, wprMeta->frtsSize, wprMeta->gspFwWprEnd,
+         wprMeta->vgaWorkspaceOffset, wprMeta->bootBinOffset,
+         wprMeta->bootCount);
+    ulogf(L"PRE   WPR2=0x%08x/0x%08x PLM=0x%08x SS0=0x%08x SS1=0x%08x GFW=0x%08x\n",
+         mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
+         mmio_read32(0x00823804U), mmio_read32(REG_FEAT_OVR_SM_SPD),
+         mmio_read32(REG_FEAT_OVR_SM_SPD_1), mmio_read32(0x00020f70U));
 
     /* --- v2.12: убить GFW (как драйвер: kflcnReset(GSP) перед booter load) ---
      * Живой GFW из POST держит SEC2 залоченным. GSP ENGINE (0x1103C0)
@@ -5230,18 +6260,71 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
              * процесса GPU (скраб/GFW-хвост), мешающего первому прогону */
             BOOLEAN fwOk = FALSE;
             UINTN attempt;
-            for (attempt = 1; attempt <= 3 && !fwOk; attempt++) {
-                Print(L"v2.62: fwsec попытка %d/3 (пауза 3с перед прогоном)...\n",
-                      attempt);
-                uefi_call_wrapper(BS->Stall, 1, 3000000);
-                CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
-                if (fwsec_boot_gsp(fwsecPhys)) {
-                    fwOk = TRUE;
-                    Print(L"v2.62: *** FWSEC СРАБОТАЛ на попытке %d ***\n", attempt);
-                } else {
-                    Print(L"v2.62: попытка %d — WPR2 не встал\n", attempt);
+
+            /* v2.105 (порт 70HX): СНАЧАЛА пробуем штатный FWSEC, который
+             * карта загрузила сама. Наш образ не запустится — к нему в
+             * репозитории пришита подпись от GA102 (см. fwsec_preloaded_gsp).
+             * Подписанный силами самой карты код с её же FRTS-параметрами —
+             * единственный вариант, который не требует от нас знать
+             * frtsOffset и не требует валидной подписи. */
+            Print(L"\nv2.105: ПРОБА ШТАТНОГО FWSEC (без нашей подписи)...\n");
+            if (fwsec_preloaded_gsp()) {
+                fwOk = TRUE;
+                Print(L"v2.105: *** ШТАТНЫЙ FWSEC СРАБОТАЛ — WPR2 поднят ***\n");
+            } else {
+                Print(L"v2.105: штатный FWSEC не поднял WPR2, пробую свой образ\n");
+            }
+
+            /* v2.106: перебор трёх подписей FWSEC из VBIOS карты.
+             * Проверено на дампе GA104.rom: sigCount=3, третья запись (sig[2])
+             * — та, что лежит в репозитории, и верна для 90HX. Подпись НЕ
+             * вычисляется по образу (у GA102 и GA104 она байт-в-байт равна
+             * при разных образах) — это версии под разные fuse-ревизии, так
+             * что ревизия 70HX вполне может требовать sig[1].
+             *
+             * Порядок: 2 (рабочая на 90HX), 1 (единственная другая настоящая),
+             * 0 — ВСЕ НУЛИ, заглушка неподписанного слота. Её пробуем
+             * последней как КОНТРОЛЬНЫЙ ОПЫТ: если WPR2 встанет и с нулевой
+             * подписью, значит BROM подпись не проверяет вовсе и 0x780009
+             * вызван чем-то другим. */
+            {
+                /* v2.107: перебор 2x2 — подпись {sig2, sig1, sig0} x
+                 * {IMEM SEC=1, IMEM SEC=0}. Подпись: SIG[2] рабочая на
+                 * 90HX, остальные — из VBIOS самой карты. Режим SEC: на
+                 * 70HX защищённый IMEM отдаёт 0xDEAD5EC1 (осознанный отказ
+                 * GSP), а основания грузить через SEC=1 больше нет —
+                 * после POST IMEM пуст (imem_card=0x00000000), затирать
+                 * нечего. Порядок: сначала проверенная комбинация
+                 * sig2+SEC1, затем то, что правдоподобно для 70HX. */
+                static const UINT8 *sigs[3] = {
+                    fwsec_ga104_prod_sig2, fwsec_ga104_prod_sig1,
+                    fwsec_ga104_prod_sig0
+                };
+                static const UINTN sigOrder[3] = { 2, 1, 0 };
+                /* SEC=0 идёт ПЕРВЫМ: secure-DMA в IMEM на этой карте
+                 * отклоняется с 0xDEAD5EC1 (см. g_fwsecImemSec). */
+                static const UINTN secOrder[3] = { 0, 1, 0 };
+                for (attempt = 1; attempt <= 3 && !fwOk; attempt++) {
+                    UINTN s = sigOrder[attempt - 1];
+                    UINTN sec = secOrder[attempt - 1];
+                    Print(L"v2.107: FWSEC попытка %d/3 — sig[%d] + IMEM SEC=%d "
+                          L"(пауза 3с)...\n", attempt, (INTN)s, (INTN)sec);
+                    ulogf(L"FWSEC try=%d sigIndex=%d imemSec=%d\n",
+                          attempt, s, sec);
+                    uefi_call_wrapper(BS->Stall, 1, 3000000);
+                    CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
+                    fwsec_set_imem_sec(sec);
+                    if (fwsec_boot_gsp_sig(fwsecPhys, sigs[attempt - 1], s)) {
+                        fwOk = TRUE;
+                        Print(L"v2.107: *** FWSEC СРАБОТАЛ: sig[%d] SEC=%d ***\n",
+                              (INTN)s, (INTN)sec);
+                        ulogf(L"FWSEC OK with sig[%d] imemSec=%d\n", s, sec);
+                    } else {
+                        Print(L"v2.107: sig[%d] SEC=%d — WPR2 не встал\n",
+                              (INTN)s, (INTN)sec);
+                    }
+                    sec2_health(L"5-fwsec-retry");
                 }
-                sec2_health(L"5-fwsec-retry");
             }
             if (fwOk) {
         Print(L"fwsec: OK — WPR2 установлен. kflcnResetIntoRiscv(GSP)...\n");
@@ -5331,6 +6414,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                     /* v2.100: уже точный FF — миницикл не тратим */
                     if (mmio_read32(g_rj16[i].addr) == g_rj16[i].val)
                         continue;
+                    ulogf(L"GEN2  п%d [%d] 0x%08x <- 0x%08x (сейчас 0x%08x)\n",
+                          (INTN)pass + 1, (INTN)i + 1, g_rj16[i].addr,
+                          g_rj16[i].val, mmio_read32(g_rj16[i].addr));
                     Print(L"gen2[%d/%d] 0x%08x <- 0x%08x\n",
                           (INTN)i + 1, (INTN)RJ16_N,
                           g_rj16[i].addr, g_rj16[i].val);
@@ -5342,9 +6428,21 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                     cfg_write32(0x10, saveBar);
                     enable_mem_decode();
                     gBar0Base = saveBar;
-                    /* --- ранний путь: ботер#1 со stock-payload (PLM) --- */
-                    CopyMem((VOID*)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
-                    early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
+                    /* --- ранний путь: ботер#1 со stock-payload (PLM) ---
+                     *
+                     * v3n: РАНЬШЕ early_unlock_path() звался на КАЖДОЙ записи
+                     * таблицы, где маска ещё не FF. Это 3 прохода × 41 запись
+                     * = до 120 полных FWSEC-загрузок, каждая с паузами по
+                     * секунде, — минуты работы и сотни строк лога, при том что
+                     * FWSEC от запуска не зависит: образ уже залит и лежит в
+                     * IMEM (imem_ours=0xEC547D23). Запускаем ОДИН раз: FWSEC
+                     * нужен, чтобы открыть secure-путь, а не чтобы повторять
+                     * его 120 раз подряд. */
+                    if (!g_fwsecOnce) {
+                        g_fwsecOnce = TRUE;
+                        CopyMem((VOID*)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
+                        early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
+                    }
                     /* --- ботер#2 с нашей парой (второй разрешённый выстрел) --- */
                     *pv = g_rj16[i].val;
                     *pa = g_rj16[i].addr;
@@ -5374,11 +6472,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                     if (cur != g_rj16[i].val) {
                         Print(L"gen2: свип п%d [%d] 0x%08x = 0x%08x — НЕ точный\n",
                               (INTN)pass + 1, (INTN)i + 1, a, cur);
+                        ulogf(L"GEN2  свип п%d [%d] 0x%08x = 0x%08x — НЕ точный\n",
+                              (INTN)pass + 1, (INTN)i + 1, a, cur);
                         done = FALSE;
                     }
                 }
-                Print(L"gen2: проход %d завершён — маски %s\n",
-                      (INTN)pass + 1,
+                ulogf(L"GEN2  проход %d завершён — маски %s\n", (INTN)pass + 1,
                       done ? L"ВСЕ ТОЧНЫЕ FF" : L"НЕ все точные (ещё проход)");
             }
             mc_var_set(L"CMP90G2", (UINT32)RJ16_N);
@@ -5388,6 +6487,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                 for (k = 0; k < RJ16_N; k++)
                     Print(L"gen2: [%d] 0x%08x = 0x%08x\n", (INTN)k,
                           g_rj16[k].addr, mmio_read32(g_rj16[k].addr));
+                ulogf(L"GEN2  итог по 41 записи (в лог, чтобы не читать с экрана):\n");
+                for (k = 0; k < RJ16_N; k++)
+                    ulogf(L"GEN2  [%d] 0x%08x = 0x%08x%s\n", (INTN)k,
+                          g_rj16[k].addr, mmio_read32(g_rj16[k].addr),
+                          (mmio_read32(g_rj16[k].addr) == g_rj16[k].val)
+                              ? L"  точный" : L"  НЕ точный");
             }
             Print(L"gen2: применяю конфиг\n");
 #ifndef FULL_NOGEN2
@@ -5643,6 +6748,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         mmio_write32(REG_FEAT_OVR_SM_SPD_1, VAL_SS1_UNLOCKED);
         mmio_write32(REG_FEAT_OVR_SM_SPD, VAL_SS0_UNLOCKED);
         dump_regs(L"[unlock]");
+        snapshot_state();   /* до FLR — потом MMIO уже мёртв */
 
         /* v2.88: БЕЗ FLR! На реальном железе (X570 F37d) FLR обнуляет BARs/
          * command → функция «умирает» → виснет обход устройств/консоль.
@@ -5710,6 +6816,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 
 chainload:
     dump_regs(L"[pre-Windows]");
+    if (!g_snapOk) snapshot_state();   /* ветка неуспеха — MMIO ещё живы */
     if (is_unlocked())
         Print(L"*** NVIDIA %s РАЗБЛОКИРОВАН ***\n", TARGET_NAME);
     else
@@ -5717,6 +6824,34 @@ chainload:
               mmio_read32(REG_FEAT_OVR_SM_SPD), mmio_read32(REG_FEAT_OVR_SM_SPD_1));
 
 done:
+    /* --- ИТОГОВАЯ СВОДКА: 8 строк, которые нужны для разбора.
+     * Печатается в самом конце, чтобы финальный экран не уехал
+     * при возврате в прошивку, и дублируется в лог на флешке. */
+    if (!g_snapOk) snapshot_state();
+    {
+        Print(L"\n================ ИТОГ ================\n");
+        Print(L" profile      %s  10de:%04x  bus=%d dev=%d fn=%d\n",
+              TARGET_NAME, (INTN)TARGET_PCI_DEV, (INTN)gBus, (INTN)gDev, (INTN)gFn);
+        Print(L" PLM          0x%08x\n", g_snapPlm);
+        Print(L" SS0/SS1      0x%08x / 0x%08x\n", g_snapSs0, g_snapSs1);
+        Print(L" WPR2         0x%08x/0x%08x  (ожидалось 0x%08x/0x%08x)\n",
+              g_snapWLo, g_snapWHi, TARGET_WPR2_LO, TARGET_WPR2_HI);
+        Print(L" dbg(0x94)    0x%08x   scratch0e 0x%08x   cpuctl 0x%08x\n",
+              g_snapDbg, g_snapSc0, g_snapCpu);
+        Print(L" ВЕРДИКТ      %s\n",
+              (g_snapSs0 == VAL_SS0_UNLOCKED && g_snapSs1 == VAL_SS1_UNLOCKED)
+                  ? L"РАЗБЛОКИРОВАН" : L"НЕ РАЗБЛОКИРОВАН");
+        Print(L" лог          флешка, LBA %d..%d  ->  out\\read-log.ps1\n",
+              (INTN)LOG_LBA, (INTN)(LOG_LBA + LOG_SECTORS - 1));
+        Print(L"=======================================\n");
+        log_flush_sector(TRUE);
+        ulogf(L"END   ss0=0x%08x ss1=0x%08x PLM=0x%08x WPR2=0x%08x/0x%08x "
+             "dbg=0x%08x cpuctl=0x%08x scratch0e=0x%08x\n",
+             g_snapSs0, g_snapSs1, g_snapPlm, g_snapWLo, g_snapWHi,
+             g_snapDbg, g_snapCpu, g_snapSc0);
+        ulogf(L"END   ---- end of log ----\n");   /* ASCII: см. log_write() */
+    }
+
     Print(L"\nКонец.\n");
 #if !defined(EFI_AUTOTEST) && !defined(RELEASE_BUILD)
     WaitForSingleEvent(SystemTable->ConIn->WaitForKey, 0);

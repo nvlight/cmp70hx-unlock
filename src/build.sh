@@ -78,10 +78,17 @@ embed "booter_ucode_prod_patched.bin"    booter_ucode_prod
 embed "gsp_rm_boot_dbg.bin"              gsp_rm_boot_dbg
 embed "${FWSEC}.bin"                     fwsec_ga104_bin
 embed "${FWSEC}_sig.bin"                 fwsec_ga104_sig
+# Три версии подписи FWSEC из VBIOS самой карты: подпись НЕ считается по
+# образу (у GA102 и GA104 она байт-в-байт одинакова), а версионируется по
+# fuse-ревизии. Приложение перебирает их по очереди (v2.106).
+embed "fwsec_ga104_prod_sig0.bin"        fwsec_ga104_prod_sig0
+embed "fwsec_ga104_prod_sig1.bin"        fwsec_ga104_prod_sig1
+embed "fwsec_ga104_prod_sig2.bin"        fwsec_ga104_prod_sig2
 embed "sec2_ucode_vbios_49_patched.bin"  sec2_ucode_vbios_49
 embed "sec2_ucode_vbios_89_patched.bin"  sec2_ucode_vbios_89
 OBJECTS="v67_payload_bin.o booter_ucode_dbg.o booter_ucode_prod.o \
 gsp_rm_boot_dbg.o fwsec_ga104_bin.o fwsec_ga104_sig.o \
+fwsec_ga104_prod_sig0.o fwsec_ga104_prod_sig1.o fwsec_ga104_prod_sig2.o \
 sec2_ucode_vbios_49.o sec2_ucode_vbios_89.o"
 
 # build_one <output-base> <extra -D flags...>
