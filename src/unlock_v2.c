@@ -1205,6 +1205,141 @@ find_all_cmp90hx(void)
     ulogf(L"FIND  total targets=%d (MC_MAX=%d)\n", (INTN)g_mcCount, (INTN)MC_MAX_CARDS);
 }
 
+/* v3n: путь C — читаем VROM (VBIOS) карты.
+ *
+ * Зачем: FWSEC читает данные из кадрового буфера, а писать в FB мы НЕ можем —
+ * все BAR'ы слишком маленькие (см. BARSCN: максимум 64 МБ при 8 ГБ FB).
+ * Прежде чем идти в копировальный движок, проверяем дешёвую гипотезу: может,
+ * данные уже лежат в FB (их оставил VBIOS при POST), и проблема не в пустоте
+ * региона, а в параметрах нашей FRTS-команды.
+ *
+ * VBIOS карты лежит в VROM-апертуре — отображённой памяти, которую можно
+ * читать напрямую. Адрес берём из PCI-регистра 0x30 (Expansion ROM Base
+ * Address, бит0=enable, адрес 1МБ-выровненный). Если он выключен — сканируем
+ * BAR0 по сигнатуре option-ROM 55 AA.
+ *
+ * Печатаем первые 64 байта (там заголовок: сигнатура, длина, указатель на
+ * инициализацию, строка "VBIOS") и CRC32 первых 4 КБ — по нему сверяем с
+ * GA104.rom на хосте. */
+static void
+dump_vrom(void)
+{
+    static const UINT8 hex[] = "0123456789abcdef";
+    UINT32 romBar = cfg_read32(0x30);
+    UINT64 base = 0;
+    volatile UINT8 *p;
+    UINTN i, j;
+    static UINT8 buf[4096];
+
+    ulogf(L"VROM  expBAR(0x30)=0x%08x\n", romBar);
+    if ((romBar & 1u) != 0)
+        base = (UINT64)(romBar & ~0x3FFu);   /* 1 МБ alignment */
+
+    if (base == 0) {
+        /* сканируем BAR0 (16 МБ) по сигнатуре 55 AA шагом 4 КБ */
+        for (i = 0; i < 0x1000000ULL; i += 0x1000ULL) {
+            if (*(volatile UINT16 *)(UINTN)(gBar0Base + i) == 0xAA55u) {
+                base = gBar0Base + i;
+                break;
+            }
+        }
+    }
+    if (base == 0) {
+        ulogf(L"VROM  не найден (0x30 выключен, в BAR0 нет 55 AA)\n");
+        return;
+    }
+
+    p = (volatile UINT8 *)(UINTN)base;
+    ulogf(L"VROM  found @0x%llx\n", base);
+
+    /* первые 16 байт: сигнатура 55 AA, длина, указатель инициализации */
+    ulogf(L"VROM  hdr:");
+    for (j = 0; j < 16; j++) {
+        UINT8 v = p[j];
+        ulogf(L" %c%c", hex[v >> 4], hex[v & 0xF]);
+    }
+    ulogf(L"\n");
+
+    /* CRC32 первых 4 КБ — отпечаток для сверки с GA104.rom на хосте */
+    for (i = 0; i < 4096; i++)
+        buf[i] = p[i];
+    ulogf(L"VROM  CRC32 первых 4КБ = 0x%08x (сверить с GA104.rom)\n",
+          crc32_upd(0xFFFFFFFFu, buf, 4096));
+}
+
+/* v3n: разведка всех шести BAR'ов карты.
+ *
+ * Зачем: FWSEC читает FRTS-регион из кадрового буфера, а мы его не заполняем
+ * (FWSEC_FRTS_OFFSET в коде встречается только как число в дескрипторе
+ * команды). Чтобы заполнить, нужно знать, отображён ли FB в CPU-адресное
+ * пространство — и если да, то каким BAR'ом.
+ *
+ * Декодирование по спецификации PCI:
+ *   bit0 = 0 → memory BAR, 1 → I/O BAR;
+ *   bits1-2: 0 = 32-битный, 2 = 64-битный, 1 = зарезервирован;
+ *   размер: записать 0xFFFFFFFF, прочитать обратно, замаскировать, восстановить.
+ *
+ * Запись 0xFFFFFFFF — штатная процедура определения размера BAR, она ничего
+ * не ломает: значение сразу восстанавливается. BAR с orig==0 пропускаем
+ * (не реализован). */
+static void
+scan_bars(const CHAR16 *tag)
+{
+    static const struct { UINTN reg; const CHAR16 *nm; } bars[] = {
+        { 0x10, L"BAR0" }, { 0x14, L"BAR1" }, { 0x18, L"BAR2" },
+        { 0x1C, L"BAR3" }, { 0x20, L"BAR4" }, { 0x24, L"BAR5" },
+    };
+    UINTN b;
+
+    for (b = 0; b < sizeof(bars)/sizeof(bars[0]); b++) {
+        UINTN reg = bars[b].reg;
+        UINT32 orig = 0, probe = 0, origHi = 0, probeHi = 0;
+        UINT64 size = 0;
+        UINT32 type;
+
+        if (EFI_ERROR(pci_cfg_read(reg, &orig)) || orig == 0) {
+            ulogf(L"BARSCN %s %s=0 (не реализован)\n", tag, bars[b].nm);
+            continue;
+        }
+        type = orig & 0xFU;
+        if (type & 1U) {
+            ulogf(L"BARSCN %s %s=0x%08x (I/O BAR, пропускаем)\n",
+                  tag, bars[b].nm, orig);
+            continue;
+        }
+        /* v3n: 64-битный BAR — это биты [2:1] = 10b, то есть (type & 0x6) == 0x4.
+         * Проверка == 0x6 (оба бита) — зарезервированное значение, из-за неё
+         * BAR1/BAR3 (0xF800000C, 0xFC00000C) уходили в отбраковку, а это как
+         * раз апертуры кадрового буфера. */
+        if ((type & 0x6U) == 0x4U) {
+            /* 64-битный: старшая половина — следующий регистр */
+            UINT32 origHi = 0, probeHi = 0;
+            pci_cfg_read(reg + 4, &origHi);
+            pci_cfg_write(reg, 0xFFFFFFFFU);
+            pci_cfg_write(reg + 4, 0xFFFFFFFFU);
+            pci_cfg_read(reg, &probe);
+            pci_cfg_read(reg + 4, &probeHi);
+            pci_cfg_write(reg + 4, origHi);
+            pci_cfg_write(reg, orig);
+            size = ~(((UINT64)probeHi << 32) | (UINT64)(probe & ~0xFU)) + 1ULL;
+        } else if ((type & 0x6U) == 0x0U) {
+            pci_cfg_write(reg, 0xFFFFFFFFU);
+            pci_cfg_read(reg, &probe);
+            pci_cfg_write(reg, orig);
+            /* v3n: размер считается в 32-БИТНОЙ арифметике — иначе ~0xFF000000+1
+             * даёт 0xFFFFFFFF01000000 вместо 0x01000000 (256 МБ) */
+            size = (UINT64)(UINT32)(~(UINT32)(probe & ~0xFU) + 1U);
+        } else {
+            ulogf(L"BARSCN %s %s=0x%08x (type=%x — зарезервировано)\n",
+                  tag, bars[b].nm, orig, type);
+            continue;
+        }
+        ulogf(L"BARSCN %s %s=0x%08x type=%x size=0x%llx%s\n",
+              tag, bars[b].nm, orig, type, size,
+              size >= 0x20000000ULL ? L"  <-- КАНДИДАТ В FB-АПЕРТУРУ" : L"");
+    }
+}
+
 static BOOLEAN mc_pick(UINTN idx)
 {
     if (idx >= g_mcCount) return FALSE;
@@ -1228,7 +1363,14 @@ static BOOLEAN mc_pick(UINTN idx)
  *
  * Зонд ничего не пишет: только PCI-конфиг и несколько MMIO-чтений.
  * Настоящий кристалл отвечает правдоподобными значениями (WPR2, GFW,
- * PLM), фантом — нулями или 0xFFFFFFFF/0xBADFxxxx. */
+ * PLM), фантом — нулями или 0xFFFFFFFF/0xBADFxxxx.
+ *
+ * v3n: ПЕРЕД зондом включаем MEM_EN — раньше зонд читал MMIO при
+ * command=0, поэтому chip/gfw/fbsz/plm были 0xFFFFFFFF у ОБЕИХ карт и
+ * отличить реальный кристалл от фантома было нельзя (KNOWN-ISSUES 24).
+ * Плюс сканируем ВСЕ BAR'ы: без этого неизвестно, отображён ли кадровый
+ * буфер в CPU-адресное пространство, а это единственный способ заполнить
+ * FRTS-регион, из-за пустоты которого FWSEC не защёлкивает WPR2. */
 static void
 mc_probe_all(void)
 {
@@ -1247,7 +1389,19 @@ mc_probe_all(void)
         st = pci_cfg_read(0x00, &id);
         if (!EFI_ERROR(st)) pci_cfg_read(0x08, &cls);
         if (!EFI_ERROR(st)) pci_cfg_read(0x10, &bar0);
+
+        /* v3n: BAR'ы смотрим ДО включения decode (это read-only операция,
+         * command-регистр не трогаем), затем включаем MEM_EN — и только
+         * после этого читаем MMIO: при command=0 все чтения давали 0xFFFFFFFF,
+         * из-за чего обе карты выглядели одинаково и фантом было не отличить. */
+        scan_bars(L"card");
+        enable_mem_decode();
+
         gBar0Base = bar0 & ~0xFU;
+
+        /* v3n: VROM (VBIOS) — читаем, чтобы понять, где карта ждёт данные
+         * и совпадает ли её VBIOS с GA104.rom */
+        dump_vrom();
 
         Print(L"[probe] card#%d bus=%d dev=%d fn=%d: 10de:%04X class=%06X "
               L"BAR0=0x%08x\n", (INTN)i, (INTN)bus, (INTN)dev, (INTN)fn,
@@ -1408,6 +1562,12 @@ static const struct { UINT32 addr, val; } g_rj16[] = {
 static BOOLEAN g_gen2Fire = FALSE;
 /* v3n: FWSEC в свипе gen2 нужен один раз, а не на каждой записи таблицы */
 static BOOLEAN g_fwsecOnce = FALSE;
+/* v3n: gen2 по умолчанию ВЫКЛЮЧЕН. Замер времени показал: свип съедает
+ * ~10.8 минут из 13 и при этом не доходит до FF (маски на 0xFFFFFFCF/8F).
+ * Пока не решён вопрос WPR2, отладка идёт без gen2 — цикл сжимается до
+ * ~2.2 минуты. Включать осознанно, когда WPR2 защёлкивается и понадобится
+ * полный PLM. */
+static BOOLEAN g_gen2Enable = FALSE;
 static BOOLEAN g_gen2Quick = FALSE;   /* v2.99h: маски уже открыты — сразу конфиг */
 static UINT32 g_gen2Addr = 0, g_gen2Val = 0;
 #endif /* PCIE_GEN2_REJOIN */
@@ -1818,6 +1978,49 @@ fwsec_set_imem_sec(UINTN sec)
     g_fwsecImemSec = sec;
 }
 
+/* v3n: ТЕСТ — может ли GSP-DMA прочитать кадровый буфер?
+ *
+ * Проблема: FRTS-регион лежит в FB по TARGET_FRTS_OFFSET, а FB недоступен из
+ * CPU (BAR'ы максимум 64 МБ при 8 ГБ FB). Прежде чем инвестировать в
+ * копировальный движок, проверяем дешёвую гипотезу: может, GSP-DMA умеет
+ * GPU-локальную адресацию и сможет прочитать FB напрямую.
+ *
+ * Подставляем в DMATRFBASE адрес региона вместо sysmem и читаем результат
+ * через порты Falcon. Если DMA вернёт осмысленные данные — FB читается,
+ * и мы узнаем, что в регионе. Если мусор — GSP-DMA не для FB.
+ *
+ * Размер минимальный (0x100), чтобы не подвесить систему; gsp_dma_wait_idle
+ * и так ограничен 20000 итерациями. */
+static void
+test_fb_read(void)
+{
+    static BOOLEAN done = FALSE;
+    UINT64 frtsPhys = TARGET_FRTS_OFFSET;   /* v3n: UINT64! 0x1FFE00000 не влезает в UINT32 */
+    UINT32 w0 = 0, w1 = 0, w2 = 0, w3 = 0;
+    UINTN i;
+
+    if (done) return;
+    done = TRUE;
+
+    ulogf(L"FBTEST пробуем прочитать FRTS-регион 0x%llx через GSP-DMA...\n",
+          frtsPhys);
+
+    gsp_dma_transfer(0, 0, frtsPhys, 0x100, 0 | (6 << 8) | (0 << 12));
+
+    for (i = 0; i < 4; i++) {
+        UINT32 v;
+        mmio_write32(GSP_BASE + 0x1C0, i * 4);
+        v = mmio_read32(GSP_BASE + 0x1C4);
+        if (i == 0) w0 = v;
+        if (i == 1) w1 = v;
+        if (i == 2) w2 = v;
+        if (i == 3) w3 = v;
+    }
+    ulogf(L"FBTEST первые слова: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+          w0, w1, w2, w3);
+    ulogf(L"FBTEST (в DMEM после прогона FWSEC лежит наш образ — сверяй)\n");
+}
+
 static BOOLEAN
 fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
 {
@@ -2216,6 +2419,9 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
         }
         ulogf(L"FWSEC   конец дампа DMEM (непустых слов: %d)\n", (INTN)shown);
     }
+
+    /* v3n: тест чтения FB — один раз за прогон, после первого FWSEC */
+    test_fb_read();
     return FALSE;
 }
 
@@ -2275,10 +2481,47 @@ typedef struct {
 
 static UINT64 cmp90_ptimer64(void)
 {
-    /* чтение TIME_1 защёлкивает TIME_0 — порядок как в драйвере NV */
-    UINT32 hi = mmio_read32(NV_PTIMER_TIME_1);
-    UINT32 lo = mmio_read32(NV_PTIMER_TIME_0);
+    /* чтение TIME_1 защёлкивает TIME_0 — порядок как в драйвере NV.
+     * v3n: читаем ДВАЖДЫ до совпадения. Одиночное чтение во время FLR-циклов
+     * gen2 давало мусор (t=16658495639518мс) — TIME_0 обновляется между
+     * двумя чтениями. Повтор с проверкой стабильности это лечит. */
+    UINT32 hi, lo, hi2, lo2;
+    hi  = mmio_read32(NV_PTIMER_TIME_1);
+    lo  = mmio_read32(NV_PTIMER_TIME_0);
+    hi2 = mmio_read32(NV_PTIMER_TIME_1);
+    lo2 = mmio_read32(NV_PTIMER_TIME_0);
+    if (hi != hi2) return ((UINT64)hi2 << 32) | lo2;   /* сдвиг разряда — берём второе */
+    if (lo != lo2) {
+        /* TIME_0 переполнился между чтениями — перечитаем один раз */
+        hi = mmio_read32(NV_PTIMER_TIME_1);
+        lo = mmio_read32(NV_PTIMER_TIME_0);
+    }
     return ((UINT64)hi << 32) | lo;
+}
+
+/* v3n: ЗАМЕРЫ ВРЕМЕНИ.
+ *
+ * Лог не содержал меток времени, поэтому 13 минут работы приходилось
+ * раскладывать по коду вручную. PTIMER — свободно идущие GPU-часы (нс),
+ * читаются через уже проверенный порт. Печатаем миллисекунды от старта
+ * приложения: так за один заход видно, какая фаза съедает время. */
+static UINT64 g_t0 = 0;
+
+static void
+log_t0(void)
+{
+    g_t0 = cmp90_ptimer64();
+    ulogf(L"TIME  t=0мс — старт отсчёта\n");
+}
+
+static void
+log_ms(const CHAR16 *tag)
+{
+    if (g_t0 == 0) return;
+    {
+        UINT64 ms = (cmp90_ptimer64() - g_t0) / 1000000ULL;
+        ulogf(L"TIME  t=%lldмс  %s\n", (INT64)ms, tag);
+    }
 }
 
 /* v2.69b: проба здоровья SEC2 — липнут ли записи в блок регистров.
@@ -2587,6 +2830,13 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
               (UINT32)((elapsed / 1000ULL) % 1000ULL),
               (UINT32)it,
               plmOpen ? L"PLM OPEN" : halted ? L"HALT" : L"таймаут 5с");
+        /* v3n: то же в лог — именно этот поллинг (до 200000 итераций по
+         * ~0.65мс) подозреваем в съедании большей части 13 минут */
+        ulogf(L"BOOTER iters=%u за %u.%03uмс %s\n",
+              (INTN)it,
+              (INTN)(elapsed / 1000000ULL),
+              (INTN)((elapsed / 1000ULL) % 1000ULL),
+              plmOpen ? L"PLM-OPEN" : halted ? L"HALT" : L"timeout-5s");
         for (j = 0; j < hist_n; j++) {
             UINT64 tj = ((UINT64)hist[j].t_hi << 32) | hist[j].t_lo;
             UINT64 d = tj - t0;
@@ -4898,11 +5148,45 @@ log_load_ptr(EFI_BLOCK_IO_PROTOCOL *bio)
     return next;
 }
 
+/* v3n: ОДНОРАЗОВАЯ очистка области лога.
+ *
+ * Хостовая запись на диск заблокирована (Windows даёт Access Denied, пока
+ * том смонтирован), поэтому чистим из приложения. Пишем нули блоками по
+ * 64 сектора — 32 записи на всю область, быстро. После очистки указатель
+ * сбрасывается, и следующий прогон начинается с сектора 1 на чистом листе.
+ *
+ * Флаг g_logClear — на одну сборку: TRUE = очистить при следующей загрузке,
+ * затем вернуть FALSE. */
+static BOOLEAN g_logClear = FALSE;   /* уже очищено одноразовой сборкой 750ed815 */
+
+static void
+log_clear_area(EFI_BLOCK_IO_PROTOCOL *bio)
+{
+    static UINT8 buf[64 * 512];
+    UINT32 sec;
+    SetMem(buf, sizeof(buf), 0);
+    for (sec = 1; sec < LOG_SECTORS; sec += 64) {
+        UINTN n = LOG_SECTORS - sec;
+        if (n > 64) n = 64;
+        uefi_call_wrapper(bio->WriteBlocks, 5, bio, bio->Media->MediaId,
+                          LOG_LBA + sec, (UINTN)n * 512, buf);
+    }
+    /* указатель тоже сбрасываем — иначе останется старый номер */
+    log_store_ptr(bio, 1);
+    ulogf(L"LOG   область очищена, следующий прогон с сектора 1\n");
+}
+
 /* Заголовок лога + контрольная запись. */
 static void
 log_start(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 lba, const CHAR8 *how)
 {
     UINT32 startSec = log_load_ptr(bio);
+
+    if (g_logClear) {
+        g_logClear = FALSE;
+        log_clear_area(bio);
+        startSec = 1;
+    }
 
     g_logBio  = bio;
     g_logSec  = startSec;
@@ -5894,6 +6178,10 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 
     set_gpu_time();
 
+    /* v3n: старт отсчёта времени — ПОСЛЕ set_gpu_time(), иначе PTIMER ещё
+     * равен 0 и все log_ms() молча выходят (g_t0==0) */
+    log_t0();
+
     /* --- Выделение памяти (ниже 4ГБ — для DMA) --- */
     Status = alloc_fwsec_buffer((V67_SIZE + 0xFFF) >> 12, &v67Phys);
     if (EFI_ERROR(Status)) { Print(L"alloc v67: %r\n", Status); goto done; }
@@ -6219,6 +6507,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * (записи не липнут, reset не лечит) — все последующие попытки исполняли
      * труп. Теперь BL(GSP)→FWSEC(GSP)→WPR2→libos→booter_load_v67 на живом. */
     earlyOk = FALSE;
+    log_ms(L"до раннего пути (аллокации закончены)");
     {
         EFI_STATUS earlySt = early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
         sec2_health(L"9-post-early");
@@ -6227,6 +6516,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             earlyOk = TRUE;
         }
     }
+    log_ms(L"ранний путь завершён");
 
     if (!earlyOk) {
     /* --- v2.28/32: FWSEC на GSP (FRTS/WPR2) + kflcnResetIntoRiscv + LibosBootArgs
@@ -6244,6 +6534,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             Print(L"v2.51: *** результат получен — разблокирую ***\n");
             Status = EFI_SUCCESS;
         } else {
+            log_ms(L"v2.51 без результата");
             Print(L"v2.51: без результата — пробую v2.46 полный реплей\n");
     /* v2.46: ПОЛНЫЙ РЕПЛЕЙ последовательности драйвера (3 стадии) — замена
      * v2.45 flow. Если реплей дал результат (наш код выполнился / PLM открыт) —
@@ -6268,6 +6559,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
              * единственный вариант, который не требует от нас знать
              * frtsOffset и не требует валидной подписи. */
             Print(L"\nv2.105: ПРОБА ШТАТНОГО FWSEC (без нашей подписи)...\n");
+            log_ms(L"до штатного FWSEC");
             if (fwsec_preloaded_gsp()) {
                 fwOk = TRUE;
                 Print(L"v2.105: *** ШТАТНЫЙ FWSEC СРАБОТАЛ — WPR2 поднят ***\n");
@@ -6326,6 +6618,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                     sec2_health(L"5-fwsec-retry");
                 }
             }
+            log_ms(L"FWSEC-попытки закончены");
             if (fwOk) {
         Print(L"fwsec: OK — WPR2 установлен. kflcnResetIntoRiscv(GSP)...\n");
         mmio_write32(GSP_ENGINE, 0x1);
@@ -6367,7 +6660,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     {
         BOOLEAN have2 = FALSE;
         UINTN gi = mc_var_get(L"CMP90G2", &have2);
-        if (g_gen2Fire && have2) {
+        /* v3n: g_gen2Enable — рубильник. По умолчанию выключен: замер показал,
+         * что свип съедает ~10.8 мин из 13 и не доходит до FF. Включается
+         * осознанно, когда WPR2 защёлкивается и понадобится полный PLM. */
+        ulogf(L"GEN2  рубильник: fire=%d have2=%d enable=%d -> %s\n",
+              (INTN)g_gen2Fire, (INTN)have2, (INTN)g_gen2Enable,
+              (g_gen2Fire && have2 && g_gen2Enable) ? L"СВИП ИДЁТ"
+                                                    : L"свип ПРОПУЩЕН");
+        if (g_gen2Fire && have2 && g_gen2Enable) {
             /* v2.99f: каждая пара = ПОЛНЫЙ FLR-миницикл внутри EFI,
              * 1:1 как «module reload» у rejoin16:
              *   FLR → ранний путь (BL→FWSEC→WPR2→RISCV→ботер#1 со stock-
@@ -6392,6 +6692,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
              * уже точный FF => миницикл не нужен. До 3 проходов. */
             for (pass = 0; pass < 3 && !g_gen2Quick && !done; pass++) {
                 Print(L"gen2: === ПРОХОД %d/3 ===\n", (INTN)pass + 1);
+                ulogf(L"GEN2  проход %d/3 начат\n", (INTN)pass + 1);
                 for (i = 1; i < RJ16_N; i++) {
                     volatile UINT32 *pv =
                         (volatile UINT32 *)(UINTN)(v67Phys + 0xf948);
@@ -6479,6 +6780,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                 }
                 ulogf(L"GEN2  проход %d завершён — маски %s\n", (INTN)pass + 1,
                       done ? L"ВСЕ ТОЧНЫЕ FF" : L"НЕ все точные (ещё проход)");
+                {
+                    /* v3n: замер времени проходa — без него 13 минут не
+                     * разложить по фазам */
+                    static const CHAR16 *ptag[3] = { L"gen2 проход 1 завершён",
+                                                     L"gen2 проход 2 завершён",
+                                                     L"gen2 проход 3 завершён" };
+                    if (pass < 3) log_ms(ptag[pass]);
+                }
             }
             mc_var_set(L"CMP90G2", (UINT32)RJ16_N);
             Print(L"gen2: таблица пройдена — состояние масок перед конфигом:\n");
@@ -6811,6 +7120,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * (No mapping, OpenVolume-висняк, NVRAM-висяк). Возврат в
          * прошивку: BDS грузит Windows по BootOrder БЕЗ POST */
         Print(L"v3.0: возврат в прошивку — Windows по BootOrder без POST\n");
+        log_ms(L"финал: возврат в прошивку");
         goto done;
     }
 
