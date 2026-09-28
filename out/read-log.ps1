@@ -82,7 +82,8 @@ if ($magicAt -lt 0) {
     Write-Host ""
     Write-Host "ЧТО ДЕЛАТЬ:" -ForegroundColor Yellow
     Write-Host "  1. Убедитесь, что на флешке свежий загрузчик:"
-    Write-Host "     X:\EFI\BOOT\BOOTX64.EFI  (ожидается 577024 байта)"
+    Write-Host "     X:\EFI\BOOT\BOOTX64.EFI"
+    Write-Host "     md5 должен совпадать с out\unlock_v3n_CMP70HX.efi"
     Write-Host "  2. ПЕРЕЗАГРУЗИТЕСЬ и загрузитесь с этой флешки."
     Write-Host "  3. Убедитесь на экране загрузки, что есть строка"
     Write-Host "     '[log] флешка = ...' и НЕТ строки 'только на экран'."
@@ -102,6 +103,17 @@ Write-Host ""
 #     (остатки ЛОГОГО ЖЕ лога от прошлой загрузки), поэтому признак
 #     «это лог» — перевод строки в начале сектора, а не только первый байт;
 #  3) каждый сектор режем по первому нулю.
+#
+# ЛОВУШКА (исправлено 2026-09-28). Срез байтового массива в PowerShell —
+# это object[], а не byte[]. У object[] метод IndexOf сравнивает ЗНАЧЕНИЕ
+# БЕЗ ПРИВЕДЕНИЯ ТИПА, поэтому IndexOf(10) ищет Int32(10) и никогда не
+# находит byte(10):
+#     $raw[0..511][0..299].IndexOf(10)        -> -1   (всегда!)
+#     $raw[0..511][0..299].IndexOf([byte]10)  ->  9   (правильно)
+# Симптом был тихий и коварный: ридер всегда останавливался на первом
+# секторе с сообщением «нет перевода строки» и печатал лог в 1 байт,
+# хотя лог на флешке был полный. Именно из-за этого две строки ниже
+# используют [Array]::IndexOf с ЯВНЫМ приведением к [byte].
 $sb = New-Object Text.StringBuilder
 $stopped = ''
 for ($i = $firstSector; $i -lt $MAXSEC; $i++) {
@@ -109,10 +121,10 @@ for ($i = $firstSector; $i -lt $MAXSEC; $i++) {
     if ($raw[$off] -eq 0) { $stopped = "сектор $i не записан"; break }
     $chunk = $raw[$off .. ($off + $SECTOR - 1)]
     $head  = [Math]::Min(300, $SECTOR)
-    $nl = $chunk[0..($head-1)].IndexOf(10)
+    $nl = [Array]::IndexOf([object[]]$chunk[0..($head-1)], [byte]10)
     if ($nl -lt 0) { $stopped = "сектор $i не похож на лог (нет перевода строки)"; break }
-    $end = $chunk.IndexOf(0)
-    if ($end -ge 0) { $chunk = $chunk[0..($end-1)] }
+    $end = [Array]::IndexOf([object[]]$chunk, [byte]0)
+    if ($end -ge 1) { $chunk = $chunk[0..($end-1)] }
     if ($chunk.Length) { $null = $sb.Append([Text.Encoding]::ASCII.GetString($chunk)) }
     if ($sb.ToString().Contains($MARKER_END)) { $stopped = 'маркер конца'; break }
 }
@@ -125,6 +137,32 @@ if ($stop -ge 0) {
     $text = if ($nl -ge 0) { $text.Substring(0, $nl + 1) }
             else          { $text.Substring(0, $stop + $MARKER_END.Length) + "`n" }
 }
+
+# --- ЛОВУШКА (2026-09-28): лог НЕ затирался между прогонами -----------
+# Раньше unlock_v2.c писал «прогон продолжает с сектора N (логи не
+# затираются)», и на флешке лежала конкатенация всех прошлых прогонов.
+# Новый перезаписывал начало, а хвост старого выживал, если новый был
+# короче. Симптом: в логе были строки «DMA   imem_sec_bit=0», которых в
+# записанном EFI нет вообще (проверено поиском по бинарю), и метки
+# времени шли назад (t=33368 -> t=29756). Из-за этого вывод «после правки
+# три ретрая пошли по старому коду» был ложным.
+#
+# Теперь область очищается на каждом прогоне (g_logClear = TRUE в
+# unlock_v2.c), так что смешивания быть не должно. Проверка ниже остаётся
+# как СТРАХОВКА: если заголовков оказалось больше одного — значит очистка
+# не сработала и выводы могут быть недостоверны.
+$hdr = 'CMPUNLOG v1 '
+$runs = ([regex]::Matches($text, [regex]::Escape($hdr))).Count
+if ($runs -gt 1) {
+    $lastHdr = $text.LastIndexOf($hdr)
+    Write-Host ("ВНИМАНИЕ: в области {0} прогонов, показан только последний." -f $runs) -ForegroundColor Red
+    Write-Host "Очистка области лога не сработала — выводы о правках ненадёжны." -ForegroundColor Red
+    if ($lastHdr -gt 0) { $text = $text.Substring($lastHdr) }
+    Write-Host ""
+} else {
+    Write-Host "Прогонов в области лога: 1 (чисто)." -ForegroundColor DarkGreen
+    Write-Host ""
+}
 $text = $text.TrimEnd("`r", "`n") + "`n"
 
 Write-Host ("================ ЛОГ С ФЛЕШКИ ({0} байт) ================" -f $text.Length) -ForegroundColor Cyan
@@ -133,11 +171,29 @@ Write-Host "=================== КОНЕЦ ЛОГА ===================" -Foregr
 
 Write-Host ""
 Write-Host "--- ключевые строки ---" -ForegroundColor Yellow
-$text -split "`n" | Where-Object { $_ -match '^(PRE|FWSEC|FIND|PICK|FBIOS|META|END)\b' } |
+$text -split "`n" | Where-Object { $_ -match '^(PRE|FWSEC|FIND|PICK|FBIOS|META|END|FBP|TIME|BOOTER|GEN2)\b' } |
     ForEach-Object { "  " + $_.TrimEnd() }
 
 Write-Host ""
 Write-Host "--- что делать дальше ---" -ForegroundColor Yellow
+
+# ШАГ 1: вердикт пробы доступа к кадровому буферу — самое важное.
+if ($text -match 'FBP\s+VERDICT (.+)') {
+    Write-Host "  ШАГ 1 (проба FB): $($Matches[1])" -ForegroundColor Magenta
+    $v = $Matches[1]
+    if ($v -match 'ctrlA=FAIL') {
+        Write-Host "    -> положительный контроль не прошёл: чинить окно DMEM/DMA, C-G не читать."
+    } elseif ($v -match 'roundTrip=PASS') {
+        Write-Host "    -> FB ДОСТУПЕН ДЛЯ ЗАПИСИ через GSP-DMA."
+        Write-Host "       FRTS-регион можно заполнять напрямую (след. шаг)."
+    } elseif ($v -match 'frtsRead=nonzero') {
+        Write-Host "    -> FB читается, но не пишется: смотреть FBP-F / FBP-G в логе."
+    } else {
+        Write-Host "    -> FB по 0x1FFE00000 недоступен: работать с командой маппера"
+        Write-Host "       (gfwImageSize в readVbiosDesc) — см. docs/70HX-NEXT-STEPS.md §4a."
+    }
+}
+
 if ($text -match 'PRE   OK' -or $text -match 'PRE   CHANGED') {
     Write-Host "  ШТАТНЫЙ FWSEC ПОДНЯЛ WPR2 — дальше смотрите блок FWSEC/END."
 } elseif ($text -match 'PRE   imem_card=(\w+).*match=0') {

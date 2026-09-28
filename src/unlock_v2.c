@@ -189,6 +189,7 @@ static void log_init(EFI_HANDLE ImageHandle);
 static void log_store_ptr(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 next);
 static UINT32 log_load_ptr(EFI_BLOCK_IO_PROTOCOL *bio);
 static VOID *cmp90_alloc(UINTN size);
+static void cmp90_free(VOID *p);
 static void fwsec_set_imem_sec(UINTN sec);
 static UINT32 crc32_upd(UINT32 crc, const UINT8 *p, UINTN n);
 static void log_buf_check(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
@@ -278,13 +279,55 @@ static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
 #define TARGET_PRAMIN           TARGET_MB
 #define TARGET_FRTS_SIZE        TARGET_MB
 #define TARGET_VGA_WS_OFFSET    (TARGET_FB_SIZE - TARGET_PRAMIN)
-#define TARGET_WPR_END          (TARGET_VGA_WS_OFFSET & ~(0x1FFFFULL))
+
+/* --- WPR END MARGIN (найдено 2026-09-28, docs/70HX-DRIVER-ANALYSIS.md §5) ---
+ *
+ * Драйвер 610.43.03 считает конец распребительной области так
+ * (kernel_gsp_tu102.c:817):
+ *
+ *     gspFwWprEnd = ALIGN_DOWN(vgaWS - kgspGetWprEndMargin(), 128K)
+ *     frtsOffset  = gspFwWprEnd - frtsSize
+ *
+ * а kgspGetWprEndMargin (kernel_gsp.c:6552) при незаданном реестровом
+ * оверрайде складывает ВОТ ЭТО:
+ *
+ *     pmuReserved + frtsSize(1M) + gspRmBootUcodeSize(0x6000)
+ *                 + sizeOfRadix3Elf (~84M) + fwHeap + nonWprHeap
+ *
+ * То есть наш прежний TARGET_WPR_END = vgaWS & ~0x1FFFF БЕЗ этого
+ * вычитания — единственная найденная арифметическая ошибка в профиле.
+ * FRTS обязан лежать над bootBin и ELF GSP; если попросить FWSEC
+ * защёлкнуть WPR2 слишком высоко, под защиту попадёт чужой регион, и
+ * FWSEC молча откажется — ровно то, что наблюдается.
+ *
+ * ТОЧНОЕ значение маржи вычисляется в драйвере из размеров куч и
+ * pmuReserved, которые в EFI мы не знаем. Драйвер же допускает задать её
+ * реестром (RM_GSP_WPR_END_MARGIN), то есть значение подбирается
+ * экспериментально — что и делаем: TARGET_WPR_END_MARGIN задаётся здесь,
+ * а ниже печатается в баннер, чтобы по логу было видно, что на флешке.
+ *
+ * Ориентиры перебора: 0 (заведомо неверно, прежнее поведение),
+ * 64/96/128/160/256 МБ. Подробности и критерий успеха — в
+ * docs/70HX-NEXT-STEPS.md §3a. */
+#ifndef TARGET_WPR_END_MARGIN
+# define TARGET_WPR_END_MARGIN   (0x08000000ULL)   /* 128 MB */
+#endif
+
+#define TARGET_WPR_END_RAW      (TARGET_VGA_WS_OFFSET - TARGET_WPR_END_MARGIN)
+#define TARGET_WPR_END          (TARGET_WPR_END_RAW & ~(0x1FFFFULL))
 #define TARGET_FRTS_OFFSET      (TARGET_WPR_END - TARGET_FRTS_SIZE)
-/* FWSEC's FRTS command carries the offset in 4 KB pages (cmd = frts>>12);
- * that value is what it later programs into WPR2_LO. Reproducing the measured
- * WPR2 pair needs the >>8 encoding — see the note in the block comment. */
+/* FWSEC's FRTS command carries the offset in 4 KB pages (cmd = frts>>12).
+ *
+ * Формула WPR2_LO = frts>>8 проверена ТОЖДЕСТВЕННО по заголовкам драйвера
+ * (docs/70HX-DRIVER-ANALYSIS.md §4):
+ *     NV_PFB_PRI_MMU_WPR2_ADDR_LO_ALIGNMENT = 0xC
+ *     NV_PFB_PRI_MMU_WPR2_ADDR_LO_VAL      = 31:4
+ *     ожидаемое_значение_в_регистре = (frts >> 0xC) << 4 == frts >> 8
+ * Это НЕ экстраполиция с одного замера, а тождество. */
 #define TARGET_FRTS_OFFSET_PG   (TARGET_FRTS_OFFSET >> 12)
 #define TARGET_WPR2_LO          ((UINT32)(TARGET_FRTS_OFFSET >> 8))
+/* Драйвер проверяет только wpr2Hi != 0 ("WPR2 найден"), точное HI не
+ * сверяет, поэтому это значение влияет только на наше условие успеха. */
 #define TARGET_WPR2_HI          (TARGET_WPR2_LO + 0xE00U)
 
 /* A misaligned FRTS offset means a wrong fbSize in the profile, and the
@@ -298,6 +341,16 @@ static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
  * uncast values (a cast is not allowed in a preprocessor expression). */
 #if (TARGET_FRTS_OFFSET >> 8) + 0xE00 < (TARGET_FRTS_OFFSET >> 8)
 # error "WPR2 window wraps 32 bits — unsupported framebuffer size"
+#endif
+/* Маржа не должна съесть больше половины кадрового буфера: FRTS обязан
+ * остаться внутри FB, иначе WPR2 будет защёлкнут на несуществующем
+ * регионе и FWSEC откажется (или, что хуже, защитит что-то не то). */
+#if TARGET_WPR_END_MARGIN > (TARGET_FB_SIZE / 2)
+# error "TARGET_WPR_END_MARGIN exceeds half the framebuffer — nonsense"
+#endif
+/* FRTS должен лежать НИЖЕ VGA workspace, иначе это не FRTS. */
+#if TARGET_FRTS_OFFSET >= TARGET_VGA_WS_OFFSET
+# error "frtsOffset is not below vgaWorkspaceOffset — check the margin"
 #endif
 
 /* ==== GA10x registers (BAR0 MMIO) ====
@@ -314,6 +367,16 @@ static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
 #define REG_PCIE_FUSE_OVR       0x00823810UL
 #define REG_PFB_MMU_WPR2_LO     0x001FA824UL
 #define REG_PFB_MMU_WPR2_HI     0x001FA828UL
+/* Общий регистр уровня привилегий для WPR2 (dev_fb.h:
+ * NV_PFB_PRI_MMU_WPR2_ADDR_LO__PRIV_LEVEL_MASK). Нулевое значение означает,
+ * что чтение WPR2 отдаёт реальную запись; ненулевое — запись прикрыта, и
+ * тогда наше «wpr2 не встал» может быть ложным. */
+#define REG_PFB_MMU_WPR2_PLM    0x001FA7CCU
+/* NV_PBUS_VBIOS_SCRATCH(i) = 0x1400 + i*4. Драйвер читает 0x0E
+ * (FWSECLIC_FRTS_ERR_CODE = 31:16) и 0x15 (SB_ERR_CODE = 15:0). */
+#define NV_PBUS_VBIOS_SCRATCH  0x00001400UL
+#define FWSECLIC_SCRATCH_FRTSE 0x0EU
+#define FWSECLIC_SCRATCH_SBE   0x15U
 #define REG_PCIE_LINK_CTRL      0x0008C000UL
 #define REG_GFW_BOOT_OK         0x00118234UL   /* 0xff == GFW booted */
 
@@ -335,6 +398,77 @@ is_target_gpu(UINT32 Id)
 #define VAL_PLM_OPEN            0xFFFFFFFFUL
 #define VAL_SS0_UNLOCKED        0x88888888UL
 #define VAL_SS1_UNLOCKED        0x00000008UL
+
+/* ==== РЕШАЮЩИЙ ЭКСПЕРИМЕНТ: переживают ли селекторы FLR (2026-09-29) ====
+ *
+ * Установка: render test GPU-Z — 75 Вт, Cyberpunk 2077 — 85 Вт при 9 FPS.
+ * Анлока нет. Перезапуска между прогоном и замером не было, значит
+ * fuse-shadow не сбрасывался POST'ом, и виноват не он.
+ *
+ * Гипотезы, которые надо разделить:
+ *   (а) селекторы не переживают do_flr() — в Windows приходит ноль;
+ *   (б) селекторы переживают, но 0x88888888 для GA104 не то значение.
+ *
+ * Проверка: убрать FLR. Если (а) — мощность вырастет. Если (б) — останется
+ * прежней. Различить можно одним прогоном.
+ *
+ * Цена: FLR был нужен, чтобы сбросить защёлкнутый WPR2 — комментарий в
+ * коде говорит, что без него драйвер падает с frts_err=0xbe. То есть в
+ * варианте без FLR карта может вообще не подняться. Это ожидаемо и
+ * информативно: если карта пропадёт — значит без FLR нельзя, и вопрос
+ * закрывается в пользу (б).
+ *
+ * Значение по умолчанию: 0 — FLR ВЫПОЛНЯЕТСЯ.
+ *
+ * РЕЗУЛЬТАТ ЭКСПЕРИМЕНТА (прогон skipflr, 2026-09-29): SKIP_FLR=1
+ * НЕЖИЗНЕСПОСОБЕН. Карта перестала инициализироваться, и PREFLR показал
+ * почему:
+ *
+ *     PREFLR WPR2=0x01EAD000/0x01F7EE00   (ожидалось 0x01F7E000/...)
+ *            cpuctl=0xBADF5620  <- движок в плохом состоянии
+ *            GFW=0xBADF1100
+ *
+ * LO уехал на 0xD1000, cpuctl не 0x10 — то есть без сброса WPR2 не
+ * возвращается в постовый вид, и Windows-драйвер падает. Ровно то, о чём
+ * предупреждает комментарий в коде (frts_err=0xbe).
+ *
+ * Значит: FLR обязателен, и вопрос «переживают ли селекторы FLR» этим
+ * экспериментом НЕ закрыт — карта не поднялась, мощность мерить не на чем.
+ * Следующий шаг — другой: искать правильные значения селекторов, а не
+ * отменять сброс. */
+#ifndef SKIP_FLR
+#define SKIP_FLR 0
+#endif
+/* ==== ЛОВУШКА, КОТОРАЯ МОГЛА СЪЕСТЬ ВЕСЬ АНЛОК (2026-09-29) ============
+ *
+ * Многокарточный режим при g_mcCount=2 ставит g_mcAdvance=TRUE для карты 0
+ * (условие: g_mcIndex+1 < g_mcCount). А в финале вызывается
+ * mc_set_bootnext_self(), которая пишет BootNext = путь НАШЕГО EFI на
+ * флешке. То есть прошивка загружает флешку ещё раз.
+ *
+ * Это ПОЛНЫЙ POST. А fuse-shadow (где живут SS0/SS1) при POST обнуляется —
+ * ради этого весь Unlock и делается ДО загрузки ОС, минуя POST.
+ *
+ * Итог: анлок записывается, затем прошивка делает POST, и карта приходит в
+ * Windows заблокированной. Ровно наблюдаемая картина: лог показывает
+ * «SS0/SS1 встали, всё хорошо», а мощность 75-85 Вт.
+ *
+ * И это НЕВИДИМО в логе: второй прогон затирает первый (область лога
+ * очищается каждый прогон), а второй прогон выглядит идентично — он тоже
+ * записывает селекторы и читает их обратно. Отличить «анлок пережил» от
+ * «анлок затёрт вторым POST'ом» по логу нельзя.
+ *
+ * SINGLE_CARD_ONLY: не перезагружаться на флешку, работать с первой
+ * найденной картой и отдать BootOrder прошивке. Вторая 10de:248A на
+ * bus 16 считается призраком от прежней работы (docs/70HX-PORT-STATUS).
+ * Если после этого мощность вырастет — причина найдена.
+ *
+ * Обоснование: перезагрузка ради второй карты несовместима с задачей
+ * «анлок должен дожить до Windows». Побеждает второе. */
+#ifndef SINGLE_CARD_ONLY
+#define SINGLE_CARD_ONLY 1
+#endif
+static BOOLEAN g_postFlr = FALSE;   /* после do_flr() MMIO не читать */
 
 /* ==== SEC2 Falcon microcontroller — hosts the signed "booter" ucode ====
  * This is where the exploit runs: we craft its IMEM/DMEM via DMA and let
@@ -1570,6 +1704,12 @@ static BOOLEAN g_fwsecOnce = FALSE;
 static BOOLEAN g_gen2Enable = FALSE;
 static BOOLEAN g_gen2Quick = FALSE;   /* v2.99h: маски уже открыты — сразу конфиг */
 static UINT32 g_gen2Addr = 0, g_gen2Val = 0;
+/* v3n: читаемое состояние fire-режима для кода ВНЕ #ifdef PCIE_GEN2_REJOIN.
+ * Раньше строка лога с g_gen2Fire стояла в общем коде, и сборки без
+ * PCIE_GEN2_REJOIN падали с 'g_gen2Fire undeclared'. */
+#define GEN2_FIRE_STATE()  ((INTN) g_gen2Fire)
+#else
+#define GEN2_FIRE_STATE()  ((INTN) 0)
 #endif /* PCIE_GEN2_REJOIN */
 
 /* ==== GPU wall-clock (PTIMER) ====
@@ -1964,61 +2104,491 @@ fwsec_preloaded_gsp(void)
     return FALSE;
 }
 
-/* Режим secure для DMA в IMEM: 1 = SEC=1 (как на 90HX), 0 = SEC=0.
- * На 70HX защищённый IMEM отдаёт 0xDEAD5EC1 — осознанный отказ GSP. */
-/* v3n: по умолчанию НЕ-secure. Лог показал: при imemSec=1 чтение IMEM через
- * порт GSP возвращает 0xDEAD5EC1 — осознанный отказ «secure memory access».
- * То есть бит SEC в DMATRFCMD на этой карте запрещён, и DMA кода в IMEM
- * просто не происходит. При SEC=0 тот же отказ не возвращается. Поэтому
- * начинаем с SEC=0, а SEC=1 оставляем на последние попытки. */
-static UINTN g_fwsecImemSec = 0;
+/* Режим secure для DMA в IMEM: 1 = SEC=1 (как в драйвере), 0 = SEC=0.
+ *
+ * ИСТОРИЯ ЭТОГО ФЛАГА (2026-09-28) — важно, потому что прежнее
+ * обоснование было построено на ошибочной расшифровке регистра.
+ *
+ * Стояло здесь: «на 70HX защищённый IMEM отдаёт 0xDEAD5EC1, осознанный
+ * отказ GSP, значит бит SEC запрещён и DMA кода в IMEM не происходит,
+ * начинаем с SEC=0».
+ *
+ * Наблюдение 0xDEAD5EC1 было верным, а вывод — нет. Поле IMEMC.SECURE
+ * (28:28) — это признак ЗАЩИТЫ ПРИ ЧТЕНИИ, а не запрет на запись. И
+ * главное: тот замер шёл при команде 0x604, где бит IMEM=1 стоял на
+ * позиции SEC, то есть код в IMEM не писался вообще. Сравнивать было
+ * нечего.
+ *
+ * Теперь при правильной команде 0x614 (IMEM=1, SEC=1) все 9 проб IMEM
+ * дают 0xDEAD5EC1 — то есть IMEM ЗАНЯТ, а «DEAD SEC1» означает ровно
+ * то, что написано: содержимое защищено и не читается без достаточного
+ * уровня привилегий. Это признак УСПЕШНОЙ загрузки защищённого кода,
+ * а не отказа.
+ *
+ * Значение по умолчанию 1 — как в эталоне GA102
+ * (kernel_gsp_falcon_ga102.c:229, FLD_SET_DRF_NUM(..., _SEC, 0x1, ...)).
+ */
+static UINTN g_fwsecImemSec = 1;
 static void
 fwsec_set_imem_sec(UINTN sec)
 {
     g_fwsecImemSec = sec;
 }
 
-/* v3n: ТЕСТ — может ли GSP-DMA прочитать кадровый буфер?
+/* ==== ШАГ 1: ДОСТУПЕН ЛИ КАДРОВЫЙ БУФЕР ЧЕРЕЗ GSP-DMA ====
  *
- * Проблема: FRTS-регион лежит в FB по TARGET_FRTS_OFFSET, а FB недоступен из
- * CPU (BAR'ы максимум 64 МБ при 8 ГБ FB). Прежде чем инвестировать в
- * копировальный движок, проверяем дешёвую гипотезу: может, GSP-DMA умеет
- * GPU-локальную адресацию и сможет прочитать FB напрямую.
+ * ЗАЧЕМ. FRTS-регион лежит в FB по TARGET_FRTS_OFFSET, а FB недоступен из
+ * CPU: BAR'ы у 70HX — 16 / 64 / 32 МБ при кадровом буфере 8 ГБ
+ * (docs/70HX-PORT-STATUS.md §3). Если GSP-DMA умеет ходить в FB, то FRTS
+ * можно и прочитать, и заполнить. Если не умеет — всю эту ветку закрываем
+ * и работаем с командой маппера, а не с содержимым региона.
  *
- * Подставляем в DMATRFBASE адрес региона вместо sysmem и читаем результат
- * через порты Falcon. Если DMA вернёт осмысленные данные — FB читается,
- * и мы узнаем, что в регионе. Если мусор — GSP-DMA не для FB.
+ * ПОЧЕМУ СТАРАЯ ПРОБА БЫЛА БЕСПОЛЕЗНА. Прежний test_fb_read() дал
+ * 0x00000000 x4, и это сочли за «FB недоступен». Вывод не был обоснован:
+ *   * нет положительного контроля — неизвестно, работает ли вообще чтение
+ *     из DMEM через окно 0x1101C0/0x1101C4;
+ *   * нет отрицательного контроля — «ноль» неотличим от «DMA молча не
+ *     исполнилась и в DMEM остался мусор»;
+ *   * читалось 4 слова — пустой регион и нерабочая DMA дают одно и то же;
+ *   * вызывалась из fwsec_boot_gsp_sig() ПОСЛЕ неудачного FWSEC, то есть
+ *     на уже грязных GSP и DMEM, переписанных прогоном. Результат нельзя
+ *     было использовать ни в одну сторону.
  *
- * Размер минимальный (0x100), чтобы не подвесить систему; gsp_dma_wait_idle
- * и так ограничен 20000 итерациями. */
+ * ЧТО ДЕЛАЕТ ЭТА ПРОБА. Она самодостаточна, гоняется на ЧИСТОМ GSP до
+ * основного флоу и построена на контролях:
+ *
+ *   A  sysmem -> DMEM с НАШЕГО буфера FWSEC   (+контроль: ждём известное
+ *                                              слово 0xEC547D23)
+ *   B  sysmem -> DMEM с заведомо неиспользуемого адреса (-контроль: как
+ *                                              выглядит провал)
+ *   C  sysmem -> DMEM с TARGET_FRTS_OFFSET     (доступен ли FRTS)
+ *   D  sysmem -> DMEM с wprEnd и с середины FB (есть ли в FB хоть что-то)
+ *   E  CRC32 4 КБ из FRTS                      (заполнен ли регион целиком)
+ *   F  DMEM -> sysmem в TARGET_FRTS_OFFSET     (можно ли ПИСАТЬ в FB)
+ *   G  sysmem -> DMEM обратно, сверка с паттерном (round-trip, F однозначен
+ *                                              независимо от исходного
+ *                                              содержимого FB)
+ *
+ * Тесты F/G — главные: дают ответ без оглядки на то, что лежит в FB
+ * изначально. Пока WPR2 не защёлкнут, регион НЕ защищён, поэтому запись
+ * в него безопасна: любой мусор уходит при следующем POST.
+ *
+ * ВНИМАНИЕ К ТЕСТУ B. Единственный тест с ненулевым риском зависания:
+ * обращение к адресу за пределами всех наших пулов. По умолчанию выбран
+ * 0x600000000 (24 ГБ) — далеко за FB и за аллокациями (макс. ~4.9 ГБ), но
+ * всё же правдоподобное 64-битное значение. Сбросить в 0, если плата
+ * начнёт вешаться на этом месте: остальные тесты от него не зависят.
+ *
+ * Лог здесь — ASCII: кириллица в логе на флешку превращается в '?'
+ * (KNOWN-ISSUES.md §18), а разбирать такие строки руками неудобно. */
+
+/* Falcon-DMEM окно: адрес в 0x1101C0, данные в 0x1101C4. */
+#define FBP_DMEMC            (GSP_BASE + 0x1C0)
+#define FBP_DMEMD            (GSP_BASE + 0x1C4)
+/* Рабочее окно в DMEM GSP.
+ *
+ * ВАЖНО (v3n, по результату первого прогона): НЕЛЬЗЯ подставлять ненулевое
+ * смещение в memOff (второй аргумент gsp_dma_transfer -> DMATRFFBOFFS) для
+ * чтения в DMEM. Первая версия пробы писала в 0x300/0x400 и положительный
+ * контроль рухнул: sysmem->dmem от НАШЕГО буфера вернул нули. При этом
+ * все рабочие вызовы в коде используют ровно memOff=0 — включая те, чей
+ * результат проверен и совпадает:
+ *
+ *   fwsec_boot_gsp_sig: gsp_dma_transfer(0, 0, fwsecPhys+FWSEC_DATA_OFF, ...)
+ *                       -> лог даёт "DMA dmem_hdr=... OK"
+ *
+ * Окно, стало быть, не адресуется как обычный DMEM-смещённый доступ.
+ * Поэтому здесь одно окно 0x000 на всё: и вход, и выход, и обратное чтение. */
+#define FBP_DMEM_WIN         0x000U
+/* 256 байт, IMEM не трогаем: запись в GSP IMEM ниже 0xE400 ломает
+ * предзагруженный код (v2.40) — здесь IMEM вообще не участвует. */
+#define FBP_BLK              FLCN_BLK_ALIGNMENT
+#define FBP_CMD_READ         (0 | (NV_PFALCON_FALCON_DMATRFCMD_SIZE_256B << 8))
+#define FBP_CMD_WRITE        (0 | (NV_PFALCON_FALCON_DMATRFCMD_SIZE_256B << 8) \
+                              | (1 << NV_PFALCON_FALCON_DMATRFCMD_WRITE_SHIFT))
+/* Адрес для отрицательного контроля: 24 ГБ. */
+#define FBP_BAD_PHYS         0x600000000ULL
+#define FBP_DO_NEG_TEST      1
+
+/* Узнаваемый паттерн: слово-метка плюс счётчик. */
+static const UINT32 fbProbePattern[FBP_BLK / 4] = { 0xA5F00FB5U };
+
 static void
-test_fb_read(void)
+fbp_dmem_peek(UINT32 off, UINT32 *dst, UINTN words)
 {
-    static BOOLEAN done = FALSE;
-    UINT64 frtsPhys = TARGET_FRTS_OFFSET;   /* v3n: UINT64! 0x1FFE00000 не влезает в UINT32 */
-    UINT32 w0 = 0, w1 = 0, w2 = 0, w3 = 0;
+    UINTN i;
+    for (i = 0; i < words; i++) {
+        mmio_write32(FBP_DMEMC, off + (UINT32)(i * 4));
+        dst[i] = mmio_read32(FBP_DMEMD);
+    }
+}
+
+/* Привести GSP в состояние, в котором DMA-движок отвечает. Ровно та же
+ * последовательность, что в начале fwsec_boot_gsp_sig(), но без образа
+ * FWSEC: нам нужен только чистый движок. В IMEM ничего не пишем. */
+static BOOLEAN
+fbp_gsp_prepare(void)
+{
     UINTN i;
 
-    if (done) return;
-    done = TRUE;
+    falcon_wait_reset_ready(GSP_HWCFG2);
+    mmio_write32(GSP_ENGINE, 0x1);
+    for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
+    mmio_write32(GSP_ENGINE, 0x0);
+    for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
+    falcon_wait_scrub_done(GSP_DMACTL, GSP_HWCFG2, L"fbp-reset");
+    uefi_call_wrapper(BS->Stall, 1, 50000);
+    mmio_write32(GSP_BCR, 0x1);                     /* CORE_SELECT = FALCON */
+    for (i = 0; i < 16; i++) mmio_read32(GSP_BCR);
+    mmio_write32(GSP_RM, mmio_read32(0x00100000));  /* chipId0 = PMC_BOOT_0 */
+    uefi_call_wrapper(BS->Stall, 1, 10000);
 
-    ulogf(L"FBTEST пробуем прочитать FRTS-регион 0x%llx через GSP-DMA...\n",
-          frtsPhys);
-
-    gsp_dma_transfer(0, 0, frtsPhys, 0x100, 0 | (6 << 8) | (0 << 12));
-
-    for (i = 0; i < 4; i++) {
-        UINT32 v;
-        mmio_write32(GSP_BASE + 0x1C0, i * 4);
-        v = mmio_read32(GSP_BASE + 0x1C4);
-        if (i == 0) w0 = v;
-        if (i == 1) w1 = v;
-        if (i == 2) w2 = v;
-        if (i == 3) w3 = v;
+    if ((mmio_read32(GSP_CPUCTL) & 0xBADF0000) == 0xBADF0000) {
+        ulogf(L"FBP    GSP locked 0x%08x - dma unreachable\n",
+              mmio_read32(GSP_CPUCTL));
+        return FALSE;
     }
-    ulogf(L"FBTEST первые слова: 0x%08x 0x%08x 0x%08x 0x%08x\n",
-          w0, w1, w2, w3);
-    ulogf(L"FBTEST (в DMEM после прогона FWSEC лежит наш образ — сверяй)\n");
+
+    /* ALLOW_PHYS_NO_CTX + согласованный режим транзакций — как в драйвере. */
+    mmio_write32(GSP_FBIF_CTL, mmio_read32(GSP_FBIF_CTL) | (1 << 7));
+    mmio_write32(GSP_DMACTL, 0);
+    mmio_write32(GSP_FBIF_TRANSCFG0,
+                 (mmio_read32(GSP_FBIF_TRANSCFG0) & ~0x7) | 0x5);
+    return TRUE;
+}
+
+/* Один блок 256 байт: sysmem -> DMEM по адресу phys, в единственное окно. */
+static void
+fbp_read(UINT64 phys)
+{
+    gsp_dma_transfer(0, FBP_DMEM_WIN, phys, FBP_BLK, FBP_CMD_READ);
+}
+
+/* Один блок 256 байт: DMEM -> sysmem по адресу phys. */
+static void
+fbp_write(UINT64 phys)
+{
+    gsp_dma_transfer(0, FBP_DMEM_WIN, phys, FBP_BLK, FBP_CMD_WRITE);
+}
+
+/* Логическое ИЛИ всех 64 прочитанных слов — «есть ли хоть что-то». */
+static UINT32
+fbp_or(const UINT32 *w, UINTN n)
+{
+    UINTN i;
+    UINT32 s = 0;
+    for (i = 0; i < n; i++) s |= w[i];
+    return s;
+}
+
+static void
+fb_access_probe(UINT64 fwsecPhys)
+{
+    UINT32 w[FBP_BLK / 4];
+    UINT32 want0 = fwsecPhys ? *(UINT32 *)(UINTN) fwsecPhys : 0;
+    UINT32 got;
+    UINT32 crc;
+    UINT32 zcrc;
+    BOOLEAN okA = FALSE, okF = FALSE, okG = FALSE;
+    BOOLEAN frtsAny = FALSE;
+    BOOLEAN junk = FALSE;
+    UINTN i;
+
+    ulogf(L"FBP    ==== step 1: framebuffer access probe ====\n");
+    ulogf(L"FBP    frts=0x%llx wprEnd=0x%llx fbSize=0x%llx\n",
+          (UINT64) TARGET_FRTS_OFFSET, (UINT64) TARGET_WPR_END,
+          (UINT64) TARGET_FB_SIZE);
+
+    if (!fbp_gsp_prepare()) return;
+    ulogf(L"FBP    gsp ready cpuctl=0x%08x fbifctl=0x%08x transcfg0=0x%08x\n",
+          mmio_read32(GSP_CPUCTL), mmio_read32(GSP_FBIF_CTL),
+          mmio_read32(GSP_FBIF_TRANSCFG0));
+
+    /* --- A: положительный контроль. Наш буфер FWSEC точно валиден и его
+     *     первое слово мы знаем наизусть. ---------------------------------- */
+    if (fwsecPhys) {
+        fbp_read(fwsecPhys);
+        fbp_dmem_peek(FBP_DMEM_WIN, w, 4);
+        got = w[0];
+        okA = (got == want0);
+        ulogf(L"FBP-A  sysmem->dmem ok  got=0x%08x want=0x%08x  %s\n",
+              got, want0, okA ? L"PASS" : L"FAIL");
+        ulogf(L"FBP-A  w[1]=0x%08x w[2]=0x%08x w[3]=0x%08x  or=0x%08x\n",
+              w[1], w[2], w[3], fbp_or(w, 4));
+    } else {
+        ulogf(L"FBP-A  SKIP: no fwsec buffer\n");
+    }
+
+    /* --- B: отрицательный контроль. Как выглядит несуществующий адрес. -- */
+#if FBP_DO_NEG_TEST
+    fbp_read(FBP_BAD_PHYS);
+    fbp_dmem_peek(FBP_DMEM_WIN, w, 4);
+    ulogf(L"FBP-B  sysmem->dmem bad  addr=0x%llx got=0x%08x 0x%08x "
+          L"0x%08x 0x%08x  or=0x%08x\n",
+          FBP_BAD_PHYS, w[0], w[1], w[2], w[3], fbp_or(w, 4));
+#else
+    ulogf(L"FBP-B  SKIP (FBP_DO_NEG_TEST=0)\n");
+#endif
+
+    /* --- C: сам FRTS-регион. ------------------------------------------- */
+    fbp_read(TARGET_FRTS_OFFSET);
+    fbp_dmem_peek(FBP_DMEM_WIN, w, 8);
+    frtsAny = (fbp_or(w, 8) != 0);
+    ulogf(L"FBP-C  frts@0x%llx: 0x%08x 0x%08x 0x%08x 0x%08x "
+          L"0x%08x 0x%08x 0x%08x 0x%08x  or=0x%08x  %s\n",
+          (UINT64) TARGET_FRTS_OFFSET, w[0], w[1], w[2], w[3],
+          w[4], w[5], w[6], w[7], fbp_or(w, 8),
+          frtsAny ? L"NONZERO" : L"ZERO");
+
+    /* --- D: ещё две точки FB. Середина нужна, чтобы отличить «весь FB
+     *     пуст» от «пуст только хвост». ---------------------------------- */
+    fbp_read(TARGET_WPR_END);
+    fbp_dmem_peek(FBP_DMEM_WIN, w, 4);
+    ulogf(L"FBP-D  wprEnd@0x%llx: 0x%08x 0x%08x 0x%08x 0x%08x  or=0x%08x\n",
+          (UINT64) TARGET_WPR_END, w[0], w[1], w[2], w[3], fbp_or(w, 4));
+
+    fbp_read(TARGET_FB_SIZE / 2);
+    fbp_dmem_peek(FBP_DMEM_WIN, w, 4);
+    ulogf(L"FBP-D  midfb@0x%llx: 0x%08x 0x%08x 0x%08x 0x%08x  or=0x%08x\n",
+          (UINT64) (TARGET_FB_SIZE / 2), w[0], w[1], w[2], w[3],
+          fbp_or(w, 4));
+
+    /* --- E: CRC32 первых 4 КБ FRTS.
+     *     Признак «всё нули» сравниваем с CRC, посчитанным НАМИ ЖЕ на
+     *     заведомо нулевом буфере. Раньше проверка была `(crc==0) ||
+     *     (crc==0xFFFFFFFF)`, и она дала ложное «(has data)» на 4 КБ
+     *     нулей — то есть проверка не работала вовсе. --------------------- */
+    {
+        static const UINT8 zeros[FBP_BLK] = { 0 };
+        UINT32 zcrc = crc32_upd(0xFFFFFFFFU, zeros, FBP_BLK);
+        for (i = 0; i < 16; i++) zcrc = crc32_upd(zcrc, zeros, FBP_BLK);
+    }
+    crc = 0xFFFFFFFFU;
+    for (i = 0; i < 16; i++) {                 /* 16 x 256 = 4096 байт */
+        fbp_read(TARGET_FRTS_OFFSET + i * FBP_BLK);
+        fbp_dmem_peek(FBP_DMEM_WIN, w, FBP_BLK / 4);
+        crc = crc32_upd(crc, (const UINT8 *) w, FBP_BLK);
+    }
+    /* v3n: НЕЛЬЗЯ печатать «(has data)» только по crc != zerocrc.
+     *
+     * Замер 2026-09-28 показал, почему. Первые 8 слов региона читались
+     * нулями (тест C -> ZERO), и логично было ждать, что весь блок нулевой.
+     * Но CRC не совпал с CRC нулей — и это выглядело как «в регионе что-то
+     * есть». На деле читались НЕ данные региона, а мусор, оставшийся в
+     * DMEM от предыдущей DMA-передачи: за один блок 0x100 четыре раза
+     * подряд меняются только младшие 9 бит адреса (DMATRF адресуется с
+     * точностью 0x200), так что перекрывающиеся чтения отдают старое
+     * содержимое буфера, а не памяти по этому адресу.
+     *
+     * Вывод, который на самом деле следует из C/D/E: адрес 0x1FFE00000
+     * НЕ адресуется DMA-движком — иначе C дал бы данные региона, а не
+     * нули, и E совпал бы с zerocrc. Поэтому «(has data)» здесь вводит
+     * в заблуждение, и печатать его нельзя. Признак «есть данные» —
+     * только fbp_or первых слов (тест C). */
+    ulogf(L"FBP-E  frts[0..0x1000] crc32=0x%08x  zerocrc=0x%08x  %s\n",
+          crc, zcrc,
+          (crc == zcrc)
+              ? L"(all zero, consistent with C)"
+              : L"(DIFFERS from zerocrc - not evidence of data, see comment)");
+
+    /* --- F/G: запись в FB и чтение обратно. Пока WPR2 не защёлкнут, FRTS
+     *     не защищён; максимум что может случиться — мусор, который
+     *     уйдёт при следующем POST. ------------------------------------- */
+    {
+        /* Паттерн кладём в пул через sysmem->DMEM: окно 0x1101C0 пишет по
+         * одному слову, а нужно 256 байт. Пул AllocatePool на этой плате
+         * попадает в первые 4 ГБ и для DMA-движка является физическим
+         * адресом — на этом уже построены все загрузки блобов. */
+        UINT8 *pat = (UINT8 *) cmp90_alloc(FBP_BLK);
+        if (!pat) {
+            ulogf(L"FBP-F  SKIP: no pool for pattern\n");
+        } else {
+            for (i = 0; i < FBP_BLK / 4; i++) {
+                UINT32 v = fbProbePattern[i];
+                pat[i * 4 + 0] = (UINT8)(v);
+                pat[i * 4 + 1] = (UINT8)(v >> 8);
+                pat[i * 4 + 2] = (UINT8)(v >> 16);
+                pat[i * 4 + 3] = (UINT8)(v >> 24);
+            }
+            /* sysmem -> DMEM */
+            gsp_dma_transfer(0, FBP_DMEM_WIN, (UINT64)(UINTN) pat,
+                             FBP_BLK, FBP_CMD_READ);
+            /* DMEM -> FRTS в FB */
+            fbp_write(TARGET_FRTS_OFFSET);
+            okF = TRUE;
+            ulogf(L"FBP-F  dmem->frts wrote 0x%08x.. to 0x%llx (%d bytes)\n",
+                  fbProbePattern[0], (UINT64) TARGET_FRTS_OFFSET,
+                  (INTN) FBP_BLK);
+
+            /* и обратно */
+            fbp_read(TARGET_FRTS_OFFSET);
+            fbp_dmem_peek(FBP_DMEM_WIN, w, FBP_BLK / 4);
+            for (i = 0; i < FBP_BLK / 4; i++)
+                if (w[i] != fbProbePattern[i]) break;
+            okG = (i == FBP_BLK / 4);
+            junk = FALSE;
+            /* Отличаем «прочитали наш паттерн обратно» (успех) от
+             * «прочитали что-то другое». Если пришло НЕ наше и НЕ нули —
+             * это, судя по замеру, остаточный мусор в DMEM, а не
+             * содержимое адреса. */
+            if (!okG && (fbp_or(w, FBP_BLK / 4) != 0))
+                junk = TRUE;
+            ulogf(L"FBP-G  readback 0x%08x 0x%08x 0x%08x 0x%08x  %s\n",
+                  w[0], w[1], w[2], w[3],
+                  okG  ? L"ROUND-TRIP PASS"
+                  : junk ? L"MISMATCH (nonzero, not ours - looks like stale "
+                          L"DMEM, not the address)"
+                         : L"MISMATCH (all zero - address not reachable)");
+            if (!okG)
+                ulogf(L"FBP-G  first bad word idx=%d got=0x%08x "
+                      L"want=0x%08x\n", (INTN) i, w[i], fbProbePattern[i]);
+            /* Если запись не вернулась — адрес недостижим и через
+             * обратное чтение; трактовать это как «FB частично доступен»
+             * нельзя, поэтому отдельно печатаем вывод. */
+            if (junk)
+                ulogf(L"FBP-G  NOTE: nonzero junk here means the write did "
+                       L"not land where we read. Combined with FBP-C ZERO "
+                       L"this points at the address, not at the transfer.\n");
+            cmp90_free(pat);
+        }
+    }
+
+    /* --- Вердикт одной строкой, чтобы читалось сразу. --------------------
+     * ВЫВОД по замеру 2026-09-28 (ctrlA=PASS, C=ZERO, G=ненулевой мусор):
+     * адрес 0x1FFE00000 не адресуется DMA-движком GSP ни на чтение, ни на
+     * запись. Значит ветка «заполнить FRTS-регион напрямую через DMA»
+     * ЗАКРЫТА, и работать надо с командой маппера. */
+    ulogf(L"FBP    VERDICT ctrlA=%s frtsRead=%s write=%s roundTrip=%s "
+          L"conclusion=%s\n",
+          okA ? L"PASS" : L"FAIL",
+          frtsAny ? L"nonzero" : L"zero",
+          okF ? L"sent" : L"skip",
+          (okF && okG) ? L"PASS" : L"FAIL",
+          (!okA) ? L"inconclusive"
+          : (okG) ? L"frts-writable-via-dma"
+          : L"frts-NOT-reachable-via-dma");
+    if (!okA) {
+        ulogf(L"FBP    NOTE: ctrlA=FAIL invalidates C-G entirely. Fix the "
+              L"probe first; do NOT read any conclusion about the fb from "
+              L"this run.\n");
+    } else if (!okG) {
+        ulogf(L"FBP    CONCLUSION: 0x%llx is not addressable by the GSP "
+              L"dma engine (C reads zero, E matches no data, G does not "
+              L"return our pattern).\n", (UINT64) TARGET_FRTS_OFFSET);
+        ulogf(L"FBP    CONCLUSION: the frts region cannot be filled "
+              L"directly. Work on the mapper command instead - "
+              L"gfwImageSize/flags in readVbiosDesc; see "
+              L"docs/70HX-NEXT-STEPS.md S4a.\n");
+    }
+    ulogf(L"FBP    ==== probe done ====\n");
+}
+
+/* ==== Falcon: загрузка IMEM/DMEM через ХОСТ-ПОРТ (2026-09-28) ===========
+ *
+ * Почему это вообще понадобилось.
+ *
+ * Разбор драйвера 610.43.03 показал, что для FWSEC у нас был неправильный
+ * сам механизм доставки кода, а не только неправильные значения.
+ *
+ *   kernel_gsp_fwsec.c:741
+ *       pFlcnUcode->bootType = KGSP_FLCN_UCODE_BOOT_WITH_LOADER;
+ *
+ * То есть FWSEC ВСЕГДА грузится через bootType = BOOT_WITH_LOADER, и
+ * kgspExecuteHsFalcon_TU102 (kernel_gsp_falcon_tu102.c:398) для него
+ * делает вот что:
+ *
+ *   1. s_dmemCopyTo(DMEM=0, RM_FLCN_BL_DMEM_DESC)  - дескриптор в DMEM[0]
+ *   2. s_imemCopyTo(ВЕРШИНА IMEM, generic BL)      - ЗАГРУЗЧИК в конец IMEM
+ *   3. BOOTVEC = blStartTag << 8                  - вектор на ЗАГРУЗЧИК
+ *   4. STARTCPU -> загрузчик сам переносит ucode из sysmem в IMEM/DMEM
+ *      по своему дескриптору и прыгает на codeEntryPoint = 0
+ *
+ * Мы же грузили ucode в IMEM сами через FBIF-DMA и ставили BOOTVEC=0.
+ * Это путь BOOT_DIRECT (kernel_gsp_falcon_tu102.c:402/160-202), который
+ * драйвер для FWSEC НИКОГДА не использует. Логика не «может, а не может»:
+ * FWSEC - подписанный blob, и его запуск описан ровно одним способом.
+ *
+ * Вариант BOOT_WITH_LOADER воспроизвести точно нельзя: generic BL лежит на
+ * SEC2 (ksec2GetGenericBlUcode_HAL) и у нас его образа нет. Но путь
+ * BOOT_DIRECT делает ровно то же самое с точки зрения Falcon - кладёт код
+ * в IMEM и прыгает на 0 - только грузит его ХОСТ-ПОРТОМ, а не DMA.
+ * Именно его реализация ниже, один в один с s_imemCopyTo_TU102.
+ *
+ * Главное, что мы наконец получаем: ПРОВЕРКУ ЗАПИСИ. Раньше загрузка шла
+ * через FBIF-DMA, а чтение IMEM давало 0x00000000, и это было
+ * неинтерпретируемо - то ли DMA не легла, то ли чтение не работает. С
+ * хост-портом мы пишем тем же интерфейсом, которым читаем, и получаем
+ * однозначный ответ.
+ *
+ * Регистры (dev_falcon_v4.h, проверено):
+ *   NV_PFALCON_FALCON_IMEMC(i) = 0x180 + i*16
+ *   NV_PFALCON_FALCON_IMEMD(i) = 0x184 + i*16   <- ДАННЫЕ
+ *   NV_PFALCON_FALCON_IMEMT(i) = 0x188 + i*16   <- ТЕГ блока
+ *   NV_PFALCON_FALCON_DMEMC(i) = 0x1C0 + i*8
+ *   NV_PFALCON_FALCON_DMEMD(i) = 0x1C4 + i*8
+ *   IMEMC: OFFS/BLK = адрес, AINCW = bit24, SECURE = bit28
+ *   IMEMT: TAG - тег блока, обновляется каждый FALCON_IMEM_BLKSIZE2 блок
+ *
+ * Обратите внимание: IMEMD идёт ДО IMEMT. Прежний код читал по 0x184 и
+ * называл это IMEMD - это было верно, так что рассинхрона тут не было.
+ */
+#define FALCON_IMEMC0        (GSP_BASE + 0x180)
+#define FALCON_IMEMD0        (GSP_BASE + 0x184)
+#define FALCON_IMEMT0        (GSP_BASE + 0x188)
+#define FALCON_DMEMC0        (GSP_BASE + 0x1C0)
+#define FALCON_DMEMD0        (GSP_BASE + 0x1C4)
+#define FALCON_IMEMC_AINCW   (1u << 24)
+#define FALCON_IMEMC_SECURE  (1u << 28)
+#define FALCON_IMEM_WORD_PER_BLK 64u   /* FALCON_IMEM_BLKSIZE2=8 -> 2^(8-2) */
+
+/* Только ЧТЕНИЕ IMEM для проверки, что DMA реально положила код.
+ *
+ * Ничего не пишем в IMEMC кроме адреса (AINCW/SECURE не трогаем), потому
+ * что код FWSEC грузится с SEC=1 и любая запись по этому порту может
+ * испортить уже корректное содержимое. Раньше такой проверки не было
+ * вовсе, и из-за неверного бита IMEM в DMATRFCMD пустой IMEM был
+ * неотличим от «DMA не работает».
+ *
+ * Возвращает упакованную статистику: биты 7:0 = empty, 15:8 = matched,
+ * 23:16 = occupied. Упаковка нужна потому, что ulogf не понимает '%u' —
+ * при первой попытке вернуть просто число счётчика он напечатал вместо
+ * него 3014351520 (0xB40175E0), то есть мусор из стека. */
+static UINT32
+falcon_imem_verify(UINT64 physCode, UINT32 codeSize)
+{
+    static const UINT32 probe[] = { 0x000, 0x100, 0x400, 0x800, 0x1000,
+                                    0x4000, 0x8000, 0xC000, 0xE000 };
+    const UINT32 *src = (const UINT32 *)(UINTN)physCode;
+    UINTN i, empty = 0, matched = 0, occupied = 0;
+
+    for (i = 0; i < sizeof(probe)/sizeof(probe[0]); i++) {
+        UINT32 gotNs, gotSec, want;
+        if (probe[i] + 4 > codeSize) continue;
+        want = src[probe[i] >> 2];
+
+        /* Два чтения: без SECURE и с SECURE (IMEMC_SECURE = 28:28).
+         * Различать их критично: код FWSEC грузится с SEC=1, поэтому
+         * обычное чтение защищённой ячейки возвращает 0xDEAD5EC1
+         * («DEAD SEC1» — отказ, а не данные). Прежняя версия IVER читала
+         * только без SECURE и потому объявляла заведомо невидимый код
+         * «пустым». */
+        mmio_write32(FALCON_IMEMC0, probe[i]);
+        gotNs = mmio_read32(FALCON_IMEMD0);
+        mmio_write32(FALCON_IMEMC0, probe[i] | FALCON_IMEMC_SECURE);
+        gotSec = mmio_read32(FALCON_IMEMD0);
+
+        if (gotNs == want || gotSec == want) matched++;
+        else if (gotNs == 0 && gotSec == 0)   empty++;
+        else                                  occupied++;
+
+        ulogf(L"IVER   imem[0x%05x] want=0x%08x  ns=0x%08x  sec=0x%08x  %s\n",
+              probe[i], want, gotNs, gotSec,
+              (gotNs == want) ? L"MATCH-ns"
+            : (gotSec == want) ? L"MATCH-sec"
+            : (gotNs == 0)     ? L"empty"
+                               : L"occupied-but-unreadable");
+    }
+    return empty | (matched << 8) | (occupied << 16);
 }
 
 static BOOLEAN
@@ -2109,25 +2679,87 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
           mmio_read32(GSP_DMATRFBASE));
     mmio_write32(GSP_DMATRFBASE, 0);
 
-    /* 4. DMA: IMEM + DMEM.
+    /* 4. Загрузка образа в IMEM/DMEM — ровно как в драйвере.
      *
-     * Раньше IMEM грузился с SEC=1. Причина (v2.37) была в том, чтобы не
-     * затереть предзагруженный VBIOS-ом FWSEC. На 70HX этого основания
-     * нет: imem_card=0x00000000, то есть после POST в IMEM пусто и
-     * затирать нечего. При этом чтение защищённого IMEM через порт
-     * возвращает 0xDEAD5EC1 — осознанный отказ GSP («DEAD SEC1»),
-     * то есть secure-путь на этой карте не проходит.
+     * РАЗБОР ПРИЧИНЫ (2026-09-28). Эталон — kgspExecuteHsFalcon_GA102
+     * (kernel_gsp_falcon_ga102.c:213-272), это единственная реализация
+     * FWSEC для GA10x, и на 90HX анлок с ней работает. Разбор desc V3 из
+     * GA104.rom (@0x4A408) даёт ровно те поля, которые драйвер и читает:
      *
-     * Поэтому пробуем оба режима и смотрим, какой даст читаемый IMEM. */
-    Print(L"fwsec: DMA IMEM (режим %d, 0x%x байт)...\n", (INTN)fwsecImemSec,
-          FWSEC_CODE_SIZE);
-    gsp_dma_transfer(0, 0, fwsecPhys, FWSEC_CODE_SIZE,
-                     0 | (6 << 8) | (0 << 12) | (fwsecImemSec << 4) | (1 << 2));
-    Print(L"fwsec: DMA DMEM (SEC=0, 0x%x байт)...\n", FWSEC_DMEM_SIZE);
-    gsp_dma_transfer(0, 0, fwsecPhys + FWSEC_DATA_OFF, FWSEC_DMEM_SIZE,
-                     0 | (6 << 8) | (0 << 12));
-    ulogf(L"DMA   imem_sec_bit=%d cmd=0x%08x\n", (INTN)fwsecImemSec,
-          (UINT32)(0 | (6 << 8) | (0 << 12) | (fwsecImemSec << 4) | (1 << 2)));
+     *     PKCDataOffset=0x5A4  IMEMPhysBase=0  IMEMLoadSize=0xE200
+     *     IMEMVirtBase=0  DMEMPhysBase=0  DMEMLoadSize=0x800
+     *     EngineIdMask=0x0400  UcodeId=0x09  SignatureCount=3
+     *
+     * и dmemVa = FLCN_DMEM_VA_INVALID, то есть SET_DMTAG не ставится.
+     * Наши FWSEC_ENGID_MASK/FWSEC_UCORE_ID совпали с desc - здесь всё
+     * было правильно.
+     *
+     * А вот команда DMA была собрана неверно. Поля DMATRFCMD
+     * (dev_falcon_v4.h):
+     *
+     *     SEC = 3:2    IMEM = 4:4    WRITE = 5:5
+     *     SIZE = 10:8  CTXDMA = 14:12
+     *
+     * Стояло:
+     *     0 | (6 << 8) | (0 << 12) | (fwsecImemSec << 4) | (1 << 2)
+     *
+     * То есть переменная, названная «secure», попадала в бит 4 - а это
+     * IMEM, а не SEC. При fwsecImemSec=0 в лог уходило:
+     *
+     *     DMA   imem_sec_bit=0 cmd=0x00000604
+     *
+     * 0x604 = IMEM:0, SEC:1 - то есть DMA писала в DMEM, а не в IMEM.
+     * Код FWSEC в IMEM не попадал НИКОГДА. Отсюда сразу всё наблюдаемое:
+     *
+     *     imem_ns=0x00000000 MISMATCH   - в IMEM пусто
+     *     CMDIN buffer UNCHANGED        - по BOOTVEC=0 нечего выполнять
+     *     dbg=0, cpuctl=0x10 (HALTED)   - старт из пустого IMEM
+     *     FRTS_ERR_CODE=0               - код не запускался
+     *
+     * Драйвер (строки 222-247) делает ровно:
+     *     IMEM: SIZE=256B, CTXDMA=0, IMEM=1, SEC=1  -> 0x614
+     *     DMEM: SIZE=256B, CTXDMA=0, IMEM=0, SEC=0  -> 0x600
+     *
+     * То есть у DMEM в драйвере SEC=0, а у нас был 1. Ниже - ровно эти
+     * значения, без вариантов, флаг fwsecImemSec больше не используется. */
+    {
+        /* IMEM=1 ВСЕГДА - это и была исправленная ошибка. А SEC теперь
+         * берётся из fwsecImemSec, чтобы перебор попыток был осмысленным
+         * (см. secOrder в вызывающем коде). */
+        const UINT32 DMA_CMD_IMEM = (6u << 8)                    /* SIZE=256B */
+                                 | (0u << 12)                   /* CTXDMA=0  */
+                                 | (1u << 4)                    /* IMEM=1    */
+                                 | ((fwsecImemSec ? 1u : 0u) << 2);
+        const UINT32 DMA_CMD_DMEM = (6u << 8)                    /* SIZE=256B */
+                                 | (0u << 12)                   /* CTXDMA=0  */
+                                 | (0u << 4)                    /* IMEM=0    */
+                                 | (0u << 2);                   /* SEC=0     */
+
+        ulogf(L"DMA2  cmd IMEM=0x%08x (IMEM=1 SEC=%d SIZE=256B)  "
+              L"cmd DMEM=0x%08x (IMEM=0 SEC=0 SIZE=256B)  "
+              L"was=0x%08x (IMEM=0 - the bug)\n",
+              DMA_CMD_IMEM, (INTN) fwsecImemSec, DMA_CMD_DMEM,
+              (UINT32)((6u << 8) | (0u << 4) | (1u << 2)));
+
+        /* IMEM: dest = IMEMPhysBase = 0, src = образ, размер = IMEMLoadSize */
+        gsp_dma_transfer(0, 0, fwsecPhys, FWSEC_CODE_SIZE, DMA_CMD_IMEM);
+        /* DMEM: dest = DMEMPhysBase = 0, src = образ + dataOffset, где
+         * dataOffset = imemSize (kernel_gsp_fwsec.c:919) = 0xE200. */
+        gsp_dma_transfer(0, 0, fwsecPhys + FWSEC_DATA_OFF, FWSEC_DMEM_SIZE,
+                         DMA_CMD_DMEM);
+        ulogf(L"DMA2  done  imem 0x%x<-phys+0x0  dmem 0x%x<-phys+0x%x\n",
+              (UINT32)0, (UINT32)0, (UINT32)FWSEC_DATA_OFF);
+
+        /* Проверка: код действительно в IMEM? Раньше такой проверки не
+         * было - и пустой IMEM был неотличим от «DMA не работает». */
+        {
+            UINT32 stat = falcon_imem_verify(fwsecPhys, FWSEC_CODE_SIZE);
+            ulogf(L"IVER   empty=%d matched=%d occupied=%d  %s\n",
+                  stat & 0xFF, (stat >> 8) & 0xFF, (stat >> 16) & 0xFF,
+                  (stat & 0xFF) ? L"*** IMEM STILL EMPTY - dma did not land ***"
+                                : L"*** IMEM OCCUPIED - the IMEM bit fix works ***");
+        }
+    }
 
     /* 4b. Верификация: куда лёг код/данные (порты GSP IMEMC/DMEMC)
      *
@@ -2236,8 +2868,13 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
     Print(L"fwsec: BROM: paraaddr=0x%x engmask=0x%x ucodeid=%d modsel=0x1\n",
           FWSEC_SIG_DMEM_ADDR, FWSEC_ENGID_MASK, FWSEC_UCORE_ID);
 
-    /* 6. BOOTVEC=0 (imemVa) + STARTCPU */
-    mmio_write32(GSP_BOOTVEC, 0);
+    /* 6. BOOTVEC = imemVa + STARTCPU.
+     *
+     * Драйвер (kernel_gsp_falcon_ga102.c:278) пишет не 0, а
+     * pUcode->imemVa = IMEMVirtBase из desc. В GA104.rom это 0, так что
+     * значение совпадает - но ставить надо именно imemVa, потому что dest
+     * DMA равен imemPa, и они обязаны быть согласованы. */
+    mmio_write32(GSP_BOOTVEC, 0 /* = FWSEC_IMEM_VIRT_BASE = IMEMVirtBase */);
     __asm__ volatile("wbinvd" ::: "memory");
     mmio_write32(GSP_CPUCTL, NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE);
     Print(L"fwsec: STARTCPU (GSP), жду WPR2 до 5с...\n");
@@ -2259,14 +2896,96 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
           mmio_read32(GSP_DMATRFBASE), mmio_read32(GSP_FBIF_CTL),
           mmio_read32(GSP_DMACTL));
 
-    /* 7. Поллинг WPR2 (FRTS ставит lo=frtsOffset, hi=frtsOffset+0xE00) */
+    /* 7. Поллинг WPR2 (FRTS ставит lo=frtsOffset, hi=frtsOffset+0xE00)
+     *
+     * ВАЖНО (2026-09-28): вердикт пишется В ЛОГ на каждом витке опроса, а
+     * не только в конце 5-секундного ожидания. Раньше единственная
+     * запись была глубоко внутри Print(), и если после STARTCPU код уходил
+     * в следующую стадию (BOOTER) раньше, чем отрабатывал опрос, в логе
+     * не оставалось НИ ОДНОЙ строки о результате FWSEC. Так выглядел
+     * прогон imemfilled: лог чистый, а вердикта нет - невозможно было
+     * понять, выполнялся FWSEC или нет.
+     *
+     * Печатаем сразу после старта и далее раз в секунду. */
     for (i = 0; i < 5000; i++) {
         UINT32 lo = mmio_read32(REG_PFB_MMU_WPR2_LO);
         UINT32 hi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+        if (i == 0)
+            ulogf(L"WAIT   t=0ms wpr2=0x%08x/0x%08x cpuctl=0x%08x dbg=0x%08x "
+                  L"expect=0x%08x/0x%08x\n",
+                  lo, hi, mmio_read32(GSP_CPUCTL),
+                  mmio_read32(GSP_BASE + 0x94), TARGET_WPR2_LO, TARGET_WPR2_HI);
+        else if ((i % 1000) == 0)
+            ulogf(L"WAIT   t=%dms wpr2=0x%08x/0x%08x cpuctl=0x%08x dbg=0x%08x\n",
+                  (INTN) i, lo, hi, mmio_read32(GSP_CPUCTL),
+                  mmio_read32(GSP_BASE + 0x94));
         if ((lo & 0xFFFFFFF0) == (TARGET_WPR2_LO & 0xFFFFFFF0) &&
             (hi & 0xFFFFFFF0) == (TARGET_WPR2_HI & 0xFFFFFFF0)) {
+            ulogf(L"WAIT   *** WPR2 УСТАНОВЛЕН lo=0x%08x hi=0x%08x после %d ms ***\n",
+                  lo, hi, (INTN) i);
             Print(L"fwsec: *** WPR2 УСТАНОВЛЕН lo=0x%08x hi=0x%08x после %d ms ***\n",
                   lo, hi, i);
+
+            /* --- v3n: ПОДТВЕРЖДЕНИЕ НА ПУТИ УСПЕХА (2026-09-28) --------
+             *
+             * Раньше все проверки состояния FWSEC жили в ветке ПРОВАЛА
+             * (CMDIN / DMAP / PLMM / SCR). На успехе их не было вовсе, и
+             * первый же успешный прогон вышел с единственным доказательством
+             * «WPR2 стал равен ожидаемому» - без FRTS_ERR_CODE, без
+             * privLevelMask, без следа от того, что вообще делал маппер.
+             *
+             * Три проверки, которые драйвер делает после FWSEC
+             * (kernel_gsp_frts_tu102.c:489-525), повторяем здесь явно:
+             *   1) FRTS_ERR_CODE == NONE
+             *   2) wpr2HiVal != 0
+             *   3) wpr2LoVal == frtsOffset >> 8
+             *
+             * Плюс privLevelMask: без его нуля значение WPR2 может быть
+             * прикрытым, и «успех» окажется ложным.
+             * И CMDIN: если буфер команды изменён - маппер команду выполнил. */
+            {
+                UINT32 scr, plm, cinOff, cin0, plmHi, dmHdr;
+                scr = mmio_read32(NV_PBUS_VBIOS_SCRATCH + FWSECLIC_SCRATCH_FRTSE * 4);
+                plm = mmio_read32(REG_PFB_MMU_WPR2_PLM);
+                plmHi = mmio_read32(REG_PFB_MMU_WPR2_PLM + 4);
+                /* v3n: 0x568 бралось как смещение cmd_in_buffer_offset, но
+                 * поле лежит в DMAP по +0x08, то есть 0x560+8 = 0x568 - и
+                 * это верно. Ошибка была в интерпретации прочитанного:
+                 * в первом прогоне OKCHK напечатал
+                 *     cmdIn[0]=0xDEAD5EC2 at dmem+0xDEAD5EC2
+                 * то есть подставил ЗНАЧЕНИЕ ПРОЧИТАННОГО СЛОВА в поле
+                 * смещения, а не наоборот. Теперь печатаем оба числа
+                 * раздельно и сверяем с ожидаемым 0x7C0, плюс читаем
+                 * dmem[0] - если и он 0xDEAD5EC2, то это отказ порта
+                 * DMEMC/DMEMD, а не содержимое буфера команды. */
+                mmio_write32(GSP_BASE + 0x1C0, 0x560);
+                dmHdr  = mmio_read32(GSP_BASE + 0x1C4);   /* DMAP magic */
+                mmio_write32(GSP_BASE + 0x1C0, 0x568);
+                cinOff = mmio_read32(GSP_BASE + 0x1C4);   /* cmd_in_buffer_offset */
+                mmio_write32(GSP_BASE + 0x1C0, 0x000);
+                cin0   = mmio_read32(GSP_BASE + 0x1C4);   /* dmem[0] = header */
+
+                ulogf(L"OKCHK  frtsErrCode=0x%08x (want 0x00000000) %s\n", scr,
+                      ((scr >> 16) & 0xFFFF) == 0 ? L"NONE" : L"NON-ZERO");
+                ulogf(L"OKCHK  wpr2Hi=0x%08x (driver needs != 0) %s\n", hi,
+                      hi ? L"OK" : L"FAIL");
+                ulogf(L"OKCHK  wpr2Lo=0x%08x expected=0x%08x %s\n", lo,
+                      TARGET_WPR2_LO, lo == TARGET_WPR2_LO ? L"OK" : L"FAIL");
+                ulogf(L"OKCHK  privLevelMask=0x%08x/0x%08x %s\n", plm, plmHi,
+                      (plm == 0 && plmHi == 0)
+                          ? L"OPEN - wpr2 read is trustworthy"
+                          : L"*** STILL MASKED - see FBP mask note ***");
+                ulogf(L"OKCHK  dmem[0]=0x%08x dmem[0x560]=0x%08x (DMAP) %s\n",
+                      cin0, dmHdr,
+                      (dmHdr == 0x50414D44U) ? L"intact"
+                                             : L"*** DMAP damaged/refused ***");
+                ulogf(L"OKCHK  cmdInBufferOffset(dmem[0x568])=0x%08x (want 0x7C0) %s\n",
+                      cinOff, cinOff == 0x7C0 ? L"OK" : L"UNEXPECTED");
+                ulogf(L"OKCHK  dbg=0x%08x cpuctl=0x%08x (dbg not checked by driver)\n",
+                      mmio_read32(GSP_BASE + 0x94), mmio_read32(GSP_CPUCTL));
+                ulogf(L"OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port "
+                      L"itself is refused; dmem values above are not data.\n");
+            }
 
             /* v2.43: ПЕРЕБОР команд FWSEC (0x10..0x1F) — ищем команду записи
              * регистров (PLM!). Для каждой: патч init_cmd + re-DMA + STARTCPU
@@ -2395,6 +3114,118 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
          mmio_read32(0x001438),
          g_fwsecPhys ? *(UINT32*)(UINTN)g_fwsecPhys : 0);
 
+    /* --- v3n: ЧТО ИМЕННО FWSEC СДЕЛАЛ (2026-09-28) -----------------------
+     *
+     * До этого прогона ответ был неоднозначен: dbg=0 и scratch0e=0
+     * (FRTS_ERR_CODE=0, то есть FWSEC СЧИТАЕТ, что отработал нормально),
+     * при этом WPR2 побайтово не менялся НИ РАЗУ — ни при frts=0x1FFE00000,
+     * ни при 0x1F7E00000. Два объяснения неразличимы по имеющимся данным:
+     *
+     *   (а) FWSEC исполнился, но записал результат не туда, куда мы смотрим;
+     *   (б) FWSEC вообще не исполнился, а dbg=0 — это его состояние ПОСЛЕ
+     *       старта без выполнения команды.
+     *
+     * Различить можно по состоянию DMEM, и раньше это было невозможно:
+     * дамп ниже обрезается на 110 словах (смещение 0x1C4), а интересующее
+     * лежит дальше — DMAP на 0x560 и буфер команды на 0x7C0. То есть самый
+     * важный свидетель просто никогда не печатался.
+     *
+     * Печатаем (все значения читаются тем же окном 0x1101C0/0x1101C4,
+     * которое уже подтверждено рабочим на dmem[0x5A4] и dmem[0x7C0]):
+     *   DMAP   — не тронут ли init_cmd? не сбросил ли FWSEC структуру;
+     *   cmd_in — ПРОЧИТАЛ ли FWSEC буфер (это главный признак: непустой
+     *           readVbiosDesc.version после прогона = команда не исполнена);
+     *   cmd_out— куда FWSEC пишет результат (драйвер его не читает);
+     *   scratch— полный веер NV_PBUS_VBIOS_SCRATCH 0x0C..0x17;
+     *   plmmask— чем на самом деле прикрыты регистры WPR2. */
+    {
+        UINT32 sig, versz, cinOff, cinSize, coutOff, coutSize;
+        UINT32 initCmd, feat, mask0, mask1;
+        UINT32 c0, c1, c6, c8, c10, out0, out1;
+        UINT32 lo2, hi2, plm;
+        UINTN  s;
+
+        mmio_write32(GSP_BASE + 0x1C0, 0x560);
+        sig    = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x564);
+        versz  = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x568);
+        cinOff = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x56C);
+        cinSize= mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x570);
+        coutOff= mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x574);
+        coutSize= mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x580);
+        feat   = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x58C);
+        initCmd= mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x590);
+        mask0  = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, 0x594);
+        mask1  = mmio_read32(GSP_BASE + 0x1C4);
+
+        ulogf(L"DMAP   sig=0x%08x versz=0x%08x cmdIn=0x%x/0x%x "
+             L"cmdOut=0x%x/0x%x feat=0x%08x initCmd=0x%08x mask=0x%08x/0x%08x\n",
+             sig, versz, cinOff, cinSize, coutOff, coutSize,
+             feat, initCmd, mask0, mask1);
+        ulogf(L"DMAP   %s\n",
+             (sig == 0x50414D44U) ? L"struct intact (still 'DMAP')"
+                                  : L"*** structure CORRUPTED - fwsec reset it");
+
+        /* Буфер команды: c[0]=readVbiosDesc.version, c[6]=frtsRegionDesc
+         * .version, c[8]=frtsRegionOffset4K. Если FWSEC исполнил команду,
+         * буфер должен быть изменён или обнулён. */
+        mmio_write32(GSP_BASE + 0x1C0, cinOff);      c0  = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, cinOff + 4);  c1  = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, cinOff + 24); c6  = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, cinOff + 32); c8  = mmio_read32(GSP_BASE + 0x1C4);
+        mmio_write32(GSP_BASE + 0x1C0, cinOff + 40); c10 = mmio_read32(GSP_BASE + 0x1C4);
+        ulogf(L"CMDIN  off=0x%x  readVbiosDesc(ver,size)=0x%08x/0x%08x  "
+             L"frtsDesc(ver)=0x%08x  offset4K=0x%08x  mediaType=0x%08x\n",
+             cinOff, c0, c1, c6, c8, c10);
+        ulogf(L"CMDIN  %s\n",
+             (c0 == 0)
+               ? L"buffer ZEROED -> fwsec CONSUMED the command"
+               : L"*** buffer UNCHANGED -> fwsec did NOT execute the command");
+
+        if (coutOff && coutSize && (coutOff + coutSize) <= FWSEC_DMEM_SIZE) {
+            mmio_write32(GSP_BASE + 0x1C0, coutOff);
+            out0 = mmio_read32(GSP_BASE + 0x1C4);
+            mmio_write32(GSP_BASE + 0x1C0, coutOff + 4);
+            out1 = mmio_read32(GSP_BASE + 0x1C4);
+            ulogf(L"CMDOUT off=0x%x size=0x%x  [0]=0x%08x [4]=0x%08x %s\n",
+                  coutOff, coutSize, out0, out1,
+                  (out0 || out1) ? L"(fwsec wrote something here)"
+                                 : L"(empty)");
+        } else {
+            ulogf(L"CMDOUT unusable off=0x%x size=0x%x\n", coutOff, coutSize);
+        }
+
+        /* NV_PBUS_VBIOS_SCRATCH(i) = 0x1400 + i*4. Драйвер читает 0x0E
+         * (FRTS_ERR_CODE 31:16) и 0x15 (SB_ERR_CODE 15:0). Печатаем веер,
+         * потому что FWSEC мог писать и в соседние. */
+        for (s = 0x0C; s <= 0x17; s++) {
+            UINT32 v = mmio_read32(NV_PBUS_VBIOS_SCRATCH + s * 4);
+            if (v == 0) continue;
+            ulogf(L"SCR    [0x%02x] = 0x%08x\n", (INTN) s, v);
+        }
+
+        /* Чем прикрыты регистры WPR2: если маска непустая, то чтение
+         * отдаёт запись-по-умолчанию, а не то, что записал FWSEC. */
+        lo2  = mmio_read32(REG_PFB_MMU_WPR2_LO);
+        hi2  = mmio_read32(REG_PFB_MMU_WPR2_HI);
+        plm  = mmio_read32(REG_PFB_MMU_WPR2_PLM);
+        ulogf(L"PLMM   wpr2_lo=0x%08x wpr2_hi=0x%08x privLevelMask=0x%08x "
+             L"expect_lo=0x%08x\n",
+             lo2, hi2, plm, TARGET_WPR2_LO);
+        ulogf(L"PLMM   %s\n",
+             (lo2 == TARGET_WPR2_LO) ? L"*** wpr2_lo == expected - FRTS SUCCEEDED ***"
+             : (plm != 0)         ? L"wpr2 reads are priv-masked - value unreliable"
+                                   : L"wpr2_lo is a plain read, genuinely not set");
+    }
+
     /* v3n: ДАМП DMEM ПОСЛЕ ПРОГОНА. dbg=0x00000000 означает, что FWSEC не
      * сообщил об ошибке, но WPR2 не защёлкнулся. Значит вопрос не «падает
      * ли он», а «где именно остановился». Печатаем все НЕнулевые слова
@@ -2420,8 +3251,9 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
         ulogf(L"FWSEC   конец дампа DMEM (непустых слов: %d)\n", (INTN)shown);
     }
 
-    /* v3n: тест чтения FB — один раз за прогон, после первого FWSEC */
-    test_fb_read();
+    /* Проба доступа к кадровому буферу уехала на fb_access_probe(): там
+     * есть контроли и она гоняется на чистом GSP до основного флоу, а не
+     * на грязном состоянии после этого прогона. */
     return FALSE;
 }
 
@@ -4691,14 +5523,32 @@ build_wpr_meta(GspFwWprMeta *m, UINT64 elfPhys, UINT64 elfSize,
     m->vgaWorkspaceOffset = fbSize - TARGET_PRAMIN;
     m->vgaWorkspaceSize   = fbSize - m->vgaWorkspaceOffset;   /* 1MB */
 
-    /* End of WPR region, 128KB aligned (wprEndMargin=0 — по frts-математике dmesg) */
-    wprEnd = m->vgaWorkspaceOffset & ~0x1FFFFULL;
+    /* End of WPR region, 128KB aligned.
+     *
+     * ВАЖНО (2026-09-28): эта геометрия ОБЯЗАНА брать значения из
+     * TARGET PROFILE, а не считать их здесь заново. Раньше здесь стояло
+     *     wprEnd = m->vgaWorkspaceOffset & ~0x1FFFF;
+     * то есть маржа не вычиталась, и после того как в профиль добавили
+     * TARGET_WPR_END_MARGIN, значения РАСХОДИЛИСЬ:
+     *
+     *     META  frtsOffset=0x1FFE00000  <- отсюда (старая формула)
+     *     GEOM  frts=0x1F7E00000        <- из профиля (с маржой)
+     *
+     * То есть профиль изменился, а то, что реально уходит в FWSEC-команду
+     * и в booter, — нет. Второй источник правды для одной и той же
+     * величины = гарантированный рассинхрон. Теперь единственный источник
+     * — TARGET PROFILE.
+     *
+     * Драйвер (kernel_gsp_tu102.c:817) считает так же:
+     *     gspFwWprEnd = ALIGN_DOWN(vbiosReservedOffset - margin, 128K)
+     * см. docs/70HX-DRIVER-ANALYSIS.md §5. */
+    wprEnd = (m->vgaWorkspaceOffset - TARGET_WPR_END_MARGIN) & ~0x1FFFFULL;
     m->gspFwWprEnd = wprEnd;
 
     /* FRTS: 1MB на GA10x (kgspGetFrtsSize). FWSEC-шаг не выполняем, но регион
      * заявляем в meta — booter валидирует раскладку по этим полям */
     m->frtsSize   = TARGET_FRTS_SIZE;
-    m->frtsOffset = m->gspFwWprEnd - m->frtsSize;    /* 8GB:0x1FFE00000 10GB:0x27FE00000 */
+    m->frtsOffset = m->gspFwWprEnd - m->frtsSize;
 
     m->bootBinOffset = (m->frtsOffset - blSize) & ~0xFFFULL;  /* ALIGN_DOWN(4K) */
 
@@ -5155,9 +6005,24 @@ log_load_ptr(EFI_BLOCK_IO_PROTOCOL *bio)
  * 64 сектора — 32 записи на всю область, быстро. После очистки указатель
  * сбрасывается, и следующий прогон начинается с сектора 1 на чистом листе.
  *
- * Флаг g_logClear — на одну сборку: TRUE = очистить при следующей загрузке,
- * затем вернуть FALSE. */
-static BOOLEAN g_logClear = FALSE;   /* уже очищено одноразовой сборкой 750ed815 */
+ * ВАЖНО (2026-09-28): очистка теперь БЕЗУСЛОВНАЯ, каждый прогон.
+ *
+ * Раньше за очисткой стоял одноразовый флаг g_logClear, и лог накапливался
+ * («прогон продолжает с сектора N (логи не затираются)»). На флешке лежала
+ * конкатенация всех прошлых прогонов, а новый перезаписывал только начало.
+ *
+ * Чем это кончилось: в логе оказались строки
+ *     DMA   imem_sec_bit=0 cmd=0x00000604
+ * которых в записанном EFI физически нет (проверено поиском по бинарю) —
+ * это хвост прогона ПРЕДЫДУЩЕЙ сборки. Метки времени шли назад
+ * (t=33368 -> t=29756). Из-за этого вывод «после правки бита IMEM три
+ * ретрая всё ещё идут по старому коду» был ложным: ретраи шли по новому
+ * коду, а строки просто принадлежали прошлому прогону.
+ *
+ * Итог: без изоляции прогонов нельзя делать выводы «что изменилось после
+ * правки» — а именно такие выводы и нужны. Стоимость очистки — 1 МБ
+ * записи на флешку, это ничто по сравнению с загрузкой UEFI. */
+static BOOLEAN g_logClear = TRUE;   /* очищать область лога на каждом прогоне */
 
 static void
 log_clear_area(EFI_BLOCK_IO_PROTOCOL *bio)
@@ -5901,6 +6766,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             g_mcIndex = 0;
         }
         g_mcAdvance = (g_mcCount > 0) && (g_mcIndex + 1 < g_mcCount);
+    /* v3n: метка в лог. Без неё нельзя отличить «карт одна, BootNext
+     * не писался» от «карт две, BootNext писался и устроил POST». */
+    ulogf(L"MC     g_mcIndex=%d g_mcCount=%d g_mcAdvance=%d "
+          L"SINGLE_CARD_ONLY=%d SKIP_FLR=%d\n",
+          (INTN)g_mcIndex, (INTN)g_mcCount, (INTN)g_mcAdvance,
+          (INTN)SINGLE_CARD_ONLY, (INTN)SKIP_FLR);
         Print(L"MULTI-CARD: найдено %d карт(ы), итерация %d, advance=%d\n",
               (INTN)g_mcCount, (INTN)g_mcIndex + 1, g_mcAdvance ? 1 : 0);
         if (g_mcAdvance)
@@ -5952,7 +6823,41 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     {
         BOOLEAN have2 = FALSE;
         UINTN gi = mc_var_get(L"CMP90G2", &have2);
-        if (have2 && gi <= RJ16_N && g_mcCount > 0) {
+        /* v3n: РАЗБЛОКИРОВКА СОСТОЯНИЯ (2026-09-28). Прогон stages показал:
+         *
+         *   STG  gen2: no branch taken (have2=1 success=0 direct=0 early=1)
+         *   STG  reached 'chainload'
+         *   STG  is_unlocked()=0 (SS0=0x05173106 SS1=0x00000007)
+         *
+         * То есть earlyOk=1 (анлок по раннему пути ПРОШЁЛ, WPR2 защёлкнут),
+         * но блок записи селекторов НЕ выполнился, и SS0/SS1 остались
+         * ровно такими, какими были до прогона.
+         *
+         * Причина — старый счётчик CMP90G2 в NVRAM (остался от прежней
+         * работы с 90HX). Из-за него have2=TRUE и gi<=41, то есть
+         * g_gen2Fire=TRUE. Дальше:
+         *
+         *   стр. ~7515: if (g_gen2Fire && have2 && g_gen2Enable)  -> FALSE
+         *               (свип выключен рубильником)  -> тело вырезано
+         *   стр. ~7910: else if (!have2 && ...)                  -> FALSE
+         *               (have2=1)                  -> не берётся
+         *   стр. ~7897: if ((успех) && !g_gen2Fire)             -> FALSE
+         *               (!g_gen2Fire == 0)         -> СЕЛЕКТОРЫ ПРОПУЩЕНЫ
+         *
+         * Взаимная блокировка: счётчик означает «свип в процессе», свип
+         * выключен, а из-за счётчика не выполняется обычный путь, который
+         * и должен записать SS0/SS1. Ничего не происходит, кроме FWSEC.
+         *
+         * Исправление: не входить в fire-режим, пока свип выключен. Счётчик
+         * существует только чтобы управлять свипом; если свип не может
+         * идти, счётчик - бессмысленное состояние, и он не должен подавлять
+         * обычный путь. Это также снимает необходимость вручную чистить
+         * NVRAM. */
+        if (!g_gen2Enable && have2)
+            ulogf(L"G2NVR  CMP90G2=%d есть, но свип выключен -> fire-режим "
+                  L"НЕ включаем, обычный путь селекторов будет выполнен\n",
+                  (INTN) gi);
+        if (g_gen2Enable && have2 && gi <= RJ16_N && g_mcCount > 0) {
             UINT32 saveBar;
             g_gen2Fire = TRUE;
             Print(L"gen2: fire-режим (счётчик %d/%d)\n",
@@ -6084,8 +6989,16 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         if (g_mcAdvance) {
             Print(L"multi-card: карта %d уже разлочена -> следующая\n",
                   (INTN)g_mcIndex + 1);
+            /* v3n: тот же запрет, что и в основном финале — см. SINGLE_CARD_ONLY.
+             * Этот путь («карта уже разлочена») тоже писал BootNext на флешку,
+             * то есть устраивал POST и стирал то, ради чего карта и
+             * разблокировалась. */
+            ulogf(L"MC     already-unlocked path: BootNext=self ПРОПУЩЕН "
+                  L"(SINGLE_CARD_ONLY=%d)\n", (INTN)SINGLE_CARD_ONLY);
+#if !SINGLE_CARD_ONLY
             mc_var_set(L"CMP90IDX", (UINT32)(g_mcIndex + 1));
             mc_set_bootnext_self(ImageHandle);
+#endif
             goto done;
         }
         mc_vars_clear();   /* последняя карта — грузим Windows */
@@ -6449,10 +7362,45 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          wprMeta->frtsOffset, wprMeta->frtsSize, wprMeta->gspFwWprEnd,
          wprMeta->vgaWorkspaceOffset, wprMeta->bootBinOffset,
          wprMeta->bootCount);
+    /* v3n: печатаем ВСЮ геометрию профиля, включая маржу. Именно её
+     * подбираем перебором, и по этому логу видно, какая сборка на флешке —
+     * иначе при переборе непонятно, откуда взялось значение. */
+    ulogf(L"GEOM  margin=0x%llx (%d MB)  wprEnd=0x%llx  frts=0x%llx  "
+         "frtsPG=0x%llx  expectWPR2=0x%08x/0x%08x\n",
+         (UINT64) TARGET_WPR_END_MARGIN,
+         (INTN)(TARGET_WPR_END_MARGIN >> 20),
+         (UINT64) TARGET_WPR_END, (UINT64) TARGET_FRTS_OFFSET,
+         (UINT64) TARGET_FRTS_OFFSET_PG,
+         TARGET_WPR2_LO, TARGET_WPR2_HI);
+    /* Сверка профиля со структурой, которая реально уходит в FWSEC и
+     * booter. Прогон 2026-09-28 показал, что рассинхрон возможен и молчалив:
+     * GEOM печатал frts=0x1F7E00000, а META — 0x1FFE00000, потому что
+     * build_wpr_meta() считала геометрию сама. Теперь такой разрыв
+     * печатается явно. */
+    if (wprMeta->frtsOffset != TARGET_FRTS_OFFSET ||
+        wprMeta->gspFwWprEnd != TARGET_WPR_END)
+        ulogf(L"GEOM  *** MISMATCH: meta frts=0x%llx wprEnd=0x%llx  vs "
+              L"profile frts=0x%llx wprEnd=0x%llx - BUILD BUG, fix "
+              L"build_wpr_meta()\n",
+              wprMeta->frtsOffset, wprMeta->gspFwWprEnd,
+              (UINT64) TARGET_FRTS_OFFSET, (UINT64) TARGET_WPR_END);
+    else
+        ulogf(L"GEOM  profile and wpr meta agree\n");
     ulogf(L"PRE   WPR2=0x%08x/0x%08x PLM=0x%08x SS0=0x%08x SS1=0x%08x GFW=0x%08x\n",
          mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
          mmio_read32(0x00823804U), mmio_read32(REG_FEAT_OVR_SM_SPD),
          mmio_read32(REG_FEAT_OVR_SM_SPD_1), mmio_read32(0x00020f70U));
+
+    /* --- ШАГ 1: доступен ли кадровый буфер через GSP-DMA? ---------------
+     * Идёт ДО убийства GFW и до основного флоу, на чистом GSP: так результат
+     * не зависит от того, что нагадили предыдущие стадии. Сама проба
+     * ресетит GSP, поэтому порядок «сначала проба, потом GFW» безопасен —
+     * и gsp_engine_reset() ниже всё равно приводит GSP в нужное состояние.
+     * Ничего, кроме какого-нибудь мусора в неприкрытом FRTS-регионе, эта
+     * проба испортить не может: WPR2 здесь ещё не защёлкнут. */
+    log_ms(L"проба доступа к кадровому буферу");
+    fb_access_probe(fwsecPhys);
+    log_ms(L"проба FB завершена");
 
     /* --- v2.12: убить GFW (как драйвер: kflcnReset(GSP) перед booter load) ---
      * Живой GFW из POST держит SEC2 залоченным. GSP ENGINE (0x1103C0)
@@ -6588,14 +7536,36 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                  * после POST IMEM пуст (imem_card=0x00000000), затирать
                  * нечего. Порядок: сначала проверенная комбинация
                  * sig2+SEC1, затем то, что правдоподобно для 70HX. */
+                /* Подписи 1 и 0: sig[0] — это 384 байта НУЛЕЙ (см.
+                 * docs/70HX-VBIOS-ANALYSIS.md §4), то есть заведомо
+                 * бесполезна. Оставляем все три на случай, если
+                 * пересчёт из другого VBIOS даст иной набор. */
                 static const UINT8 *sigs[3] = {
                     fwsec_ga104_prod_sig2, fwsec_ga104_prod_sig1,
                     fwsec_ga104_prod_sig0
                 };
                 static const UINTN sigOrder[3] = { 2, 1, 0 };
-                /* SEC=0 идёт ПЕРВЫМ: secure-DMA в IMEM на этой карте
-                 * отклоняется с 0xDEAD5EC1 (см. g_fwsecImemSec). */
-                static const UINTN secOrder[3] = { 0, 1, 0 };
+                /* v3n: решающий сдвиг 2026-09-28.
+                 *
+                 * Раньше здесь стояло secOrder = {0,0,0} с обоснованием
+                 * «secure-DMA забивает DMEM значением 0xDEAD5EC2». Это
+                 * заключение было построено на НЕВЕРНОЙ команде DMA: бит
+                 * IMEM=1 ставился в позицию SEC, поэтому «secure-DMA» на
+                 * самом деле писал в DMEM, а не в IMEM. Сейчас:
+                 *
+                 *   IMEM: cmd=0x614 (IMEM=1, SEC=1) - как в драйвере
+                 *   DMEM: cmd=0x600 (IMEM=0, SEC=0) - как в драйвере
+                 *
+                 * и IMEM после DMA читается как 0xDEAD5EC1 во всех 9 точках,
+                 * то есть он ЗАНЯТ (код загрузился), а не пуст. Старый
+                 * вывод «на 70HX secure-путь не проходит» доказанным
+                 * образом не состоялся.
+                 *
+                 * Итог: перебор SEC теперь осмыслен. Идём 1=secure (как в
+                 * драйвере), 0=non-secure, 0=non-secure — на случай, если
+                 * на этой карте secure-IMEM всё же недоступен для записи.
+                 */
+                static const UINTN secOrder[3] = { 1, 0, 0 };
                 for (attempt = 1; attempt <= 3 && !fwOk; attempt++) {
                     UINTN s = sigOrder[attempt - 1];
                     UINTN sec = secOrder[attempt - 1];
@@ -6667,7 +7637,27 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
               (INTN)g_gen2Fire, (INTN)have2, (INTN)g_gen2Enable,
               (g_gen2Fire && have2 && g_gen2Enable) ? L"СВИП ИДЁТ"
                                                     : L"свип ПРОПУЩЕН");
+
+        /* v3n: МЕТКИ ПО ПУТИ (2026-09-28).
+         *
+         * Наблюдение: прогоны sec1/okchk ОБРЫВАЮТСЯ ровно на этой строке -
+         * после неё в логе нет ни 'SS0', ни 'END', ни 'возврат в прошивку'.
+         * То есть до финального блока селекторов (стр. ~7899) управление
+         * не доходит, и непонятно где именно.
+         *
+         * Причина непонятна ещё и потому, что огромная часть кода ниже
+         * печатает ТОЛЬКО через Print() (на экран), а в лог идёт ulogf().
+         * Если обрыв происходит после Print(), в логе его не видно, и
+         * вывод 'ничего не выполнилось' неверен - просто нечего писать.
+         *
+         * Поэтому: метки до и после каждой стадии, именно в лог. Тогда
+         * обрыв локализуется точно, без догадок. */
+        ulogf(L"STG   enter gen2 block fire=%d have2=%d enable=%d\n",
+              (INTN)g_gen2Fire, (INTN)have2, (INTN)g_gen2Enable);
+
         if (g_gen2Fire && have2 && g_gen2Enable) {
+            ulogf(L"STG   gen2 sweep START\n");
+
             /* v2.99f: каждая пара = ПОЛНЫЙ FLR-миницикл внутри EFI,
              * 1:1 как «module reload» у rejoin16:
              *   FLR → ранний путь (BL→FWSEC→WPR2→RISCV→ботер#1 со stock-
@@ -7034,16 +8024,30 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                 if (g_mcAdvance) {
                     Print(L"multi-card: карта %d разлочена (fire) -> BootNext "
                           L"на себя (без ребута)\n", (INTN)g_mcIndex + 1);
+                    /* v3n: тот же запрет — см. SINGLE_CARD_ONLY */
+                    ulogf(L"MC     fire path: BootNext=self ПРОПУЩЕН "
+                          L"(SINGLE_CARD_ONLY=%d)\n", (INTN)SINGLE_CARD_ONLY);
+#if !SINGLE_CARD_ONLY
                     mc_var_set(L"CMP90IDX", (UINT32)(g_mcIndex + 1));
                     mc_set_bootnext_self(ImageHandle);
-                    goto done;   /* возврат в прошивку: следующая карта */
+#endif
+                    goto done;   /* возврат в прошивку: BootOrder -> Windows */
                 }
                 mc_vars_clear();   /* последняя карта — BootOrder (Windows) */
 #endif
+                ulogf(L"STG   gen2 block done, goto done\n");
                 goto done;
         } else if (!have2 && (Status == EFI_SUCCESS || directOk || earlyOk)) {
             mc_var_set(L"CMP90G2", 0);   /* первый успешный анлок — старт циклов */
             Print(L"gen2: счётчик инициализирован (следующий бут = цикл 1)\n");
+            ulogf(L"STG   gen2 counter initialised, falling through\n");
+        } else {
+            /* v3n: этот случай в прогонах sec1/okchk как раз и молчал -
+             * fire=1 и have2=1, enable=0 -> ни первая ветка, ни вторая.
+             * Теперь это видно в логе явно. */
+            ulogf(L"STG   gen2: no branch taken (have2=%d success=%d "
+                  L"direct=%d early=%d) - falling through\n",
+                  (INTN)have2, (INTN)Status, (INTN)directOk, (INTN)earlyOk);
         }
     }
 #endif
@@ -7054,8 +8058,99 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (Status == EFI_SUCCESS || directOk || earlyOk) {
 #endif
         /* --- Селекторы --- */
+        ulogf(L"STG   reached selector block success=%d direct=%d early=%d "
+              L"gen2Fire=%d\n",
+              (INTN)Status, (INTN)directOk, (INTN)earlyOk,
+              GEN2_FIRE_STATE());
+
+        /* v3n: СНИМОК БЛОКА FUSE ДО записи селекторов.
+         *
+         * Урок из §3j: is_unlocked() — тавтология, она перечитывает то, что
+         * только что записала. Здесь измеряем НЕ ЭХО, а ЭФФЕКТ: в этом же
+         * диапазоне 0x008238xx лежит документированный регистр
+         *     NV_FUSE_FEATURE_READOUT = 0x00823814   (R--4R, только чтение)
+         * Если запись селекторов включает признаки, то FeatureReadout
+         * обязан измениться. Если он не изменился — значения не те.
+         *
+         * Снимаем окно 0x00823800..0x0082382F до и после и печатаем diff.
+         * Безопасность: только чтение, ничего не пишем. */
+        /* Широкое окно блока fuse. Задача — НЕ угадывать значения, а
+         * собрать структуру: 0x008238xx в драйвере не описан почти никак
+         * (только 0x823814 = FEATURE_READOUT, и то лишь с полем
+         * ECC_DRAM бит 16). Поэтому печатаем всё окно до и после записи
+         * и diff — по нему видно и раскладку, и побочные эффекты.
+         * Только чтение. */
+#define FUSE_WIN_LO   0x00823780UL
+#define FUSE_WIN_N    48
+        static UINT32 freg[FUSE_WIN_N];
+        UINT32 fbefore[FUSE_WIN_N], fafter[FUSE_WIN_N];
+        UINTN k, fchanged = 0;
+        for (k = 0; k < FUSE_WIN_N; k++) freg[k] = FUSE_WIN_LO + k * 4;
+
+        for (k = 0; k < FUSE_WIN_N; k++) fbefore[k] = mmio_read32(freg[k]);
+        for (k = 0; k < FUSE_WIN_N; k++)
+            ulogf(L"FUSE   before 0x%08x = 0x%08x%s\n", freg[k], fbefore[k],
+                  (freg[k] == 0x00823814UL)
+                      ? L"  <- NV_FUSE_FEATURE_READOUT (only ECC_DRAM doc'd)"
+                  : (freg[k] == 0x0082381CUL) ? L"  <- SS0 (we write here)"
+                  : (freg[k] == 0x00823820UL) ? L"  <- SS1 (we write here)"
+                                               : L"");
+
+        /* v3n: PLM тоже открываем здесь. Раньше он считался уже открытым
+         * (BOOTER давал PLM-OPEN), но после secure-загрузки FWSEC
+         * привилегии могли смениться, и запись в селекторы без открытого
+         * PLM молча не липнет. Поэтому читаем-пишем с проверкой. */
+        {
+            UINT32 plmNow = mmio_read32(REG_FEAT_OVR_PLM);
+            if (plmNow != VAL_PLM_OPEN) {
+                mmio_write32(REG_FEAT_OVR_PLM, VAL_PLM_OPEN);
+                uefi_call_wrapper(BS->Stall, 1, 50000);
+            }
+            ulogf(L"STG   PLM 0x%08x -> 0x%08x readback 0x%08x %s\n",
+                  plmNow, (UINT32) VAL_PLM_OPEN, mmio_read32(REG_FEAT_OVR_PLM),
+                  (mmio_read32(REG_FEAT_OVR_PLM) == VAL_PLM_OPEN)
+                      ? L"OPEN" : L"*** DID NOT STICK ***");
+        }
         mmio_write32(REG_FEAT_OVR_SM_SPD_1, VAL_SS1_UNLOCKED);
         mmio_write32(REG_FEAT_OVR_SM_SPD, VAL_SS0_UNLOCKED);
+        uefi_call_wrapper(BS->Stall, 1, 100000);
+        {
+            UINT32 ss0 = mmio_read32(REG_FEAT_OVR_SM_SPD);
+            UINT32 ss1 = mmio_read32(REG_FEAT_OVR_SM_SPD_1);
+            ulogf(L"STG   selectors: want SS0=0x%08x SS1=0x%08x | got "
+                  L"SS0=0x%08x SS1=0x%08x %s\n",
+                  (UINT32) VAL_SS0_UNLOCKED, (UINT32) VAL_SS1_UNLOCKED,
+                  ss0, ss1,
+                  (ss0 == VAL_SS0_UNLOCKED && ss1 == VAL_SS1_UNLOCKED)
+                      ? L"written OK" : L"*** DID NOT STICK ***");
+            ulogf(L"STG   is_selectors_written()=%d  (ЭТО ТАВТОЛОГИЯ: "
+                  L"перечитывает только что записанное; анлок не доказывает)\n",
+                  (INTN) is_unlocked());
+
+            /* Тот же блок fuse ПОСЛЕ записи — ищем реальный эффект. */
+            for (k = 0; k < FUSE_WIN_N; k++) fafter[k] = mmio_read32(freg[k]);
+            for (k = 0; k < FUSE_WIN_N; k++) {
+                if (fafter[k] == fbefore[k]) continue;
+                fchanged++;
+                ulogf(L"FUSE   CHANGED 0x%08x: 0x%08x -> 0x%08x "
+                      L"(xor 0x%08x)%s\n",
+                      freg[k], fbefore[k], fafter[k],
+                      fbefore[k] ^ fafter[k],
+                      (freg[k] == 0x00823814UL)
+                          ? L"  <- FEATURE_READOUT MOVED"
+                      : ((freg[k] != 0x0082381CUL && freg[k] != 0x00823820UL)
+                             ? L"  <- UNREQUESTED SIDE EFFECT" : L""));
+            }
+            ulogf(L"FUSE   %d of %d changed; FEATURE_READOUT=0x%08x->0x%08x %s\n",
+                  (INTN) fchanged, (INTN) FUSE_WIN_N,
+                  fbefore[(0x00823814UL - FUSE_WIN_LO) / 4],
+                  fafter[(0x00823814UL - FUSE_WIN_LO) / 4],
+                  (fbefore[(0x00823814UL - FUSE_WIN_LO) / 4] ==
+                   fafter[(0x00823814UL - FUSE_WIN_LO) / 4])
+                      ? L"UNCHANGED (но поле документировано только как "
+                        L"ECC_DRAM бит 16 - это НЕ признак анлока)"
+                      : L"moved");
+        }
         dump_regs(L"[unlock]");
         snapshot_state();   /* до FLR — потом MMIO уже мёртв */
 
@@ -7097,17 +8192,58 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * падает frts_err=0xbe. Селекторы переживают FLR (доказано 2 раза).
          * СРАЗУ после FLR — StartImage из ОЗУ, БЕЗ печатей и чтений MMIO
          * (функция «мертва» до конца загрузки; консоль на второй ГПУ). */
+        /* v3n: ПОЛНЫЙ СНИМОК ДО FLR. После FLR функция «мертва», и все
+         * показания после него недоступны. Значит всё, что хотим узнать,
+         * снимаем здесь — тогда результат эксперимента не зависит от того,
+         * доживёт ли приложение до маркера END. */
+        ulogf(L"PREFLR PLM=0x%08x SS0=0x%08x SS1=0x%08x WPR2=0x%08x/0x%08x "
+              L"GFW=0x%08x dbg=0x%08x cpuctl=0x%08x scratch0e=0x%08x\n",
+              mmio_read32(REG_FEAT_OVR_PLM),
+              mmio_read32(REG_FEAT_OVR_SM_SPD),
+              mmio_read32(REG_FEAT_OVR_SM_SPD_1),
+              mmio_read32(REG_PFB_MMU_WPR2_LO),
+              mmio_read32(REG_PFB_MMU_WPR2_HI),
+              mmio_read32(0x0000B100U),
+              mmio_read32(GSP_BASE + 0x94), mmio_read32(GSP_CPUCTL),
+              mmio_read32(NV_PBUS_VBIOS_SCRATCH + FWSECLIC_SCRATCH_FRTSE * 4));
+        ulogf(L"PREFLR want SS0=0x%08x SS1=0x%08x -> %s\n",
+              (UINT32) VAL_SS0_UNLOCKED, (UINT32) VAL_SS1_UNLOCKED,
+              (mmio_read32(REG_FEAT_OVR_SM_SPD) == VAL_SS0_UNLOCKED &&
+               mmio_read32(REG_FEAT_OVR_SM_SPD_1) == VAL_SS1_UNLOCKED)
+                  ? L"written OK" : L"MISMATCH");
+
+#if SKIP_FLR
+        /* Эксперимент: FLR пропускаем, чтобы проверить, переживают ли
+         * селекторы сброс. Всё, что было до сброса, уже записано в лог
+         * строками выше. */
+        ulogf(L"FLRX   *** SKIP_FLR=%d - do_flr() ПРОПУЩЕН ***\n", (INTN) SKIP_FLR);
+        uefi_call_wrapper(BS->Stall, 1, 500000);
+#else
         Print(L"FLR (сброс защёлкнутого WPR2)...\n");
         do_flr();
         uefi_call_wrapper(BS->Stall, 1, 300000);   /* PCIe: 100мс + запас */
+        g_postFlr = TRUE;
+        /* После FLR MMIO не читаем принципиально — только запись в лог. */
+        ulogf(L"FLRX   do_flr() выполнен, дальше MMIO не читается\n");
+#endif
 
 #ifdef MULTI_CARD
         if (g_mcAdvance) {
             Print(L"multi-card: карта %d разлочена -> BootNext на себя (без ребута)\n",
                   (INTN)g_mcIndex + 1);
+            ulogf(L"MC     g_mcIndex=%d g_mcCount=%d g_mcAdvance=1 -> "
+                  L"BootNext=self ПРОПУЩЕН (SINGLE_CARD_ONLY=%d): перезагрузка "
+                  L"на флешку = POST = стирание fuse-shadow\n",
+                  (INTN)g_mcIndex, (INTN)g_mcCount, (INTN)SINGLE_CARD_ONLY);
+#if !SINGLE_CARD_ONLY
             mc_var_set(L"CMP90IDX", (UINT32)(g_mcIndex + 1));
-            mc_set_bootnext_self(ImageHandle);
-            goto done;   /* возврат в прошивку: она перезапустит нас с флешки */
+            ulogf(L"MC     mc_set_bootnext_self() = %d (0 = запись BootNext "
+                  L"не удалась, значит и перезагрузки не будет)\n",
+                  (INTN) mc_set_bootnext_self(ImageHandle));
+#else
+            mc_var_set(L"CMP90IDX", 0);   /* счётчик сбрасываем, чтобы не крутить */
+#endif
+            goto done;   /* возврат в прошивку: BootOrder -> Windows без POST */
         }
         mc_vars_clear();   /* последняя карта — дальше как обычно chainload */
 #endif
@@ -7125,8 +8261,18 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     }
 
 chainload:
+    /* v3n: метка. Существенно, что путь сюда ВОЗМОЖЕН даже при успешном
+     * анлоке: условие селекторов содержит !g_gen2Fire, а при fire=1
+     * (счётчик CMP90G2 в NVRAM) оно ложно. То есть в fire-режиме блок
+     * записи SS0/SS1 не выполняется вовсе — и это не должно выглядеть
+     * как «анлок сломался». Различить позволяет именно эта метка. */
+    ulogf(L"STG   reached 'chainload' (selector block skipped if "
+          L"g_gen2Fire=1)\n");
     dump_regs(L"[pre-Windows]");
     if (!g_snapOk) snapshot_state();   /* ветка неуспеха — MMIO ещё живы */
+    ulogf(L"STG   is_unlocked()=%d (SS0=0x%08x SS1=0x%08x)\n",
+          (INTN) is_unlocked(), mmio_read32(REG_FEAT_OVR_SM_SPD),
+          mmio_read32(REG_FEAT_OVR_SM_SPD_1));
     if (is_unlocked())
         Print(L"*** NVIDIA %s РАЗБЛОКИРОВАН ***\n", TARGET_NAME);
     else
@@ -7134,10 +8280,18 @@ chainload:
               mmio_read32(REG_FEAT_OVR_SM_SPD), mmio_read32(REG_FEAT_OVR_SM_SPD_1));
 
 done:
-    /* --- ИТОГОВАЯ СВОДКА: 8 строк, которые нужны для разбора.
-     * Печатается в самом конце, чтобы финальный экран не уехал
-     * при возврате в прошивку, и дублируется в лог на флешке. */
-    if (!g_snapOk) snapshot_state();
+    /* v3n: метка входа в done — иначе 'лог оборвался' и 'приложение
+     * не дописало' неразличимы: обе означают одно и то же (ничего не
+     * записано), но причины разные. */
+    ulogf(L"STG   reached 'done' label\n");
+    /* v3n: после FLR функция «мертва» — MMIO читать нельзя. Именно этим,
+     * по всей видимости, объясняется отсутствие маркера END в прогонах
+     * sec1/okchk/stages: snapshot_state() в этой точке висела на мёртвом
+     * устройстве. Теперь состояние просто переиспользуем. */
+    if (!g_snapOk && !g_postFlr) snapshot_state();
+    else if (g_postFlr)
+        ulogf(L"STG   post-FLR: MMIO недоступен, сводка берёт снимок "
+              L"от момента до FLR\n");
     {
         Print(L"\n================ ИТОГ ================\n");
         Print(L" profile      %s  10de:%04x  bus=%d dev=%d fn=%d\n",

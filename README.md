@@ -13,6 +13,31 @@ The unlock runs **before any OS boots**, so Windows simply starts with the card 
 > the framebuffer size. What is field-proven versus extrapolated is spelled out
 > in [KNOWN-ISSUES.md](KNOWN-ISSUES.md) §13–16.
 
+> 🚧 **CMP 70HX status as of 2026-09-29 — the unlock is NOT confirmed.**
+> FWSEC now loads, executes, latches `WPR2`, and the selector registers
+> accept their writes. **But the card does not unlock in Windows**: a
+> GPU-Z render test draws **75 W**, which is not an unlocked card.
+>
+> ```
+> STG    selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 *** UNLOCKED ***
+> STG    is_unlocked()=1
+> ```
+>
+> `is_unlocked()=1` is **not** evidence: the function re-reads the two
+> registers it just wrote, and an FLR immediately afterwards leaves the
+> result unverifiable. Three one-line fixes were still needed to get this
+> far (KNOWN-ISSUES §36, §37, §42), all the same class of mistake —
+> reading register bits by variable name instead of by field definition.
+>
+> The figures quoted below remain from the field-proven **90HX** build.
+> PCIe Gen2 is off by default ([PORT-STATUS §3a](docs/70HX-PORT-STATUS.md));
+> it does not affect the unlock itself.
+>
+> Root-cause analysis, the VBIOS teardown, and the step history:
+> **[docs/70HX-PORT-STATUS.md](docs/70HX-PORT-STATUS.md)**,
+> **[docs/70HX-VBIOS-ANALYSIS.md](docs/70HX-VBIOS-ANALYSIS.md)**,
+> **[docs/70HX-NEXT-STEPS.md](docs/70HX-NEXT-STEPS.md)**.
+
 > ⚠️ **Honest expectations:** this is a mining card, and it is *not* a gaming
 > GPU replacement — no display outputs, PCIe Gen1 ×16 in the current release,
 > and gaming requires a community-patched driver (see below). Compute/AI is
@@ -129,6 +154,11 @@ unsolved problems live in **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)**.
   card-specific constants
 - `src/build.sh` — build script (gnu-efi, `TARGET=70HX|90HX`); `src/tools/` — firmware extraction helpers
 - `docs/` — platform gotchas, register/geometry notes, Code 43 diagnostic report, blob patching procedure
+- `docs/70HX-PORT-STATUS.md` — **CMP 70HX port status**: what works, what doesn't, the `WPR2` blocker
+- `docs/70HX-VBIOS-ANALYSIS.md` — **teardown of the 70HX VBIOS**: FWSEC signatures, the `DMEM_MAPPER_V3` layout
+- `docs/70HX-NEXT-STEPS.md` — **step plan** with a success criterion for every experiment
+- `docs/70HX-DRIVER-ANALYSIS.md` — **teardown of the 610.43.03 driver**: formula confirmations and the found `WPR_END_MARGIN`
+- `docs/FLASH-AND-LOG.md` — **procedure**: writing the loader to the stick, verifying it, pulling the log
 - `tests/` — proof artifacts: game screenshot, HWiNFO log, llama-bench output
 - `out/` — `.efi` builds produced here for both cards
 - Release images are attached to the [Releases](https://github.com/WildFlash1st/cmp90hx-unlock-for-windows/releases) page
