@@ -468,6 +468,29 @@ is_target_gpu(UINT32 Id)
 #ifndef SINGLE_CARD_ONLY
 #define SINGLE_CARD_ONLY 1
 #endif
+
+/* ==== ГИПОТЕЗА B: настоящий селектор живёт в 0x0082380C (2026-09-29) ===
+ *
+ * Чтение из Windows (RWEverything, сессия через флешку) дало:
+ *
+ *     0x0082380C = 0x00888888   <- стояло ДО нас, стоит и сейчас
+ *     наш SS0    = 0x88888888   <- пишем в 0x0082381C
+ *
+ * Разница РОВНО в старшем байте. Плюс 0x00823810 = 0x002AAAAA (чередующиеся
+ * биты) — тоже не меняется. Похоже на fuse-отчётность.
+ *
+ * Тем не менее стоит проверить: если 0x82380C — настоящий селектор
+ * SM-скорости, ему не хватает верхнего байта. Эксперимент дешёвый и
+ * обратимый в том же смысле, в каком уже доказано: запись в 0x82381C
+ * уцелела в Windows и ничего не сломала.
+ *
+ * Щадящий режим: если PROBE_FUSE_NEIGHBOUR=0, ничего не пишем, только
+ * читаем. По умолчанию 1 — эксперимент. */
+#ifndef PROBE_FUSE_NEIGHBOUR
+#define PROBE_FUSE_NEIGHBOUR 1
+#endif
+#define REG_FUSE_SEL_CAND     0x0082380CUL   /* кандидат: сейчас 0x00888888 */
+#define REG_FUSE_ROUTINE      0x00823810UL   /* сопровождающий, 0x002AAAAA */
 static BOOLEAN g_postFlr = FALSE;   /* после do_flr() MMIO не читать */
 
 /* ==== SEC2 Falcon microcontroller — hosts the signed "booter" ucode ====
@@ -5644,6 +5667,11 @@ static void log_flush_sector(BOOLEAN force);
  * флешку, с которой мы запустились, не мешает.
  *
  * Читается обратно out\read-log.ps1 (или Get-Content вручную).
+ *
+ * Механика записи и чтения лога целиком описана в docs/LOGGING.md: формат
+ * области на диске, отбор флешки (log_stick_ok), секторный буфер, контракт
+ * синхронности с out/read-log.ps1 и диагностика отказов. Процедура снятия
+ * лога — docs/FLASH-AND-LOG.md.
  * ================================================================== */
 /* Адрес области лога. ДЕСЯТИЧНОЕ ЧИСЛО, а не hex: в hex здесь легко
  * ошибиться (0x3E8000 = 4 096 000, а не 4 000 000) и тогда читающий
@@ -8150,6 +8178,31 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                       ? L"UNCHANGED (но поле документировано только как "
                         L"ECC_DRAM бит 16 - это НЕ признак анлока)"
                       : L"moved");
+
+        /* --- ГИПОТЕЗА B: пробуем 0x0082380C как настоящий селектор ------- */
+#if PROBE_FUSE_NEIGHBOUR
+        {
+            UINT32 was  = mmio_read32(REG_FUSE_SEL_CAND);
+            UINT32 was2 = mmio_read32(REG_FUSE_ROUTINE);
+            ulogf(L"PROBE  0x%08x = 0x%08x (кандидат в селектор), "
+                  L"0x%08x = 0x%08x\n",
+                  REG_FUSE_SEL_CAND, was, REG_FUSE_ROUTINE, was2);
+            ulogf(L"PROBE  %s -> пишу 0x88888888 (добираем старший байт)\n",
+                  (was == 0x88888888UL) ? L"уже 0x88888888, писать нечего"
+                                         : L"ЗАПИСЫВАЮ");
+            if (was != 0x88888888UL) {
+                mmio_write32(REG_FUSE_SEL_CAND, 0x88888888UL);
+                uefi_call_wrapper(BS->Stall, 1, 100000);
+            }
+            ulogf(L"PROBE  readback 0x%08x = 0x%08x %s | 0x%08x = 0x%08x%s\n",
+                  REG_FUSE_SEL_CAND, mmio_read32(REG_FUSE_SEL_CAND),
+                  (mmio_read32(REG_FUSE_SEL_CAND) == 0x88888888UL)
+                      ? L"STUCK" : L"NOT STUCK (вероятно это отчётность)",
+                  REG_FUSE_ROUTINE, mmio_read32(REG_FUSE_ROUTINE),
+                  (mmio_read32(REG_FUSE_ROUTINE) == was2)
+                      ? L" (не изменился)" : L" *** ИЗМЕНИЛСЯ ***");
+        }
+#endif
         }
         dump_regs(L"[unlock]");
         snapshot_state();   /* до FLR — потом MMIO уже мёртв */

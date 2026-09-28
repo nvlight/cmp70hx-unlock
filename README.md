@@ -34,6 +34,7 @@ The unlock runs **before any OS boots**, so Windows simply starts with the card 
 > it does not affect the unlock itself.
 >
 > Root-cause analysis, the VBIOS teardown, and the step history:
+> **[docs/70HX-FINAL-SUMMARY.md](docs/70HX-FINAL-SUMMARY.md)** (start here),
 > **[docs/70HX-PORT-STATUS.md](docs/70HX-PORT-STATUS.md)**,
 > **[docs/70HX-VBIOS-ANALYSIS.md](docs/70HX-VBIOS-ANALYSIS.md)**,
 > **[docs/70HX-NEXT-STEPS.md](docs/70HX-NEXT-STEPS.md)**.
@@ -154,11 +155,13 @@ unsolved problems live in **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)**.
   card-specific constants
 - `src/build.sh` — build script (gnu-efi, `TARGET=70HX|90HX`); `src/tools/` — firmware extraction helpers
 - `docs/` — platform gotchas, register/geometry notes, Code 43 diagnostic report, blob patching procedure
+- `docs/70HX-FINAL-SUMMARY.md` — **where the CMP 70HX port stands**: what is proven, what was disproved, what is left
 - `docs/70HX-PORT-STATUS.md` — **CMP 70HX port status**: what works, what doesn't, the `WPR2` blocker
 - `docs/70HX-VBIOS-ANALYSIS.md` — **teardown of the 70HX VBIOS**: FWSEC signatures, the `DMEM_MAPPER_V3` layout
 - `docs/70HX-NEXT-STEPS.md` — **step plan** with a success criterion for every experiment
 - `docs/70HX-DRIVER-ANALYSIS.md` — **teardown of the 610.43.03 driver**: formula confirmations and the found `WPR_END_MARGIN`
 - `docs/FLASH-AND-LOG.md` — **procedure**: writing the loader to the stick, verifying it, pulling the log
+- `docs/LOGGING.md` — **logging mechanics**: on-disk format, the write path in `unlock_v2.c`, the read path in `out/read-log.ps1`, the keep-in-sync contract between them, log diagnostics
 - `tests/` — proof artifacts: game screenshot, HWiNFO log, llama-bench output
 - `out/` — `.efi` builds produced here for both cards
 - Release images are attached to the [Releases](https://github.com/WildFlash1st/cmp90hx-unlock-for-windows/releases) page

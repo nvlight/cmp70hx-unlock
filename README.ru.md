@@ -40,6 +40,7 @@
 > ([PORT-STATUS §3a](docs/70HX-PORT-STATUS.md)) — на сам анлок не влияет.
 >
 > Разбор причины, разбор VBIOS этой карты и история шагов:
+> **[docs/70HX-FINAL-SUMMARY.md](docs/70HX-FINAL-SUMMARY.md)** (с неё начать),
 > **[docs/70HX-PORT-STATUS.md](docs/70HX-PORT-STATUS.md)**,
 > **[docs/70HX-VBIOS-ANALYSIS.md](docs/70HX-VBIOS-ANALYSIS.md)**,
 > **[docs/70HX-NEXT-STEPS.md](docs/70HX-NEXT-STEPS.md)**.
@@ -159,11 +160,13 @@ TARGET=90HX BLOBS=/путь/к/блобам bash build.sh  # оригиналь�
   блок `TARGET PROFILE` в начале файла — единственное место с константами карты
 - `src/build.sh` — скрипт сборки (gnu-efi, `TARGET=70HX|90HX`); `src/tools/` — хелперы извлечения прошивок
 - `docs/` — грабли платформы, заметки по регистрам, отчёт диагностики Code 43, процедура патча блобов
+- `docs/70HX-FINAL-SUMMARY.md` — **итог работы по 70HX**: что доказано, что опровергнуто, что осталось
 - `docs/70HX-PORT-STATUS.md` — **статус порта 70HX**: что работает, что нет, разбор блокера `WPR2`
 - `docs/70HX-VBIOS-ANALYSIS.md` — **разбор VBIOS карты 70HX**: подписи FWSEC, структура `DMEM_MAPPER_V3`
 - `docs/70HX-NEXT-STEPS.md` — **план дальнейших шагов** с критериями успеха каждого эксперимента
 - `docs/70HX-DRIVER-ANALYSIS.md` — **разбор драйвера 610.43.03**: подтверждение формул и найденная `WPR_END_MARGIN`
 - `docs/FLASH-AND-LOG.md` — **процедура**: запись загрузчика на флешку, проверка, снятие лога
+- `docs/LOGGING.md` — **механика логирования**: формат на диске, путь записи в `unlock_v2.c`, путь чтения в `out/read-log.ps1`, контракт синхронности между ними, диагностика отказов
 - `tests/` — доказательства: скриншот игры, лог HWiNFO, вывод llama-bench
 - `out/` — собранные здесь `.efi` для обеих карт
 - Образы релизов прикреплены к странице [Releases](https://github.com/WildFlash1st/cmp90hx-unlock-for-windows/releases)

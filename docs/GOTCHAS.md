@@ -45,6 +45,10 @@
   Проверять md5 СОДЕРЖИМОГО BOOTX64.EFI, перед cp делать rm + fsck при dirty.
 - Serial лог СМЕШАННЫЙ: ASCII debug-строки + UTF-16LE Print (кириллица).
   grep ASCII-паттернов по нему слепой («Конец.» не ищется!) — iconv/NUL-strip.
+- **Лог, который мы снимаем, — не serial и не файл:** приложение пишет ASCII
+  сырыми секторами в область флешки (LBA 4000000) и читается хостовым
+  `out\read-log.ps1`. Механика целиком — [LOGGING.md](LOGGING.md),
+  процедура — [FLASH-AND-LOG.md](FLASH-AND-LOG.md).
 
 ## PCIe Gen2 (статус: приоритет понижен)
 
