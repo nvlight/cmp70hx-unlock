@@ -3140,14 +3140,31 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
      * открылся — и GFX_SPEED_SELECT всё равно не встал. Значит дверь
      * другая, и наш собственный комментарий называет её прямо.
      *
-     * Шесть адресов окна XVE из таблицы g_rj16. Порядок — как в таблице.
+     * Плюс 0x823800 (PLM стр. 0x8238xx) и 0x823B04 — оба в g_rj16, первый
+     * в прошлом прогоне открылся, второй не подтвердился, но стоит копейки.
+     *
+     * ГЛАВНОЕ ИСПРАВЛЕНИЕ ЭТОГО ПРОГОНА: снят гард «ботер#1 только один
+     * раз». Замер v3.09 дал безупречный по позициям паттерн:
+     *   цель #1  -> ОТКРЫТА  (polls=0)
+     *   цели #2..#6 -> заперты (polls=1000), и во втором проходе тоже
+     * и в прошлом прогоне ровно то же: 1-я открылась, 2-я нет.
+     * Срабатывает ТОЛЬКО ПЕРВАЯ запись прогона. Причина — гард, который
+     * стоит и в историческом свипе (unlock_v2.c:8542, `if (!g_fwsecOnce)`):
+     * ботер#1 не зовётся со второй итерации, а после FLR именно он заново
+     * открывает PLM и сбрасывает счётчик выстрелов. Комментарий рядом
+     * утверждает «FWSEC от запуска не зависит: образ уже залит в IMEM» —
+     * это верно про FWSEC и неверно про ботер: early_unlock_path зовёт всю
+     * цепочку BL->FWSEC->WPR2->RISCV->ботер#1, и без неё ботер#2 после
+     * FLR не имеет к чему целиться. Этим же, вероятно, объясняется и
+     * «свип не доходит до FF» из v3n: за прогон реально писалась ровно
+     * одна запись таблицы, а остальные циклы уходили впустую.
      */
-    static const UINT32 tgt[6] = { 0x00088FE8U, 0x00088FECU, 0x00088FF0U,
-                                   0x00088FF4U, 0x00088FF8U, 0x00088AB4U };
+    static const UINT32 tgt[8] = { 0x00088FE8U, 0x00088FECU, 0x00088FF0U,
+                                   0x00088FF4U, 0x00088FF8U, 0x00088AB4U,
+                                   0x00823800U, 0x00823B04U };
 #define NTGT ((INTN)(sizeof(tgt) / sizeof(tgt[0])))
     volatile UINT32 *pv = (volatile UINT32 *)(UINTN)(v67Phys + 0xf948);
     volatile UINT32 *pa = (volatile UINT32 *)(UINTN)(v67Phys + 0xf960);
-    BOOLEAN fwsecDone = FALSE;
     INTN pass, k, tries, done;
     UINT32 v, saveBar, wLo, wHi;
 
@@ -3170,18 +3187,21 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
             enable_mem_decode();
             gBar0Base = saveBar;
 
-            /* --- ботер#1: открыть PLM заново (он ПЕРЕЖИВАЕТ FLR) ---------
-             * FWSEC нужен, чтобы открыть secure-путь, а не чтобы повторять
-             * его на каждой записи: образ уже залит и лежит в IMEM. */
-            if (!fwsecDone) {
-                fwsecDone = TRUE;
-                CopyMem((VOID *)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
-                __asm__ volatile("wbinvd" ::: "memory");
-                early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
-                ulogf(L"G2RMK  %s ботер#1: PLM=0x%08x SS0=0x%08x\n", tag,
-                      mmio_read32(0x00823804U),
-                      mmio_read32(REG_FEAT_OVR_SM_SPD));
-            }
+            /* --- ботер#1: КАЖДЫЙ РАЗ, без гарда ---------------------------
+             * Гард стоял здесь и в историческом свипе (стр. 8542). Замер
+             * показал, что из-за него за прогон писалась РОВНО ОДНА запись
+             * таблицы: первая (ботер#1 ещё не выстреливал) — успевала,
+             * все последующие — нет, потому что после FLR нужен новый
+             * ботер#1, чтобы заново открыть PLM и сбросить счётчик
+             * выстрелов. Комментарий «FWSEC от запуска не зависит» верен
+             * про образ в IMEM, но early_unlock_path зовёт всю цепочку
+             * BL->FWSEC->WPR2->RISCV->ботер#1, и это не то же самое, что
+             * «FWSEC уже загружен». */
+            CopyMem((VOID *)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
+            __asm__ volatile("wbinvd" ::: "memory");
+            early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
+            ulogf(L"G2RMK  %s п%d ботер#1: PLM=0x%08x\n", tag, (INTN)pass + 1,
+                  mmio_read32(0x00823804U));
 
             /* --- ботер#2: параметризованный ROP пишет наш адрес --------- */
             wLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
@@ -3198,9 +3218,12 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
             mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
             mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
 
-            /* запись асинхронная: у референса 147..1000 polls по 1 мс */
+            /* Успешные записи в обоих прогонах читались с polls=0, то есть
+             * ROP пишет синхронно. Ждать 1000 мс имеет смысл только если
+             * запись асинхронна; 400 мс — с запасом, и не сжигает минуты
+             * на заведомо мёртвые адреса. */
             v = mmio_read32(tgt[k]);
-            for (tries = 0; v != 0xFFFFFFFFU && tries < 1000; tries++) {
+            for (tries = 0; v != 0xFFFFFFFFU && tries < 400; tries++) {
                 uefi_call_wrapper(BS->Stall, 1, 1000);
                 v = mmio_read32(tgt[k]);
             }
