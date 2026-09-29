@@ -364,6 +364,55 @@ static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
 #define REG_FEAT_OVR_PLM        0x00823804UL   /* PLM: 0xffffffff = open */
 #define REG_FEAT_OVR_SM_SPD     0x0082381CUL   /* SS0: 0x88888888 = full */
 #define REG_FEAT_OVR_SM_SPD_1   0x00823820UL   /* SS1: 0x00000008 = full */
+
+/* ==== SM_ISSUE_RATE_MOD — эксперимент 2026-09-29 ===================
+ *
+ * Источник: отчёт bendy2 «CMP 90HX 相对 GA102 消费卡的图形阉割分析报告»,
+ * раздел 4 «已排除的次要项» (анализ BAR0 пяти карт):
+ *
+ *     SM_ISSUE_RATE_MOD @0x504204:  90HX=0x7   3090=0x5
+ *     «SM 调度节流，是算力域，非图形»
+ *
+ * Заблокированная карта -> 0x7, полностью разлоченная потребительская -> 0x5.
+ * В отличие от FUSE_SS_* (fuse OTP, физически не переписывается) это
+ * обычный MMIO-регистр домена SM.
+ *
+ * Зачем пробуем: вычислительный замер 2026-09-29 дал 233.89 t/s, то есть
+ * заблокированную базу, при том что SS0/SS1 в Windows доставлены верно.
+ * Значит ограничитель вычислительной скорости — не только эти поля.
+ *
+ * ГРАНИЦЫ ВЫВОДА, чтобы не переоценить: сравнение в отчёте сделано на
+ * GA102 (90HX / 3090 / 3080Ti), у нас GA104. Диэны разные, поэтому
+ * перенос значения 0x5 — гипотеза. Назначение битов не документировано.
+ * Поэтому пишем ровно наблюдавшееся у рабочей карты значение и не трогаем
+ * соседей. Критерий успеха — llama-bench снаружи, не показание в логе. */
+#define REG_SM_ISSUE_RATE_MOD   0x00504204UL
+#define ISSUE_RATE_MOD_UNLOCKED 0x00000005UL
+
+#ifndef PROBE_ISSUE_RATE_MOD
+/* v3n: 2026-09-29 — ВРЕМЕННО ВЫКЛЮЧЕНО ради A/B-теста.
+ *
+ * Что произошло. С этой записью включённой llama-bench дал
+ * 2271.71 t/s против 233.89 t/s на сборке без неё — в 9.7 раза.
+ * НО замер показал, что регистр УЖЕ БЫЛ 0x00000005 ДО записи:
+ *
+ *     IRM before 0x504200=0x00090000 0x504204=0x00000005 ...
+ *     IRM write  0x00504204 = 0x00000005 -> readback 0x00000005 STUCK
+ *
+ * То есть по read-back запись — no-op, и «IRM разблокировал карту» было бы
+ * ровно той же ошибкой, что и is_unlocked(): показание без механизма.
+ *
+ * Возможны два объяснения, и их надо развести:
+ *   (а) запись 0x5 имеет НЕНАБЛЮДАЕМЫЙ побочный эффект (сброс защёлкнутого
+ *       троттлинга), и read-back этого не показывает;
+ *   (б) 233.89 t/s были сняты в иных условиях (прошивка/драйвер/процессы),
+ *       и выросло не.register write, а окружение.
+ *
+ * A/B с выключенной записью разводит их: если вернётся ~233 t/s — виновата
+ * запись (вариант (а)); если останется ~2270 — виновато окружение (б).
+ * После теста это значение надо вернуть в 1, если сработает (а). */
+#define PROBE_ISSUE_RATE_MOD 0
+#endif
 #define REG_PCIE_FUSE_OVR       0x00823810UL
 #define REG_PFB_MMU_WPR2_LO     0x001FA824UL
 #define REG_PFB_MMU_WPR2_HI     0x001FA828UL
@@ -1945,6 +1994,18 @@ gsp_engine_reset(void)
  * Результат: WPR2 установлен → SEC2 booter load (v2.24) пройдёт (dbg≠0).
  * (В драйвере подтверждено: frts_err=0, wpr2=[frtsOffset, frtsOffset+0xE00]
  *  — то есть ровно TARGET_WPR2_LO/TARGET_WPR2_HI.) */
+/* v3n: счётчики таймаутов опроса DMA (2026-09-29).
+ * Предупреждения об этих таймаутах печатались через Print(), то есть
+ * ТОЛЬКО на экран, и в область лога на флешке не попадали ни разу за всю
+ * историю проекта. Из-за этого «этих строк нет ни в одном логе» читалось
+ * как «их никогда не было», хотя правильный вывод был «их туда не пишут»
+ * (KNOWN-ISSUES §42.7). Теперь пишем и на экран, и в лог: без лога
+ * состояние DMA-очереди при сбое невозможно расследовать постфактум. */
+static UINTN g_dmaFullTo  = 0;   /* таймаутов ожидания «не FULL» */
+static UINTN g_dmaIdleTo  = 0;   /* таймаутов ожидания «IDLE» */
+static UINTN g_dmaFullLast = 0;  /* значение cmd в последнем таком таймауте */
+static UINTN g_dmaIdleLast = 0;
+
 static void
 gsp_dma_wait_not_full(void)
 {
@@ -1952,7 +2013,11 @@ gsp_dma_wait_not_full(void)
     for (i = 0; i < 20000; i++) {
         if (!(mmio_read32(GSP_DMATRFCMD) & 0x1)) return;
     }
-    Print(L"fwsec: ВНИМАНИЕ DMA queue FULL (cmd=0x%08x)\n", mmio_read32(GSP_DMATRFCMD));
+    g_dmaFullTo++;
+    g_dmaFullLast = mmio_read32(GSP_DMATRFCMD);
+    Print(L"fwsec: ВНИМАНИЕ DMA queue FULL (cmd=0x%08x)\n", g_dmaFullLast);
+    ulogf(L"DMAQ   FULL timeout #%d cmd=0x%08x (bit0=FULL стоит, bit1=IDLE снят)\n",
+          (INTN)g_dmaFullTo, (INTN)g_dmaFullLast);
 }
 
 static void
@@ -1962,7 +2027,11 @@ gsp_dma_wait_idle(void)
     for (i = 0; i < 20000; i++) {
         if (mmio_read32(GSP_DMATRFCMD) & 0x2) return;
     }
-    Print(L"fwsec: ВНИМАНИЕ DMA не IDLE (cmd=0x%08x)\n", mmio_read32(GSP_DMATRFCMD));
+    g_dmaIdleTo++;
+    g_dmaIdleLast = mmio_read32(GSP_DMATRFCMD);
+    Print(L"fwsec: ВНИМАНИЕ DMA не IDLE (cmd=0x%08x)\n", g_dmaIdleLast);
+    ulogf(L"DMAQ   IDLE timeout #%d cmd=0x%08x (bit1=IDLE стоит, bit0=FULL снят)\n",
+          (INTN)g_dmaIdleTo, (INTN)g_dmaIdleLast);
 }
 
 static void
@@ -2383,7 +2452,34 @@ fb_access_probe(UINT64 fwsecPhys)
      *     нулей — то есть проверка не работала вовсе. --------------------- */
     {
         static const UINT8 zeros[FBP_BLK] = { 0 };
-        UINT32 zcrc = crc32_upd(0xFFFFFFFFU, zeros, FBP_BLK);
+        /* Ровно 16 блоков — столько же, сколько в цикле crc ниже.
+         *
+         * ЗДЕСЬ БЫЛИ ДВЕ ОШИБКИ, обе исправлены 2026-09-29.
+         *
+         * 1) Затенение. Здесь стояло `UINT32 zcrc = ...` — вторая
+         *    переменная с тем же именем, что объявлена выше по функции.
+         *    Она затеняла ту, что печатается в ulogf, и наружу уходило
+         *    неинициализированное значение.
+         *
+         * 2) Лишний блок. Инициализатор считал ОДИН блок, а цикл ниже
+         *    добавлял ещё 16 — итого 17 блоков против 16 у crc. Проверено
+         *    по логу от 2026-09-29 после исправления (1):
+         *        FBP-E  crc32=0x38E3FFEE  zerocrc=0x47C1A880
+         *    арифметика сходится ровно:
+         *        crc32(4096 нулей) = 0xC71C0011, без финального XOR
+         *                            = 0x38E3FFEE   <- это crc
+         *        crc32(4352 нулей) = 0x9A21E28F, без финального XOR
+         *                            = 0x47C1A880   <- это 17 x 256
+         *    То есть сравнивались 16 блоков против 17 — «DIFFERS» был
+         *    гарантирован независимо от содержимого региона.
+         *
+         * После исправления (2) zcrc станет CRC тех же 4096 байт, что и
+         * crc, и вердикт «(all zero, consistent with C)» будет означать
+         * ровно то, что читает тест C.
+         *
+         * Правило: число блоков в zcrc и в crc обязано совпадать, а
+         * имя zcrc не должно перекрываться внутренним объявлением. */
+        zcrc = 0xFFFFFFFFU;
         for (i = 0; i < 16; i++) zcrc = crc32_upd(zcrc, zeros, FBP_BLK);
     }
     crc = 0xFFFFFFFFU;
@@ -2392,27 +2488,14 @@ fb_access_probe(UINT64 fwsecPhys)
         fbp_dmem_peek(FBP_DMEM_WIN, w, FBP_BLK / 4);
         crc = crc32_upd(crc, (const UINT8 *) w, FBP_BLK);
     }
-    /* v3n: НЕЛЬЗЯ печатать «(has data)» только по crc != zerocrc.
-     *
-     * Замер 2026-09-28 показал, почему. Первые 8 слов региона читались
-     * нулями (тест C -> ZERO), и логично было ждать, что весь блок нулевой.
-     * Но CRC не совпал с CRC нулей — и это выглядело как «в регионе что-то
-     * есть». На деле читались НЕ данные региона, а мусор, оставшийся в
-     * DMEM от предыдущей DMA-передачи: за один блок 0x100 четыре раза
-     * подряд меняются только младшие 9 бит адреса (DMATRF адресуется с
-     * точностью 0x200), так что перекрывающиеся чтения отдают старое
-     * содержимое буфера, а не памяти по этому адресу.
-     *
-     * Вывод, который на самом деле следует из C/D/E: адрес 0x1FFE00000
-     * НЕ адресуется DMA-движком — иначе C дал бы данные региона, а не
-     * нули, и E совпал бы с zerocrc. Поэтому «(has data)» здесь вводит
-     * в заблуждение, и печатать его нельзя. Признак «есть данные» —
-     * только fbp_or первых слов (тест C). */
+    /* Признак «всё нули» — ТОЛЬКО crc == zerocrc, и теперь это сравнение
+     * корректно (см. блок выше: раньше считалось 17 блоков против 16).
+     * Признак «есть данные» — только fbp_or первых слов (тест C). */
     ulogf(L"FBP-E  frts[0..0x1000] crc32=0x%08x  zerocrc=0x%08x  %s\n",
           crc, zcrc,
           (crc == zcrc)
               ? L"(all zero, consistent with C)"
-              : L"(DIFFERS from zerocrc - not evidence of data, see comment)");
+              : L"(DIFFERS from zerocrc - see comment)");
 
     /* --- F/G: запись в FB и чтение обратно. Пока WPR2 не защёлкнут, FRTS
      *     не защищён; максимум что может случиться — мусор, который
@@ -2612,6 +2695,92 @@ falcon_imem_verify(UINT64 physCode, UINT32 codeSize)
                                : L"occupied-but-unreadable");
     }
     return empty | (matched << 8) | (occupied << 16);
+}
+
+/* v3n: ЗАМЕР WPR2 ПО ГРАНИЦАМ СТАДИЙ (2026-09-29).
+ *
+ * Зачем. Полный лог показал: WPR2_LO = 0x01F7E000 на выходе из
+ * fwsec_boot_gsp_sig() (строка OKCHK), и 0x01EAD000 уже в блоке
+ * селекторов. Между этими точками стоит early_unlock_path() с
+ * booter_load_v67() — единственное место, где там что-то крутится.
+ * Замеры WATCH before/after у записей селекторов виновника ИСКЛЮЧИЛИ:
+ * они не меняют ничего, кроме 0x00823818. Значит искать надо раньше, и
+ * этот замер ищет по границам стадий.
+ *
+ * Про подписи: строки PRE/END/PREFLR печатают «GFW=…», читая 0x0000B100,
+ * тогда как REG_GFW_BOOT_OK = 0x00118234. Это разные регистры, а в логе
+ * выглядят как один. Замер 2026-09-29: 0xB100 = 0xBADF5040 -> 0xBADF1100,
+ * а 0x00118234 = 0x000003FF (младший байт 0xFF = GFW поднялся, по
+ * критерию самого кода). То есть «GFW поехал 0xBADF5040 -> 0xBADF1100» —
+ * сравнение двух sentinel-ов BADF, а не данные о состоянии. */
+static void
+wpr2_probe(const CHAR16 *tag)
+{
+    /* проверку g_logOn делает сам ulogf */
+    ulogf(L"PROBE  %s WPR2=0x%08x/0x%08x GFWok=0x%08x b100=0x%08x "
+          L"cpuctl=0x%08x\n",
+          tag, mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
+          mmio_read32(REG_GFW_BOOT_OK), mmio_read32(0x0000B100U),
+          mmio_read32(GSP_CPUCTL));
+}
+
+/* v3n: ДАМП ОКНА SEC2 ВОКРУГ 0x840310 (2026-09-29).
+ *
+ * Зачем. Пользователь снял снаружи (из Windows) окно 0x840310..0x840374 и
+ * показал сплошные 0xBADF5xxx:
+ *     0x840310..0x840340 = 0xBADF5108
+ *     0x840344..0x840360 = 0xBADF5720
+ *     0x840364..0x84036C = 0xBADF5040
+ *     0x840370          = 0x001C0004   <- единственное без префикса BADF
+ *     0x840374          = 0xBADF5720
+ * Вопрос: что такое 0x840370 и меняется ли оно от анлока. Ответить
+ * внешним чтением нельзя — нужен тот же замер ДО и ПОСЛЕ, а сравнивать
+ * два разных инструмента бессмысленно. Поэтому дампим это окно самим
+ * ulogf на тех же границах стадий, что и wpr2_probe: тогда оба состояния
+ * читаются одним кодом и попадают в один лог.
+ *
+ * 0x840000 — база NV_PSEC (апертура SEC2/Falcon, :548), то есть адреса
+ * 0x8403xx — это НЕ видеоблок и не BAR0. Значения 0xBADF5xxx — sentinel
+ * «узел заперт», а не данные (KNOWN-ISSUES §42.8). Поэтому в строках ниже
+ * BADF-значения помечены явно: иначе в следующем логе их снова примут за
+ * показание.
+ *
+ * Формат: по 4 слова в строке, «addr = value». Строка держится в
+ * пределах лимита ulogf (399 символов на вызов). */
+#define SEC2_WIN_LO   0x00840300UL
+#define SEC2_WIN_HI   0x00840380UL
+
+static void
+sec2_window_dump(const CHAR16 *tag)
+{
+    UINT32 a;
+    for (a = SEC2_WIN_LO; a <= SEC2_WIN_HI; a += 16) {
+        UINT32 w0 = mmio_read32(a);
+        UINT32 w1 = mmio_read32(a + 4);
+        UINT32 w2 = mmio_read32(a + 8);
+        UINT32 w3 = mmio_read32(a + 12);
+        ulogf(L"SEC2W  %s 0x%08x=0x%08x 0x%08x=0x%08x "
+              L"0x%08x=0x%08x 0x%08x=0x%08x%s\n",
+              tag, a, w0, a + 4, w1, a + 8, w2, a + 12, w3,
+              (w0 == 0x001C0004U || w1 == 0x001C0004U ||
+               w2 == 0x001C0004U || w3 == 0x001C0004U) ? L"  <<0x001C0004" : L"");
+    }
+    /* Отдельно: сколько в окне BADF-значений и сколько — настоящих.
+     * Это то, что делает дамп пригодным для сравнения: одно число вместо
+     * двадцати шести строк, которые надо читать глазами. */
+    {
+        UINT32 badf = 0, live = 0, n = 0;
+        for (a = SEC2_WIN_LO; a <= SEC2_WIN_HI; a += 4) {
+            UINT32 v = mmio_read32(a);
+            n++;
+            if ((v & 0xBADF0000U) == 0xBADF0000U) badf++; else live++;
+        }
+        ulogf(L"SEC2S  %s window 0x%08x..0x%08x words=%d BADF=%d live=%d "
+              L"dmatrfcmd=0x%08x fullTo=%d idleTo=%d\n",
+              tag, SEC2_WIN_LO, SEC2_WIN_HI, (INTN)n, (INTN)badf, (INTN)live,
+              (INTN)mmio_read32(GSP_DMATRFCMD),
+              (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo);
+    }
 }
 
 static BOOLEAN
@@ -3054,6 +3223,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
                         break;
                     }
                 }
+                wpr2_probe(L"после-перебора-0x10..0x1F");
             }
 
             /* v2.45: ДИСКРИМИНАЦИЯ SEC=1 на GSP — загружаем МОДИФИЦИРОВАННЫЙ
@@ -3118,6 +3288,14 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
                       mmio_read32(REG_PFB_MMU_WPR2_HI),
                       TARGET_WPR2_LO);
             }
+            /* v3n: здесь функция возвращает TRUE («успех»), НЕ проверяя, что
+             * сделали с WPR2 перебор команд 0x10..0x1F и модифицированный
+             * FWSEC выше. Оба блока перезапускают FWSEC через STARTCPU, то
+             * есть FWSEC исполняется заново и может перещёлкивать WPR2.
+             * Замер: OKCHK печатал 0x01F7E000, а в блоке селекторов было
+             * 0x01EAD000 — и между этими точками больше ничего не пишет
+             * WPR2, кроме этих блоков. */
+            wpr2_probe(L"перед-return-TRUE");
             return TRUE;
         }
         if ((i % 200) == 0)
@@ -3835,14 +4013,19 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     Print(L"[E1] после BL: cpuctl=0x%x dbg=0x%x mbox0=0x%x bcr=0x%x\n",
           mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
           mmio_read32(GSP_MAILBOX0), mmio_read32(GSP_BCR));
+    wpr2_probe(L"E1-после-BL");
 
     /* --- [E2] FWSEC на GSP → WPR2 (fwsec_boot_gsp сам ресетит GSP) --- */
     Print(L"[E2] FWSEC на GSP (WPR2)...\n");
     CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
+    wpr2_probe(L"E2-до-fwsec");
+    sec2_window_dump(L"E2-до-fwsec");
     if (!fwsec_boot_gsp_sig(fwsecPhys, fwsec_ga104_prod_sig2, 2)) {
         Print(L"[E2] WPR2 не встал — ранний путь не удался\n");
         return EFI_DEVICE_ERROR;
     }
+    wpr2_probe(L"E2-после-fwsec");
+    sec2_window_dump(L"E2-после-fwsec");
 
     /* --- [E3] ResetIntoRiscv + LibosBootArgs.
      * v2.80: ТОЧНАЯ реплика kflcnResetIntoRiscv_GA102: PreResetWait →
@@ -3869,6 +4052,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
           mmio_read32(GSP_CPUCTL));
     mmio_write32(GSP_MAILBOX0, (UINT32)cmp90_meta_low(wprMetaPhys));
     mmio_write32(GSP_MAILBOX1, (UINT32)(cmp90_meta_low(wprMetaPhys) >> 32));
+    wpr2_probe(L"E3-после-ResetIntoRiscv");
 
     sec2_health(L"E4-pre-booter");
 
@@ -3876,7 +4060,70 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
      *        Свежая копия образа (патч 0x6010 от BL-шага затирался бы
      *        в DMEM-окне ботера 0x5000..0x9D00). --- */
     CopyMem((VOID*)(UINTN)ucodePhys, booter_ucode_prod, BOOTER_UCODE_SIZE);
-    return booter_load_v67(wprMetaPhys, ucodePhys);
+    {
+        /* v3n: ботер — последний кандидат на смену WPR2: он исполняет V67,
+         * а тот по устройству делает произвольные привилегированные записи
+         * в регистры. Замер снимает вопрос одним прогоном. */
+        EFI_STATUS bst;
+        UINT32 wLo, wHi;
+
+        /* v3n: СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ
+         * WPR2 ВОКРУГ V67 (2026-09-29).
+         *
+         * Замер доказал: исполнение V67 портит WPR2_LO
+         *     E5-до-ботера      WPR2=0x01F7E000/0x01F7EE00
+         *     E5-после-ботера   WPR2=0x01EAD000/0x01F7EE00
+         *
+         * И это НЕ неизбежное свойство
+         * эксплойта, а известная особенность,
+         * которую работающая реализация
+         * bendy2 обходит явно (патч
+         * 0001-58015903-cmp90hx-direct-compute.patch):
+         *
+         *     wpr2Lo = GPU_REG_RD32(pGpu, 0x001fa824U);
+         *     wpr2Hi = GPU_REG_RD32(pGpu, 0x001fa828U);
+         *     for (attempt = 0; attempt < 2; attempt++) {
+         *         GPU_REG_WR32(pGpu, 0x001fa824U, wpr2Lo);   // перед V67
+         *         GPU_REG_WR32(pGpu, 0x001fa828U, wpr2Hi);
+         *         ...ExecuteBooterLoad...                     // V67
+         *     }
+         *     GPU_REG_WR32(pGpu, 0x001fa824U, wpr2Lo);       // после V67
+         *     GPU_REG_WR32(pGpu, 0x001fa828U, wpr2Hi);
+         *     // и только потом — селекторы SS1, SS0
+         *
+         * Эталон пишет WPR2 обратно ДО
+         * записи селекторов. У нас этого
+         * не было, а драйвер в Windows проверяет
+         * именно WPR2 (frtsErrCode / wpr2Hi != 0 /
+         * wpr2Lo == expected) — то есть получает
+         * испорченное значение. Это самая
+         * вероятная из найденных причин, почему
+         * до анлока дело не доходит.
+         *
+         * Порядок принципиален: сначала
+         * вернуть WPR2, потом SS1/SS0 — ровно как в
+         * эталоне. */
+        wLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+        wHi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+        wpr2_probe(L"E5-до-ботера");
+        bst = booter_load_v67(wprMetaPhys, ucodePhys);
+        wpr2_probe(L"E5-после-ботера");
+
+        /* восстановление того, что было до V67 */
+        mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
+        mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
+        uefi_call_wrapper(BS->Stall, 1, 50000);
+        wpr2_probe(L"E5-после-восстановления");
+        ulogf(L"FLRX   WPR2 восстановлен после V67: "
+              L"lo 0x%08x->0x%08x hi 0x%08x->0x%08x %s\n",
+              wLo, mmio_read32(REG_PFB_MMU_WPR2_LO),
+              wHi, mmio_read32(REG_PFB_MMU_WPR2_HI),
+              (mmio_read32(REG_PFB_MMU_WPR2_LO) == wLo &&
+               mmio_read32(REG_PFB_MMU_WPR2_HI) == wHi)
+                  ? L"OK" : L"*** НЕ УДЕРЖАЛОСЬ ***");
+
+        return bst;
+    }
 }
 
 /* ==== FALLBACK A: full replay of the kernel driver's 3-stage init ====
@@ -5832,7 +6079,25 @@ ulogf(const CHAR16 *fmt, ...)
     UINTN i;
     if (!g_logOn) return;
     va_start(ap, fmt);
-    UnicodeVSPrint(wbuf, sizeof(wbuf) / sizeof(wbuf[0]), fmt, ap);
+    /* ВАЖНО: вторым аргументом UnicodeVSPrint ждёт размер В БАЙТАХ, а не
+     * число символов. Проверено на gnu-efi 4.0.0: функция начинается с
+     *     shr $1,%rsi ; sub $0x1,%rsi
+     * то есть сама переводит байты в символы как BufferSize/2 - 1.
+     *
+     * Раньше здесь стояло sizeof(wbuf)/sizeof(wbuf[0]) = 400, и функция
+     * считала 400/2 - 1 = 199 символов. Любая строка лога длиннее 199
+     * молча обрывалась. Наблюдалось так (2026-09-29):
+     *     META ... bootBin=0x1F7DFA000 bootCounGEOM  margin=0x8000000 (128 MB)
+     * — 199 символов, без перевода строки, следующая строка приклеена.
+     *
+     * Именно поэтому оборванная строка выглядела как «сломанный формат»:
+     * ложный след вели к правке не того. Формат был ни при чём — предел
+     * наступил раньше, чем разбиралисьSpecifier'ы.
+     *
+     * Строки MEM длиннее 199 в том же логе целые: они собираются
+     * несколькими вызовами ulogf (заголовок + цикл), и предел действует
+     * на КАЖДЫЙ вызов по отдельности. */
+    UnicodeVSPrint(wbuf, sizeof(wbuf), fmt, ap);
     va_end(ap);
     for (i = 0; wbuf[i] && i < 400; i++) {
         CHAR16 c = wbuf[i];
@@ -6069,9 +6334,21 @@ log_clear_area(EFI_BLOCK_IO_PROTOCOL *bio)
     ulogf(L"LOG   область очищена, следующий прогон с сектора 1\n");
 }
 
-/* Заголовок лога + контрольная запись. */
+/* Заголовок лога + контрольная запись.
+ *
+ * v3n: `how` — ШИРОКАЯ строка (CHAR16*), не CHAR8*. Раньше здесь стояло
+ * `const CHAR8 *how`, и "geometry" уходило в %s UnicodeVSPrint, который
+ * читает %s как CHAR16*. Узкие байты 'g','e' читались как символ 0x6567 —
+ * вне диапазона 0x20..0x7E, и ulogf() превращал его в '?'. В логе от
+ * 2026-09-29 это выглядело так:
+ *     stick ... sec=1 by=????????T????
+ * где '????????' — это «geometry», прочитанная по два байта как wide, а
+ * дальше — хвост мусора, потому что обход не остановился на границе
+ * литерала. Та же беда описана в комментарии выше про AsciiVSPrint, но при
+ * переходе на UnicodeVSPrint её повторили: узкая строка в %s недопустима
+ * в обоих. Правило: в %s для ulogf()/Print() передавать ТОЛЬКО L"...". */
 static void
-log_start(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 lba, const CHAR8 *how)
+log_start(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 lba, const CHAR16 *how)
 {
     UINT32 startSec = log_load_ptr(bio);
 
@@ -6153,7 +6430,7 @@ log_init(EFI_HANDLE ImageHandle)
             Print(L"[log] кандидат #%d отброшен: %s\n", (INTN)i, why);
             continue;
         }
-        log_start(bio, lba, "geometry");
+        log_start(bio, lba, L"geometry");
         if (g_logOn) return;
     }
     Print(L"[log] флешка не найдена среди %d устройств — лог только на экран\n",
@@ -6424,7 +6701,9 @@ static void preload_bootmgfw(void)
                               (VOID **)&bio) || !bio || !bio->Media)
             continue;
         isPart = bio->Media->LogicalPartition;
-        Print(L"[preload] хендл %d: bs=%d last=%llu removable=%d logical=%d\n",
+        /* v3n: «%llu» НЕ работает в этом Print (тот же дефект, что и в строке
+         * META выше) — печатаем 64-битное значение как «0x%llx». */
+        Print(L"[preload] хендл %d: bs=%d last=0x%llx removable=%d logical=%d\n",
               k, bio->Media->BlockSize,
               (UINT64)bio->Media->LastBlock,
               bio->Media->RemovableMedia, isPart);
@@ -6477,7 +6756,8 @@ static void preload_bootmgfw(void)
                 }
             }
             if (!espLba) { Print(L"[preload] ESP не найден в GPT\n"); continue; }
-            Print(L"[preload] ESP @LBA %llu — читаю bootmgfw...\n", espLba);
+            Print(L"[preload] ESP @LBA 0x%llx — читаю bootmgfw...\n",
+                  (UINT64) espLba);
 
             {
                 UINT8 *fb = NULL; UINTN fsz = 0;
@@ -6485,8 +6765,8 @@ static void preload_bootmgfw(void)
                 if (EFI_ERROR(st)) { Print(L"[preload] bootmgfw: %r\n", st); continue; }
                 g_bmBuf = fb; g_bmSize = fsz;
                 g_bmDp = FileDevicePath(H[k], WINDOWS_BOOT_PATH);
-                Print(L"[preload] ✓ bootmgfw.efi %d байт в ОЗУ (GPT ESP@%llu)\n",
-                      fsz, espLba);
+                Print(L"[preload] ✓ bootmgfw.efi %d байт в ОЗУ (GPT ESP@0x%llx)\n",
+                      fsz, (UINT64) espLba);
             }
         }
     }
@@ -7378,18 +7658,33 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         Print(L"fb size reg 0x440 = 0x%08x (0xBADF = залочен → берём из профиля: 0x%llX)\n",
               fbsz, TARGET_FB_SIZE);
         ulogf(L"FBIOS fbreg_0x440=0x%08x profile_fb=0x%llx %s\n", fbsz,
-             TARGET_FB_SIZE, (fbsz == 0xBADF0000U || fbsz == 0) ? "LOCKED" : "READABLE");
+             TARGET_FB_SIZE, (fbsz == 0xBADF0000U || fbsz == 0) ? L"LOCKED" : L"READABLE");
     }
     __asm__ volatile("wbinvd" ::: "memory");
     Print(L"meta@0x%lx radix@0x%lx ucode@0x%lx v67@0x%lx fb=0x%lx\n",
           wprMetaPhys, radixPhys, ucodePhys, v67Phys, wprMeta->fbSize);
+    /* v3n: здесь стояло «bootCount=%llu», и строка выглядела оборванной.
+     * ПРИЧИНА ОКАЗАЛАСЬ НЕ В ФОРМАТЕ: ulogf передавал в UnicodeVSPrint
+     * размер в символах вместо БАЙТ, и функция резала вывод на 199-м
+     * символе (см. ulogf). Формат был ни при чём — предел наступал раньше,
+     * чем разбирались спецификаторы. Именно поэтому оборванная строка так
+     * убедительно выглядела как «сломанный %llu».
+     *
+     * Проверить утверждение «%llu не поддержан» НЕ УДАЛОСЬ: стенд для
+     * проверки форматов (линковка print.o из gnu-efi в хостовую программу)
+     * не пошёл из-за несовместимости ABI на границе. Утверждение НЕ
+     * ДОКАЗАНО, опираться на него нельзя.
+     *
+     * Печатаем как 0x%llx — заодно ради единообразия: остальные поля этой
+     * строки тоже hex. Проверенно рабочие форматы: %d с приведением к
+     * INTN, %x/%llx, %u, %03u, %lld (см. KNOWN-ISSUES §42/43). */
     ulogf(L"META  meta@0x%llx radix@0x%llx ucode@0x%llx v67@0x%llx "
          "fbSize=0x%llx frtsOffset=0x%llx frtsSize=0x%llx wprEnd=0x%llx "
-         "vgaWS=0x%llx bootBin=0x%llx bootCount=%llu\n",
+         "vgaWS=0x%llx bootBin=0x%llx bootCount=0x%llx\n",
          wprMetaPhys, radixPhys, ucodePhys, v67Phys, wprMeta->fbSize,
          wprMeta->frtsOffset, wprMeta->frtsSize, wprMeta->gspFwWprEnd,
          wprMeta->vgaWorkspaceOffset, wprMeta->bootBinOffset,
-         wprMeta->bootCount);
+         (UINT64) wprMeta->bootCount);
     /* v3n: печатаем ВСЮ геометрию профиля, включая маржу. Именно её
      * подбираем перебором, и по этому логу видно, какая сборка на флешке —
      * иначе при переборе непонятно, откуда взялось значение. */
@@ -7487,6 +7782,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     {
         EFI_STATUS earlySt = early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
         sec2_health(L"9-post-early");
+        /* v3n: граница после раннего пути (он зовёт booter_load_v67).
+         * Нужна, чтобы отделить вклад FWSEC-перебора от вклада ботера:
+         * оба печатают через Print/ulogf по-разному, но WPR2 трогать могут
+         * оба. */
+        wpr2_probe(L"после-раннего-пути");
+        sec2_window_dump(L"после-раннего-пути");
         if (earlySt == EFI_SUCCESS) {
             Print(L"v2.70: *** ранний путь: PLM открыт ***\n");
             earlyOk = TRUE;
@@ -8139,9 +8440,101 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                   (mmio_read32(REG_FEAT_OVR_PLM) == VAL_PLM_OPEN)
                       ? L"OPEN" : L"*** DID NOT STICK ***");
         }
+        /* v3n: СЛЕЖКА ЗА ПОБОЧНЫМИ РЕГИСТРАМИ (2026-09-29).
+         *
+         * Наблюдение: WPR2_LO меняется между OKCHK и PREFLR, но код эти
+         * два момента разделяет большим куском работы, поэтому виноват
+         * не назван:
+         *     OKCHK  wpr2Lo=0x01F7E000   OK
+         *     PREFLR WPR2=0x01EAD000/0x01F7EE00
+         * Заодно поехал GFW: 0xBADF5040 -> 0xBADF1100.
+         *
+         * Что делает этот блок: читает «неинтересные» регистры ДО и ПОСЛЕ
+         * двух записей селекторов, вплотную. Тогда следующий прогон
+         * отвечает на вопрос не «где-то в этом окне испортилось», а
+         * «эти ли две записи это сделали».
+         *
+         * Это измерение, а не исправление: ничего не пишет, только читает.
+         * Побочный эффект заведомо есть — запись в 0x0082381C/0x00823820
+         * обнуляет соседний 0x00823818 (это видно в FUSE-diff). Вопрос
+         * в том, дотянется ли он до WPR2 по адресу 0x001FA824, который
+         * в другое подпространство. */
+        ulogf(L"WATCH  before WPR2=0x%08x/0x%08x GFW=0x%08x dbg=0x%08x "
+              L"cpuctl=0x%08x scratch0e=0x%08x privMask=0x%08x/0x%08x "
+              L"fuse18=0x%08x fuse0C=0x%08x\n",
+              mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
+              mmio_read32(REG_GFW_BOOT_OK), mmio_read32(GSP_BASE + 0x94),
+              mmio_read32(GSP_CPUCTL),
+              mmio_read32(NV_PBUS_VBIOS_SCRATCH + FWSECLIC_SCRATCH_FRTSE * 4),
+              mmio_read32(REG_PFB_MMU_WPR2_PLM), mmio_read32(REG_PFB_MMU_WPR2_PLM + 4),
+              mmio_read32(0x00823818UL), mmio_read32(0x0082380CUL));
+
         mmio_write32(REG_FEAT_OVR_SM_SPD_1, VAL_SS1_UNLOCKED);
         mmio_write32(REG_FEAT_OVR_SM_SPD, VAL_SS0_UNLOCKED);
         uefi_call_wrapper(BS->Stall, 1, 100000);
+
+        /* та же слежка сразу после — единственное место, где видно,
+         * что именно эти две записи сделали с WPR2/GFW */
+        ulogf(L"WATCH  after  WPR2=0x%08x/0x%08x GFW=0x%08x dbg=0x%08x "
+              L"cpuctl=0x%08x scratch0e=0x%08x privMask=0x%08x/0x%08x "
+              L"fuse18=0x%08x fuse0C=0x%08x\n",
+              mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
+              mmio_read32(REG_GFW_BOOT_OK), mmio_read32(GSP_BASE + 0x94),
+              mmio_read32(GSP_CPUCTL),
+              mmio_read32(NV_PBUS_VBIOS_SCRATCH + FWSECLIC_SCRATCH_FRTSE * 4),
+              mmio_read32(REG_PFB_MMU_WPR2_PLM), mmio_read32(REG_PFB_MMU_WPR2_PLM + 4),
+              mmio_read32(0x00823818UL), mmio_read32(0x0082380CUL));
+
+        /* ---------------------------------------------------------------
+         * v3n: ЭКСПЕРИМЕНТ — SM_ISSUE_RATE_MOD (2026-09-29)
+         *
+         * Основание. Замер вычислительной производительности показал, что
+         * анлок по SS0/SS1 НЕ действует: 233.89 t/s = заблокированная база
+         * (~230), при том что в Windows наши значения селекторов стоят
+         * (чтение RWEverything, расхождений ноль). Значит ограничитель
+         * вычислительной скорости на 70HX — не только (или не) эти поля.
+         *
+         * Внешний ориентир, которого раньше не было. Отчёт bendy2 по
+         * анализу BAR0 пяти карт (90HX против RTX 3090/3080Ti) содержит
+         * прямую строку про ВЫЧИСЛИТЕЛЬНЫЙ домен:
+         *
+         *     SM_ISSUE_RATE_MOD @0x504204:  90HX=0x7  3090=0x5
+         *     «SM-планировщик, троттлинг, вычислительный домен, НЕ графика»
+         *
+         * То есть у заблокированной карты 0x7, у полностью разлоченной
+         * потребительской карты 0x5. В отличие от fuse-OTP это обычный
+         * MMIO-регистр домена SM.
+         *
+         * ОСТОРОЖНО, ЧЕСТНО О ГРАНИЦАХ ВЫВОДА:
+         *   - сравнение 90HX/3090 выполнено на GA102, у нас GA104. Диэны
+         *     разные, перенос 0x5 на 70HX — гипотеза, а не факт;
+         *   - назначение битов 0x504204 нигде не документировано, кроме этой
+         *     строки отчёта;
+         *   - поэтому пишем ровно наблюдавшееся у рабочей карты значение и
+         *     НЕ трогаем соседние регистры.
+         *
+         * Критерий успеха — ВНЕ этого кода: llama-bench. 233 t/s значит
+         * «не сработало», тысячи — «сработало». Показаний в самом логе для
+         * этого недостаточно (см. FINAL-SUMMARY §4).
+         * --------------------------------------------------------------- */
+        ulogf(L"IRM    before 0x504200=0x%08x 0x504204=0x%08x "
+              L"0x504208=0x%08x 0x50420C=0x%08x\n",
+              mmio_read32(0x00504200UL), mmio_read32(0x00504204UL),
+              mmio_read32(0x00504208UL), mmio_read32(0x0050420CUL));
+        if (PROBE_ISSUE_RATE_MOD) {
+            mmio_write32(REG_SM_ISSUE_RATE_MOD, ISSUE_RATE_MOD_UNLOCKED);
+            uefi_call_wrapper(BS->Stall, 1, 100000);
+            ulogf(L"IRM    write 0x%08x = 0x%08x -> readback 0x%08x %s\n",
+                  REG_SM_ISSUE_RATE_MOD, ISSUE_RATE_MOD_UNLOCKED,
+                  mmio_read32(REG_SM_ISSUE_RATE_MOD),
+                  (mmio_read32(REG_SM_ISSUE_RATE_MOD) == ISSUE_RATE_MOD_UNLOCKED)
+                      ? L"STUCK" : L"NOT STUCK (RO или иной контекст)");
+        }
+        ulogf(L"IRM    after  0x504200=0x%08x 0x504204=0x%08x "
+              L"0x504208=0x%08x 0x50420C=0x%08x\n",
+              mmio_read32(0x00504200UL), mmio_read32(0x00504204UL),
+              mmio_read32(0x00504208UL), mmio_read32(0x0050420CUL));
+
         {
             UINT32 ss0 = mmio_read32(REG_FEAT_OVR_SM_SPD);
             UINT32 ss1 = mmio_read32(REG_FEAT_OVR_SM_SPD_1);
@@ -8362,11 +8755,36 @@ done:
               (INTN)LOG_LBA, (INTN)(LOG_LBA + LOG_SECTORS - 1));
         Print(L"=======================================\n");
         log_flush_sector(TRUE);
+        /* Финальный дамп окна SEC2: это последнее состояние перед уходом
+         * в прошивку, то есть ровно то, что доживает до Windows. Именно
+         * его и надо сравнивать между прогонами с флешкой и без. */
+        sec2_window_dump(L"END-финал");
         ulogf(L"END   ss0=0x%08x ss1=0x%08x PLM=0x%08x WPR2=0x%08x/0x%08x "
              "dbg=0x%08x cpuctl=0x%08x scratch0e=0x%08x\n",
              g_snapSs0, g_snapSs1, g_snapPlm, g_snapWLo, g_snapWHi,
              g_snapDbg, g_snapCpu, g_snapSc0);
         ulogf(L"END   ---- end of log ----\n");   /* ASCII: см. log_write() */
+        /* v3n: ФИНАЛЬНЫЙ СБРОС. Без него обе строки END остаются в буфере.
+         *
+         * Как выяснилось 2026-09-29: log_flush_sector(TRUE) выше (строка
+         * перед блоком END) сбрасывает буфер с «STG reached done» и
+         * «STG post-FLR», и на этом запись на флешке заканчивается. Две
+         * строки END уходят в свежий, уже не сброшенный буфер, а дальше
+         * Print -> Stall -> return, и приложение возвращается в прошивку
+         * с ~230 байтами лога в ОЗУ.
+         *
+         * Наблюдалось ровно так, лог обрывался чистым переводом строки:
+         *     ... STG   reached 'done' label
+         *         STG   post-FLR: MMIO недоступен, ...
+         *         <дальше на флешке пусто, маркера END нет>
+         *
+         * Именно поэтому лог ВСЕГДА обрывался на границе сброса, и
+         * «лог оборвался» и «приложение не дописало» было неразличимо —
+         * оба варианта давали один и тот же вид. Маркер END появится только
+         * после этого фикса; до него во всех прогонах (sec1, okchk, stages,
+         * verify-fixes, after-fix) его не было, и это НЕ было признаком
+         * зависания. */
+        log_flush_sector(TRUE);
     }
 
     Print(L"\nКонец.\n");
@@ -8380,5 +8798,12 @@ done:
     Print(L"v3.01: возврат в прошивку без перезагрузки (анлок волатилен)\n");
     uefi_call_wrapper(BS->Stall, 1, 2000000);
 #endif
+    /* v3n: страховка. Всё, что напечатано после сброса выше, обязано
+     * попасть на флешку ДО возврата в прошивку: после return управление
+     * уходит BDS, и дописать уже нечем. Без этой строки любой вывод,
+     * добавленный после блока END, молча пропадал бы — именно так и
+     * пропадал маркер конца. С force=FALSE: если буфер пуст, ничего не
+     * пишется, и мы не оставляем лишний нулевой сектор на флешке. */
+    log_flush_sector(FALSE);
     return EFI_SUCCESS;
 }

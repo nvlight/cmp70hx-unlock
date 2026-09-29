@@ -176,11 +176,32 @@ Write-Host "=================== КОНЕЦ ЛОГА ===================" -Foregr
 
 Write-Host ""
 Write-Host "--- ключевые строки ---" -ForegroundColor Yellow
-$text -split "`n" | Where-Object { $_ -match '^(PRE|FWSEC|FIND|PICK|FBIOS|META|END|FBP|TIME|BOOTER|GEN2)\b' } |
+# Список префиксов. Раньше здесь стояло
+#   PRE|FWSEC|FIND|PICK|FBIOS|META|END|FBP|TIME|BOOTER|GEN2
+# и в сводку НЕ попадал весь фазовый блок: STG (анлок), FUSE (до/после
+# селекторов), OKCHK (проверки драйвера), IVER/DMA/BROM (загрузка образа),
+# PREFLR/FLRX (сброс). То есть ровно то, ради чего лог и снимается, в
+# сводке отсутствовало (заметил 2026-09-29 по логу от 0929-023826).
+# Порядок ниже — это порядок стадий прогона, а не алфавит.
+$keyPrefixes = 'FIND|PICK|BARSCN|VROM|PROBE|MC|TIME|MEM|BUF|META|GEOM|FBIOS|' +
+               'G2NVR|PRE|FBP|FWSEC|DMA2|IVER|DMA|BROM|WAIT|OKCHK|BOOTER|GEN2|' +
+               'STG|FUSE|PROBE|PREFLR|FLRX|END'
+$text -split "`n" | Where-Object { $_ -match "^($keyPrefixes)\b" } |
     ForEach-Object { "  " + $_.TrimEnd() }
 
 Write-Host ""
 Write-Host "--- что делать дальше ---" -ForegroundColor Yellow
+
+# v3n: адрес FRTS берём ИЗ САМОГО ЛОГА, а не из константы в скрипте.
+# Раньше здесь стоял литерал 0x1FFE00000 — это адрес СТАРОЙ формулы
+# (docs/70HX-PORT-STATUS.md §frtsOffset), и подсказка печатала неверное
+# число: прогон от 2026-09-29 отработал с frts=0x1F7E00000, а скрипт
+# писал «FB по 0x1FFE00000 недоступен». Литерал разъехался с профилем,
+# и это молчалo вводило в заблуждение. Теперь единственный источник
+# правды — заголовок прогона:
+#     CMPUNLOG v1 profile=... frts=0x<addr> wpr2=0x..\/0x..
+$frtsAddr = '?'
+if ($text -match 'frts=0x([0-9a-fA-F]+)') { $frtsAddr = '0x' + $Matches[1] }
 
 # ШАГ 1: вердикт пробы доступа к кадровому буферу — самое важное.
 if ($text -match 'FBP\s+VERDICT (.+)') {
@@ -194,7 +215,7 @@ if ($text -match 'FBP\s+VERDICT (.+)') {
     } elseif ($v -match 'frtsRead=nonzero') {
         Write-Host "    -> FB читается, но не пишется: смотреть FBP-F / FBP-G в логе."
     } else {
-        Write-Host "    -> FB по 0x1FFE00000 недоступен: работать с командой маппера"
+        Write-Host ("    -> FB по {0} недоступен: работать с командой маппера" -f $frtsAddr)
         Write-Host "       (gfwImageSize в readVbiosDesc) — см. docs/70HX-NEXT-STEPS.md §4a."
     }
 }

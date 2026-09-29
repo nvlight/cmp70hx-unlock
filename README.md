@@ -13,31 +13,37 @@ The unlock runs **before any OS boots**, so Windows simply starts with the card 
 > the framebuffer size. What is field-proven versus extrapolated is spelled out
 > in [KNOWN-ISSUES.md](KNOWN-ISSUES.md) §13–16.
 
-> 🚧 **CMP 70HX status as of 2026-09-29 — the unlock is NOT confirmed.**
-> FWSEC now loads, executes, latches `WPR2`, and the selector registers
-> accept their writes. **But the card does not unlock in Windows**: a
-> GPU-Z render test draws **75 W**, which is not an unlocked card.
+> ## 🚧 CMP 70HX status as of 2026-09-29 — UNLOCK CONFIRMED
+>
+> Measured with `llama-bench -m llama-2-7b.Q4_0.gguf -ngl 99 -p 512 -n 16`,
+> same model, same card, clean runs:
+>
+> | | pp512 | tg16 |
+> |---|---|---|
+> | without the unlock (plain Windows boot) | 201.85 t/s | 32.50 t/s |
+> | **with the unlock (EFI + USB stick)** | **2262.22 t/s** | **102.38 t/s** |
+> | gain | **x11.25** | **x3.16** |
+>
+> Compute is unlocked. The earlier 3D measurements (GPU-Z render test at
+> **75 W**, Cyberpunk at 9 FPS) are *not* affected by the unlock and were
+> never a valid success criterion: PGRAPH on CMP parts is gated by the
+> compute-only GSP-RM firmware, independently of the selectors
+> (bendy2's BAR0 analysis of five cards: PGRAPH top config is byte-identical
+> to an RTX 3090, so the silicon is there and simply is not initialised).
 >
 > ```
-> STG    selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 *** UNLOCKED ***
-> STG    is_unlocked()=1
+> STG    selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 written OK
+> END    ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF
 > ```
 >
-> `is_unlocked()=1` is **not** evidence: the function re-reads the two
-> registers it just wrote, and an FLR immediately afterwards leaves the
-> result unverifiable. Three one-line fixes were still needed to get this
-> far (KNOWN-ISSUES §36, §37, §42), all the same class of mistake —
-> reading register bits by variable name instead of by field definition.
+> Those two lines alone prove nothing — `is_selectors_written()` is a
+> tautology and the application prints ТАВТОЛОГИЯ itself. The proof is the
+> table above. What is still open (second card, graphics, the 2262-vs-3705
+> gap to the 90HX) is in
+> [docs/70HX-PORT-STATUS.md](docs/70HX-PORT-STATUS.md).
 >
-> The figures quoted below remain from the field-proven **90HX** build.
+> The figures quoted below are from the field-proven **90HX** build.
 > PCIe Gen2 is off by default ([PORT-STATUS §3a](docs/70HX-PORT-STATUS.md));
-> it does not affect the unlock itself.
->
-> Root-cause analysis, the VBIOS teardown, and the step history:
-> **[docs/70HX-FINAL-SUMMARY.md](docs/70HX-FINAL-SUMMARY.md)** (start here),
-> **[docs/70HX-PORT-STATUS.md](docs/70HX-PORT-STATUS.md)**,
-> **[docs/70HX-VBIOS-ANALYSIS.md](docs/70HX-VBIOS-ANALYSIS.md)**,
-> **[docs/70HX-NEXT-STEPS.md](docs/70HX-NEXT-STEPS.md)**.
 
 > ⚠️ **Honest expectations:** this is a mining card, and it is *not* a gaming
 > GPU replacement — no display outputs, PCIe Gen1 ×16 in the current release,
@@ -46,9 +52,27 @@ The unlock runs **before any OS boots**, so Windows simply starts with the card 
 
 ## What are the CMP 70HX / 90HX?
 
-Both are GA10x dies sold by NVIDIA as **"mining-only" cards**. NVIDIA crippled them in firmware: CUDA compute and graphics features are disabled, and the card runs at a fraction of its real performance. The typical locked card delivers ~230 t/s on llama-bench; an unlocked 90HX delivers **~3700 t/s** (16× more).
+Both are GA10x dies sold by NVIDIA as **"mining-only" cards**. NVIDIA crippled them in firmware: performance is a fraction of what the die can do. The typical locked card delivers ~230 t/s on llama-bench; an unlocked 90HX delivers **~3700 t/s** (16× more).
 
-This project re-enables the full die using an EFI application that runs from the bootable USB, before the OS loads. **It is open source** — see [`src/`](src/) and [BUILDING.md](BUILDING.md).
+This project re-enables the die's **compute** performance using an EFI application that runs from the bootable USB, before the OS loads. **It is open source** — see [`src/`](src/) and [BUILDING.md](BUILDING.md).
+
+**What is actually unlocked on the 70HX** ([PORT-STATUS §1k](docs/70HX-PORT-STATUS.md)):
+
+| | state |
+|---|---|
+| compute | **unlocked**, ×11.25 on `pp512` |
+| lock mechanism | **issue-rate cap of 1/32** on FP32 and DP4A, fully lifted |
+| peripheral issue rate | **91–99.8 % of architectural peak**, no residual limits |
+| clock | 1545 MHz under load, no throttling, not the limiting factor |
+| cores | 3840 CUDA cores of 6144; the A/B is **done — the unlock does not change it** |
+| graphics | **not unlocked**: 75 W, 9 FPS. Blocked by firmware, independently of the selectors |
+
+The A/B is the key result: a locked card delivers exactly **1/32** of peak
+on FP32 and DP4A (3.99 of 128, 2.00 of 64), while FP16, BF16 and INT32 are
+never limited at all. So the lock is an issue-rate cap, not disabled cores,
+and this unlock removes it completely.
+
+That is the "compute limitations only" class, the same one bendy2 targets. For comparison, an unlocked **CMP 50HX** (GA107) on dartraiden's patched drivers also loses the graphics lock: 230 W under load, 3D playable, LLMs fast. So 50HX is ahead on graphics, and closing that on 70HX looks like separate work.
 
 ## How the unlock works
 
@@ -145,7 +169,10 @@ PCI ID, FB size, FRTS offset and WPR2 pair — if that line does not say
 `CMP 70HX (GA104) 10de:248A`, the wrong build is on the stick.
 
 See **[BUILDING.md](BUILDING.md)** for prerequisites, blob provenance, the
-objcopy section-list trap, and the USB-image recipe. Known limitations and
+objcopy section-list trap, and the USB-image recipe. **[BUILDING.md §6](BUILDING.md)**
+is normative for the build→flash→pull-log loop: after any source change the
+stick is rewritten and verified, and after every boot the log is pulled and
+read — both without asking. Known limitations and
 unsolved problems live in **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)**.
 
 ## Repository layout

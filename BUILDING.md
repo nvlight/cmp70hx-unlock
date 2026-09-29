@@ -151,3 +151,96 @@ The same check in one line, for either target:
 python3 -c "import sys;d=open('unlock_v3n.efi','rb').read();\
 print('card profile embedded:', 'CMP 70HX (GA104)' if 'CMP 70HX (GA104)'.encode('utf-16-le') in d else ('CMP 90HX (GA102)' if 'CMP 90HX (GA102)'.encode('utf-16-le') in d else 'MISSING -> .rodata was dropped'))"
 ```
+
+## 6. Standing obligations after every build and every boot
+
+**This section is normative. Whoever drives the build-and-test loop — a human
+or an AI agent — follows it without asking for permission each time.** These
+steps are the difference between a verified change and a change that is merely
+compiled. Skipping them makes logs lie: you end up reading a log written by
+the *previous* build and drawing conclusions from it.
+
+### 6.1 After any change to `src/unlock_v2.c` → flash the stick, unasked
+
+Once a build of `unlock_v3n.efi` exists, the following **must** happen
+immediately, **without asking the user first**:
+
+```powershell
+cd <корень проекта>
+
+# a) обновить эталон в out/ (build.sh этого не делает)
+Copy-Item src\unlock_v3n.efi out\unlock_v3n_CMP70HX.efi -Force
+
+# b) убедиться, что GSP на флешке не тронут
+Get-FileHash out\gsp_ga10x.bin -Algorithm MD5   # EB9BEB5D062CCBF3295391C926A2D7AD
+Get-FileHash X:\gsp_ga10x.bin -Algorithm MD5   # должен совпасть
+
+# c) записать загрузчик. ПОРЯДОК НЕ МЕНЯТЬ: старый файл сносят целиком,
+#    иначе ребут хоста посреди cp = битый FAT (docs/GOTCHAS.md)
+Remove-Item X:\EFI\BOOT\BOOTX64.EFI -Force
+Copy-Item  out\unlock_v3n_CMP70HX.efi X:\EFI\BOOT\BOOTX64.EFI -Force
+
+# d) обязательная проверка СОДЕРЖИМОГО, а не только файла-эталона
+Get-FileHash X:\EFI\BOOT\BOOTX64.EFI -Algorithm MD5   # == md5 out\...
+```
+
+Then verify the **strings inside the file on the stick** — profile marker,
+probe markers, and any marker that proves *this specific* fix landed:
+
+```powershell
+python -c "
+d=open(r'X:\EFI\BOOT\BOOTX64.EFI','rb').read()
+print('size', len(d), 'PE', d[:2])
+for t,n in [('profile70','CMP 70HX (GA104)'),('profile90','CMP 90HX (GA102)'),
+            ('probeA','FBP-A  sysmem->dmem ok'),('probeG','FBP-G  readback'),
+            ('verdict','FBP    VERDICT'),('loghdr','CMPUNLOG v1 ')]:
+    print(f'  {t:10s}', 'PRESENT' if (n.encode('utf-16-le') in d or n.encode() in d) else 'MISSING')
+"
+```
+
+Expected: `profile70 PRESENT`, `profile90 MISSING`, all probe markers
+`PRESENT`, `PE b'MZ'`. Add a marker per fix when a change is log-visible (e.g.
+after the `%llu` fix, `bootCount=0x%llx` must be `PRESENT` and `bootCount=%llu`
+`MISSING`). **A build that compiles but is not on the stick is not tested.**
+
+Finally, report both md5s and state plainly that a reboot is needed. Do not
+imply the change is verified — it is not, until a log comes back from the new
+binary.
+
+### 6.2 After every boot from the stick → pull and read the log, unasked
+
+After the user reboots and runs the unlock from the stick, the log is pulled
+**by whoever drives the loop**, again without being asked:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File out\pull-log.ps1 -Tag <метка>
+```
+
+Give every run an explicit `-Tag` so logs do not overwrite each other, then
+actually read it and check, in this order:
+
+1. **Is the run complete?** Is there `END   ---- end of log ----`? If the
+   reader stopped with `сектор N не записан` and there is no marker, the run
+   was cut short — the tail was never written, and nothing about the stages
+   after the cut may be concluded.
+2. **Which build wrote this?** The header carries `profile=`, `frts=`,
+   `wpr2=`. Compare against the `TARGET PROFILE` in the source. If they
+   disagree, the log is from a different build than you think.
+3. **Did the intended change show up?** Look for the specific marker.
+4. **Is the verdict data-backed?** See `docs/LOGGING.md` §8 — several log
+   lines that read as success are tautologies.
+
+### 6.3 What must NOT be done automatically
+
+These require the human, and no agent should attempt them:
+
+* **rebooting** the machine, **pressing F12**, or **power-cycling** the
+  workstation — the reboot and the boot-menu selection are the user's;
+* **interrupting a run** mid-flight. The log is written as it goes and the
+  final partial sector is never flushed, so cutting power loses the tail;
+* touching `X:\gsp_ga10x.bin` or any other file on the stick;
+* writing the USB image (`dd`/Etcher) or repartitioning — that is a separate,
+  destructive operation the user must trigger deliberately.
+
+So the split is: **build, flash, verify, pull, read, analyse — automatic.
+Reboot and press F12 — the user's.** Announce the md5s, then stop and wait.
