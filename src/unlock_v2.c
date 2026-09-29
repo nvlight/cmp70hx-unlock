@@ -195,6 +195,8 @@ static void cmp90_free(VOID *p);
  * состояние (см. §1n: A/B нельзя получить двумя перезагрузками, потому
  * что без флешки наше приложение не запускается и лог не пишется). */
 static void sec2_window_dump(const CHAR16 *tag);
+/* v3n: дамп Gen2-регистров и масок, строго на чтение (§1o). */
+static void gen2_readonly_dump(const CHAR16 *tag);
 static void fwsec_set_imem_sec(UINTN sec);
 static UINT32 crc32_upd(UINT32 crc, const UINT8 *p, UINTN n);
 static void log_buf_check(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
@@ -1642,6 +1644,10 @@ mc_probe_all(void)
              * просто повторяет первый (проверено 2026-09-29 — логи
              * различались только в 10 строках TIME t=). */
             if (i == 0) sec2_window_dump(L"POST-заблокировано");
+            /* v3n: те же «до любых записей» основания, что и у SEC2W: карта
+             * ещё в POST, то есть заблокирована. Даёт вторую половину A/B по
+             * маскам Gen2 и регистрам скорости. */
+            if (i == 0) gen2_readonly_dump(L"POST-заблокировано");
         } else {
             Print(L"[probe]   BAR0 = 0 — MMIO недоступна, это НЕ рабочая карта\n");
             ulogf(L"PROBE   bar0=0 -> MMIO unavailable, NOT a working card\n");
@@ -2796,6 +2802,260 @@ sec2_window_dump(const CHAR16 *tag)
               (INTN)mmio_read32(GSP_DMATRFCMD),
               (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo);
     }
+}
+
+/* v3n: ДИАГНОСТИКА PCIe Gen2 — ТОЛЬКО ЧТЕНИЕ (2026-09-29).
+ *
+ * Зачем. Вопрос «включать ли свип масок ради Gen2» стоит так: phase2
+ * (рецепт xrip) пишет в 0x8841c / 0x8c040 / 0x880a8 / 0x8e1xx, а свип
+ * открывает маски записью 0xFFFFFFFF в 36 адресов, включая 0x8e1b0..0x8e1f0
+ * и 0x823b04. Зависимость этих записей от масок в коде НЕ документирована,
+ * и проверять её записью вслепую дорого: свип занимает минуты и в fire-режиме
+ * выкидывает анлок и фикс Code 43 (см. 8422 и 8361).
+ *
+ * Поэтому сначала читаем. Если нужные маски уже открыты в обычном пути,
+ * phase2 можно включать самостоятельно, без свипа. Если нет — видно, какие
+ * именно и можно открыть точечно.
+ *
+ * ВАЖНО: функция ничего не пишет. Ни одного mmio_write32 и ни одной записи
+ * в конфиг PCIe. Это обязательное условие — такой дамп не может вызвать ни
+ * Code 43, ни потерю анлока.
+ *
+ * Что печатает:
+ *   GEN2M  — по 4 адреса маски в строку, с пометкой MATCH;
+ *   GEN2S  — ИТОГ: сколько масок уже на цели (это и есть ответ на вопрос);
+ *   GEN2R  — регистры конфигурации скорости и PLM/SS, которые читает phase2;
+ *   GEN2C  — PCI-конфиг обоих концов линка: LNKCTL2 (cap+0x30) и LNKSTA
+ *            (cap+0x10), плюс фактическая скорость и ширина. */
+static const struct { UINT32 addr; const CHAR16 *name; } g_gen2regs[] = {
+    { 0x00088084U, L"LINK_CAP"     },
+    { 0x00088088U, L"LNKSTA-внутр"  },
+    { 0x000880a8U, L"LNKCTL2-внутр" },
+    { 0x0008c040U, L"LINK_CONFIG_0"},
+    { 0x0008841cU, L"PRIV_MISC_1"   },
+    { 0x0008c2c0U, L"CYA_0"        },
+    { 0x0008e110U, L"XP3G_OVR0"    },
+    { 0x0008e11cU, L"XP3G_OVR3"    },
+    { 0x0008e120U, L"XP3G_VAL0"    },
+    { 0x0008e12cU, L"XP3G_VAL3"    },
+    { 0x00823b04U, L"PLM-графики"  },
+    { 0x00823804U, L"PLM-основной" },
+    { 0x0082381cU, L"SS0"          },
+    { 0x00823820U, L"SS1"          },
+    { 0x00823830U, L"GFX_SPEED_SEL"},
+};
+#define GEN2REGS_N ((INTN)(sizeof(g_gen2regs)/sizeof(g_gen2regs[0])))
+
+static void
+gen2_readonly_dump(const CHAR16 *tag)
+{
+    INTN k;
+
+#ifdef PCIE_GEN2_REJOIN
+    {
+        INTN i, ok = 0, first = -1, nbad = 0;
+        for (i = 0; i < RJ16_N; i++) {
+            UINT32 cur = mmio_read32(g_rj16[i].addr);
+            if (cur == g_rj16[i].val) ok++;
+            else {
+                if (first < 0) first = i;
+                nbad++;
+            }
+        }
+        /* Компактно, по 4 слова на строку. Индексы обязательно зажимаются:
+         * RJ16_N = 38, а i идёт с шагом 4, так что на последней итерации
+         * i+1 в границах, а i+2 и i+3 — уже за массивом. Без зажима это
+         * чтение за пределами таблицы (GCC на это ругается правильно). */
+        for (i = 0; i < RJ16_N; i += 4) {
+            INTN i1 = (i + 1 < RJ16_N) ? i + 1 : i;
+            INTN i2 = (i + 2 < RJ16_N) ? i + 2 : i;
+            INTN i3 = (i + 3 < RJ16_N) ? i + 3 : i;
+            UINT32 v0 = mmio_read32(g_rj16[i].addr);
+            UINT32 v1 = mmio_read32(g_rj16[i1].addr);
+            UINT32 v2 = mmio_read32(g_rj16[i2].addr);
+            UINT32 v3 = mmio_read32(g_rj16[i3].addr);
+            ulogf(L"GEN2M  %s [%2d..%2d] 0x%08x=0x%08x%s 0x%08x=0x%08x%s "
+                  L"0x%08x=0x%08x%s 0x%08x=0x%08x%s\n",
+                  tag, (INTN)i, (INTN)(i + 3),
+                  g_rj16[i].addr, v0, (v0 == g_rj16[i].val) ? L"*" : L"!",
+                  g_rj16[i1].addr, v1, (v1 == g_rj16[i1].val) ? L"*" : L"!",
+                  g_rj16[i2].addr, v2, (v2 == g_rj16[i2].val) ? L"*" : L"!",
+                  g_rj16[i3].addr, v3, (v3 == g_rj16[i3].val) ? L"*" : L"!");
+        }
+        ulogf(L"GEN2S  %s маски на цели %d из %d, не на цели %d, первый %d\n",
+              tag, (INTN)ok, (INTN)RJ16_N, (INTN)nbad, (INTN)first);
+    }
+#endif /* PCIE_GEN2_REJOIN */
+
+    for (k = 0; k < GEN2REGS_N; k++)
+        ulogf(L"GEN2R  %s %-14s 0x%08x = 0x%08x\n",
+              tag, g_gen2regs[k].name, g_gen2regs[k].addr,
+              mmio_read32(g_gen2regs[k].addr));
+
+    /* PCI-конфиг обоих концов: тут пишет phase3, поэтому его состояние —
+     * главный вопрос для Gen2. Только чтение. */
+    {
+        UINTN gc = find_pcie_cap(gBus, gDev, gFn);
+        if (gc) {
+            UINT32 lk = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
+            UINT32 lc2 = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
+            ulogf(L"GEN2C  %s GPU   cap@0x%02lx LNKCTL2=0x%04x TLS=%u "
+                  L"LNKCTL=0x%04x speed=%u width=%u\n",
+                  tag, (INTN)gc, (INTN)(lc2 & 0xFFFF), (INTN)(lc2 & 0xFu),
+                  (INTN)(lk & 0xFFFF), (INTN)((lk >> 16) & 0xFu),
+                  (INTN)((lk >> 20) & 0xFu));
+        } else {
+            ulogf(L"GEN2C  %s GPU   pcie_cap не найден\n", tag);
+        }
+    }
+    {
+        UINTN bb = 0, bd = 0, bf = 0;
+        if (find_bridge_to(gBus, &bb, &bd, &bf)) {
+            UINTN bc = find_pcie_cap(bb, bd, bf);
+            if (bc) {
+                UINT32 lk = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+                UINT32 lc2 = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
+                ulogf(L"GEN2C  %s BRIDGE cap@0x%02lx LNKCTL2=0x%04x TLS=%u "
+                      L"LNKCTL=0x%04x speed=%u width=%u\n",
+                      tag, (INTN)bc, (INTN)(lc2 & 0xFFFF), (INTN)(lc2 & 0xFu),
+                      (INTN)(lk & 0xFFFF), (INTN)((lk >> 16) & 0xFu),
+                      (INTN)((lk >> 20) & 0xFu));
+            } else {
+                ulogf(L"GEN2C  %s BRIDGE pcie_cap не найден\n", tag);
+            }
+        } else {
+            ulogf(L"GEN2C  %s BRIDGE не найден\n", tag);
+        }
+    }
+}
+
+/* v3n: УЗКАЯ ПОПЫТКА Gen2 — ТРИ ЗАПИСИ, ОТВЕЧАЮЩИЕ ЗА СКОРОСТЬ (2026-09-29).
+ *
+ * Зачем так узко. Замер `GEN2S` показал: анлок открывает ровно ОДНУ маску
+ * из 37 (0x823804 = PLM), остальные 36 не меняются, и НИ ОДИН из девяти
+ * адресов phase2 не входит в таблицу масок. То есть свип масок (минуты
+ * работы, fire-режим, выкидывает анлок и фикс Code 43) для Gen2 не нужен.
+ *
+ * И отдельно найдено: LINK_CAP = 0x00453D02 (собственно анонс Gen2)
+ * прописан в ТАБЛИЦЕ масок, а не в phase2 — там только восемь других
+ * регистров. Phase3 на это закладывается («наш LINK_CAP уже анонсирует
+ * Gen2»), значит без явной записи анонса остальные записи бессмысленны.
+ *
+ * Поэтому здесь ровно три адреса, которые реально задают скорость:
+ *   0x0008C040  LINK_CONFIG_0  MAX_RATE (биты 18:16) -> 2
+ *   0x000880A8  LNKCTL2        TLS (младший ниббл)     -> 2
+ *   0x00088084  LINK_CAP       speed (биты 1:0)       -> 2
+ * Плюс явная запись LINK_CAP, которой в phase2 нет.
+ *
+ * Чего здесь НЕТ сознательно:
+ *   - свипа масок (не нужен, см. выше);
+ *   - phase3 с ретрейном бриджа: он ищет capability через дефолтный gRb,
+ *     тогда как сам бридж найден через gRbAll[gBrIdx] — разные root bridge,
+ *     и bc может выйти 0 (это видно в логе как «GEN2C BRIDGE pcie_cap не
+ *     найден»). Чинить это — отдельная работа, а для первого замера хватит
+ *     того, что делает сам драйвер Windows при инициализации.
+ *   - GFX_SPEED_SELECT: это графика, и он всё равно не встанет, пока
+ *     0x823B04 = 0xFFFFFF8F.
+ *
+ * Каждая запись идёт с readback в лог: видно и что записали, и что
+ * встало. Если регистр замаскирован и запись не липнет — это будет
+ * видно сразу, а не через симптомы в Windows.
+ *
+ * РИСК, КОТОРЫЙ НАДО ПОМНИТЬ: эти три регистра управляют ЖИВЫМ линком, а
+ * консоль идёт через эту же карту. В коде уже есть запись об этом
+ * (старый LTSSM-kick «бьёт по линку в момент, когда консоль идёт через эту
+ * же карту — экран замерзает»). Возможен висяк экрана во время прогона.
+ * Восстановление — перезагрузка БЕЗ флешки и возврат unlock_v3n.efi. */
+static void
+gen2_link_try(const CHAR16 *tag)
+{
+    UINT32 v, want, got;
+
+    /* 1) LINK_CONFIG_0: MAX_RATE = 2 (5 GT/s). Биты 18:16. */
+    v    = mmio_read32(0x0008C040U);
+    want = (v & ~0x000C0000U) | (2u << 18);
+    mmio_write32(0x0008C040U, want);
+    got = mmio_read32(0x0008C040U);
+    ulogf(L"G2TRY  %s LINK_CONFIG_0 0x0008C040: 0x%08x -> хотел 0x%08x, "
+          L"стало 0x%08x %s\n",
+          tag, v, want, got, (got == want) ? L"OK" : L"*** НЕ ВСТАЛО ***");
+
+    /* 2) LNKCTL2: target link speed = 2. Младший ниббл.
+     *
+     * v3n: ПРОПУСКАЕМ. Замер 2026-09-29 показал: запрошено 0x00200002,
+     * читается 0x00000001 — не липнул не только целевой бит скорости, но и
+     * 0x00200000, который был до записи. То есть это не «запись не
+     * применилась», а частичная порча регистра. Плюс смысла ноль: без
+     * записи LINK_CAP (кремниевый анонс, §1o) линк всё равно остаётся на
+     * Gen1, сколько тут ни выставляй.
+     *
+     * Оставляем только чтение, чтобы видеть исходное значение и не портить
+     * регистр. Если когда-нибудь понадобится, писать сюда надо с
+     * обязательным восстановлением исходного значения. */
+    v    = mmio_read32(0x000880A8U);
+    ulogf(L"G2TRY  %s LNKCTL2 0x000880A8: 0x%08x — запись ПРОПУЩЕНА "
+          L"(прошлый прогон терял бит 0x00200000; §1o)\n", tag, v);
+    got = v;
+
+    /* 3) LINK_CAP: анонс Gen2. Биты 1:0: 1=Gen1, 2=Gen2.
+     *
+     * Плюс ТЕСТ НА READ-ONLY, которого не хватало в прошлом прогоне. Там было
+     * непонятно, что именно не сработало: «поле анонса игнорируется» и «весь
+     * регистр RO» — разные утверждения с разными последствиями. Поэтому
+     * после основной записи пробуем инвертировать один бит ВНЕ speed field
+     * (бит 8) и смотрим, липнет ли он. Если не липнет — регистр RO целиком и
+     * вопрос закрыт окончательно.
+     *
+     * Запись безопасна: бит 8 в 0x00453D01 равен нулю, то есть мы его
+     * УСТАНАВЛИВАЕМ в 1, а не сбрасываем. Даже если регистр окажется RW и
+     * примет запись, состояние останется корректным (тот же смысл, что у
+     * 0x00453D01), и мы вернём его назад сразу. */
+    v    = mmio_read32(0x00088084U);
+    want = (v & ~0x3U) | 0x2U;
+    mmio_write32(0x00088084U, want);
+    got = mmio_read32(0x00088084U);
+    ulogf(L"G2TRY  %s LINK_CAP 0x00088084: 0x%08x -> хотел 0x%08x, "
+          L"стало 0x%08x %s\n",
+          tag, v, want, got, (got == want) ? L"OK" : L"*** НЕ ВСТАЛО ***");
+
+    {
+        UINT32 probe, probeBack;
+        probe = mmio_read32(0x00088084U);
+        want  = probe | (1u << 8);            /* ставим бит 8 (был 0) */
+        mmio_write32(0x00088084U, want);
+        probeBack = mmio_read32(0x00088084U);
+        /* немедленно возвращаем как было */
+        mmio_write32(0x00088084U, probe);
+        got = mmio_read32(0x00088084U);
+        ulogf(L"G2TRY  %s LINK_CAP RO-тест бита 8: хотел 0x%08x, стало 0x%08x "
+              L"%s; вернули 0x%08x %s\n",
+              tag, want, probeBack,
+              (probeBack == want) ? L"ЗАПИСАЛСЯ (регистр RW)"
+                                 : L"НЕ ЗАПИСАЛСЯ (регистр RO)",
+              got, (got == probe) ? L"OK" : L"*** ВОССТАНОВЛЕНИЕ НЕ УДАЛОСЬ ***");
+    }
+
+    /* Сводка: сколько из трёх записалось. Одна строка вместо разбора трёх. */
+    {
+        INTN ok = 0;
+        if (mmio_read32(0x0008C040U) == ((mmio_read32(0x0008C040U) & ~0x000C0000U) | (2u << 18))) ok++;
+        if ((mmio_read32(0x000880A8U) & 0xFu) == 2u) ok++;
+        if ((mmio_read32(0x00088084U) & 0x3U) == 0x2U) ok++;
+        ulogf(L"G2SUM  %s записалось %d из 3 (LNKCTL2 не пишем); "
+              L"LNKSTA-внутр=0x%08x speed=%u\n",
+              tag, (INTN)ok, mmio_read32(0x00088088U),
+              (INTN)((mmio_read32(0x00088088U) >> 16) & 0xFu));
+    }
+
+    /* Дать время линку перейти. Драйвер Windows всё равно тренирует его
+     * при инициализации, но полсекунды здесь покажут, умер ли консольный
+     * тракт сразу. */
+    uefi_call_wrapper(BS->Stall, 1, 500000);
+    ulogf(L"G2SUM  %s после паузы 500мс: LINK_CAP=0x%08x LNKCTL2=0x%08x "
+          L"LNKSTA-внутр=0x%08x speed=%u\n",
+          tag, mmio_read32(0x00088084U), mmio_read32(0x000880A8U),
+          mmio_read32(0x00088088U),
+          (INTN)((mmio_read32(0x00088088U) >> 16) & 0xFu));
 }
 
 static BOOLEAN
@@ -8636,6 +8896,17 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         }
         dump_regs(L"[unlock]");
         snapshot_state();   /* до FLR — потом MMIO уже мёртв */
+        /* v3n: вторая половина A/B по Gen2. Ставим ЗДЕСЬ — после селекторов,
+         * но до глушения SEC2 и до FLR, потому что после FLR функция мертва
+         * и MMIO не читается (см. комментарий выше про «v2.88: БЕЗ FLR»).
+         * Только чтение: ни одной записи, ни в GPU, ни в конфиг PCIe. */
+        gen2_readonly_dump(L"после-анлока");
+#ifdef GEN2_LINK_TRY
+        /* v3n: попытка Gen2. Ставим ЗДЕСЬ — после снимка состояния, до
+         * do_flr() на строке ниже, потому что после FLR функция мертва и
+         * readback невозможен. Свип масок и phase3 сознательно не трогаем. */
+        gen2_link_try(L"попытка-Gen2");
+#endif
 
         /* v2.88: БЕЗ FLR! На реальном железе (X570 F37d) FLR обнуляет BARs/
          * command → функция «умирает» → виснет обход устройств/консоль.

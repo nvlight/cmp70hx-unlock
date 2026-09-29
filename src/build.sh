@@ -147,6 +147,14 @@ build_one unlock_v3f          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN
 build_one unlock_v3n          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2
 
+# v3.04: unlock_v3n + ТРИ записи Gen2 (LINK_CONFIG_0 / LNKCTL2 / LINK_CAP).
+# Свип масок и phase3 НЕ включаются: замер GEN2S показал, что анлок открывает
+# 1 маску из 37 и ни один адрес phase2 с таблицей не пересекается, так что
+# свип для Gen2 не нужен, а в fire-режиме он выкидывает анлок и фикс Code 43.
+# ОТКАТ: прошить unlock_v3n.efi (git-тег gen2-baseline-2026-09-29).
+build_one unlock_v3g          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY
+
 echo
 echo "Deploy to USB (FAT32, EFI/BOOT/BOOTX64.EFI) + gsp_ga10x.bin from the"
 echo "NVIDIA 610.43.03 package next to it. For real hardware use"
