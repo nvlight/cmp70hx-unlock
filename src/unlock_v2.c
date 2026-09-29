@@ -2738,11 +2738,36 @@ static void
 wpr2_probe(const CHAR16 *tag)
 {
     /* проверку g_logOn делает сам ulogf */
+#ifdef RENDER_MASKS
+    /* v3.12: ПРОБЕЛ БУДИЛЬНИКА. Функция зовётся 7 раз из early_unlock_path,
+     * а тот после снятия гарда ботер#1 зовётся на каждой из 17 масок.
+     * Итого 119 строк PROBE, а лог у нас кольцевой: при LOG_SECTORS ~1024
+     * 398 615 байт почти полностью съедали начало прогона, и мы видели
+     * только хвост. Полные первые 4 вызова, дальше — каждая 8-я, а итог
+     * печатает render_open_gfx_masks. Значения не теряются, место
+     * освобождается.
+     *
+     * Под #ifdef RENDER_MASKS НЕ случайно. Без ограждения эта правка попала
+     * бы в v3n, и откат перестал бы быть тем бинарём, который дал x11.25.
+     * Проверено на себе: снятие ограждения меняло md5 v3n с 1863C4B1 на
+     * C676BFB3 ПРИ ТОМ ЖЕ размере 648192 — ловушка молчаливая, размер
+     * здесь не показатель. Откат обязан собираться байт-в-байт. */
+    static INTN nSeen = 0;
+    nSeen++;
+    if (nSeen > 4 && (nSeen % 8) != 0)
+        return;
+    ulogf(L"PROBE  %s[%d] WPR2=0x%08x/0x%08x GFWok=0x%08x b100=0x%08x "
+          L"cpuctl=0x%08x\n",
+          tag, (INTN)nSeen, mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
+          mmio_read32(REG_GFW_BOOT_OK), mmio_read32(0x0000B100U),
+          mmio_read32(GSP_CPUCTL));
+#else
     ulogf(L"PROBE  %s WPR2=0x%08x/0x%08x GFWok=0x%08x b100=0x%08x "
           L"cpuctl=0x%08x\n",
           tag, mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
           mmio_read32(REG_GFW_BOOT_OK), mmio_read32(0x0000B100U),
           mmio_read32(GSP_CPUCTL));
+#endif /* RENDER_MASKS */
 }
 
 /* v3n: ДАМП ОКНА SEC2 ВОКРУГ 0x840310 (2026-09-29).
@@ -3051,21 +3076,58 @@ gen2_gfx_try(const CHAR16 *tag)
               tag, v, okB ? L"ВСТАЛ" : L"НЕ ВСТАЛ");
     }
 
-    /* ---- СОСТОЯНИЕ ПОСЛЕ --------------------------------------------- */
-    uefi_call_wrapper(BS->Stall, 1, 200000);
-    feat1 = mmio_read32(0x00823814U);
-    v     = mmio_read32(0x00823830U);
-    ulogf(L"G2GFX  %s ПОСЛЕ: GFX_SPEED_SELECT=0x%08x  0x823800=0x%08x  "
-          L"0x823B04=0x%08x\n", tag, v, mmio_read32(0x00823800U),
-          mmio_read32(0x00823B04U));
-    ulogf(L"G2GFX  %s ПОСЛЕ: FEAT_READOUT_0=0x%08x  bit8 PGRAPH=%u  "
-          L"%s\n", tag, feat1, (INTN)((feat1 >> 8) & 1u),
-          (feat1 == feat0) ? L"(не изменился)" : L"*** ИЗМЕНИЛСЯ ***");
+    /* ---- СКАН БИНОВ 0x0..0x7 ------------------------------------------
+     *
+     * Зачем. Референс говорит, что 0x4 — «следующий gfx-бин» и главный
+     * рычаг рендера, но НИГДЕ не говорит, что 4 — максимум. Мы пробовали
+     * только сток 0x3 и рабочее 0x4. Если бины выше 4 включают ещё и
+     * движок GFXP (graphics pool), это поднимет рендер.
+     *
+     * Зачем это правдоподобно. Сопоставление с рабочей 50HX (GPU-Z):
+     *              70HX (наша)   50HX
+     *     SM         30 из 48     28 из 48
+     *     TMU           120         224
+     *     Boost        1395 MHz     1545 MHz
+     *     в игре    50 fps/135 Вт  80 fps/230 Вт
+     * Compute сопоставим (отсюда тот же LLM), а текстурных блоков 120/224
+     * = 54 %, и 135 Вт из 220 = 61 % при 30/48 SM = 62.5 %. То есть
+     * графика ВКЛЮЧЕНА, её просто меньше. Отсюда гипотеза: не хватает
+     * ещё одного бина.
+     *
+     * Метод. Пишем 0..7 по одному, после каждой записи читаем обратно.
+     * Если значение отвергнуто, readback покажет предыдущий — это и есть
+     * признак «не принято». Плюс читаем FEAT_READOUT_0 и SS0/SS1, чтобы
+     * поймать реакцию. В конце ВОЗВРАЩАЕМ 0x4 — единственное
+     * подтверждённо рабочее значение, оставлять карту в неизвестном бине
+     * нельзя.
+     *
+     * Безопасно: только запись в селектор и чтения, тот же путь, что уже
+     * отработал. Кика, TLS, ретрейна, NVRAM нет. Вызывается до
+     * финального do_flr(). */
+    ulogf(L"G2SCN  %s === СКАН БИНОВ GFX_SPEED_SELECT 0x0..0x7 ===\n", tag);
+    for (t = 0; t <= 7; t++) {
+        mmio_write32(0x00823830U, (UINT32)t);
+        uefi_call_wrapper(BS->Stall, 1, 100000);
+        v = mmio_read32(0x00823830U);
+        feat1 = mmio_read32(0x00823814U);
+        ulogf(L"G2SCN  %s бин 0x%X: readback 0x%08x %s | "
+              L"FEAT_READOUT_0=0x%08x bit8=%u | SS0=0x%08x SS1=0x%08x\n",
+              tag, (INTN)t, v,
+              (v == (UINT32)t) ? L"ПРИНЯТ" : L"ОТВЕРГНУТ",
+              feat1, (INTN)((feat1 >> 8) & 1u),
+              mmio_read32(REG_FEAT_OVR_SM_SPD),
+              mmio_read32(REG_FEAT_OVR_SM_SPD_1));
+    }
 
-    ulogf(L"G2SUM  %s GFX_SPEED_SELECT: порядок A %s, порядок B %s; "
-          L"итог 0x%08x. Ожидание GPU-Z: 167.4 -> >=185.4 GTexels/s "
-          L"если встало. маски/TLS/кик/ретрейн НЕ ТРОГАЛИ\n",
-          tag, okA ? L"ВСТАЛ" : L"нет", okB ? L"ВСТАЛ" : L"нет", v);
+    /* возврат к подтверждённо рабочему 0x4 */
+    mmio_write32(0x00823830U, 0x00000004U);
+    uefi_call_wrapper(BS->Stall, 1, 100000);
+    v     = mmio_read32(0x00823830U);
+    feat1 = mmio_read32(0x00823814U);
+    ulogf(L"G2SUM  %s СКАН ЗАВЕРШЁН, вернули 0x4: readback 0x%08x %s; "
+          L"FEAT_READOUT_0=0x%08x bit8=%u\n",
+          tag, v, (v == 0x00000004U) ? L"OK" : L"*** НЕ УДЕРЖАЛСЯ ***",
+          feat1, (INTN)((feat1 >> 8) & 1u));
 }
 #endif /* GEN2_LINK_TRY */
 
