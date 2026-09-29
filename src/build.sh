@@ -147,13 +147,22 @@ build_one unlock_v3f          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN
 build_one unlock_v3n          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2
 
-# v3.04: unlock_v3n + ТРИ записи Gen2 (LINK_CONFIG_0 / LNKCTL2 / LINK_CAP).
-# Свип масок и phase3 НЕ включаются: замер GEN2S показал, что анлок открывает
-# 1 маску из 37 и ни один адрес phase2 с таблицей не пересекается, так что
-# свип для Gen2 не нужен, а в fire-режиме он выкидывает анлок и фикс Code 43.
+# v3.07: unlock_v3n + запись GFX_SPEED_SELECT=4 (рендер-селектор) с проверкой
+# обоих порядков. Замер показал: запись не липнет, пока маски 0x823800/0x823B04
+# заперты; обе в таблице g_rj16 и с хоста не открываются.
 # ОТКАТ: прошить unlock_v3n.efi (git-тег gen2-baseline-2026-09-29).
 build_one unlock_v3g          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2 -DGEN2_LINK_TRY
+
+# v3.08: unlock_v3g + РЕНДЕР-МАСКИ. Открывает ровно две маски, запирающие
+# GFX_SPEED_SELECT (0x823800 и 0x823B04), через параметризованный V67-ROP
+# (адрес/значение берутся из v67Phys+0xf960/+0xf948, payload менять не нужно).
+# Не полный свип: максимум 6 FLR-минициклов против ~30, на которых референс
+# ловил зависание гостя. Селекторы и фикс Code 43 обычного хвоста не трогаем,
+# g_gen2Fire не выставляется.
+# ОТКАТ: прошить unlock_v3n.efi.
+build_one unlock_v3r          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS
 
 echo
 echo "Deploy to USB (FAT32, EFI/BOOT/BOOTX64.EFI) + gsp_ga10x.bin from the"

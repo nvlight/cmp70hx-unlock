@@ -3069,6 +3069,153 @@ gen2_gfx_try(const CHAR16 *tag)
 }
 #endif /* GEN2_LINK_TRY */
 
+/* v3.08: ОТКРЫТИЕ ДВУХ МАСОК, КОТОРЫЕ ЗАПИРАЮТ GFX_SPEED_SELECT (2026-09-30).
+ *
+ * ЗАМЕР v3.07 дал чистый отрицательный результат:
+ *   ДО    : GFX_SPEED_SELECT=0x00000003  0x823800=0xFFFFFF8F  0x823B04=0xFFFFFF8F
+ *           FEAT_READOUT_0=0x00000033  bit8 PGRAPH=0
+ *   пор. A (GFX после SS): 5 попыток, все readback 0x00000003   НЕ ВСТАЛ
+ *   пор. B (GFX перед SS): 5 попыток, все readback 0x00000003   НЕ ВСТАЛ
+ *   ПОСЛЕ : GFX_SPEED_SELECT=0x00000003, FEAT_READOUT_0 не изменился
+ *
+ * Оба порядка дали идентичный отказ, 10 записей, ноль эффекта — порядок не
+ * был помехой, отрицательный результат однозначен. Причина одна: обе маски-
+ * предусловия заперты. Референс: 0x823800 «без него GFX_SEL не пишется».
+ * Наш комментарий (стр. 8461): «липнет только при открытом PLM 0x823b04».
+ * Совпадает с 1r: с хоста не открывается ни одна из 36.
+ *
+ * ВАЖНОЕ УТОЧНЕНИЕ, КОТОРОЕ МЕНЯЕТ ПЛАН. V67-ROP ПАРАМЕТРИЗОВАН. В цикле
+ * таблицы адрес и значение не зашиты в payload, а берутся из его памяти:
+ *     pv = v67Phys + 0xf948  -> значение
+ *     pa = v67Phys + 0xf960  -> адрес
+ * То есть payload умеет писать ЛЮБОЙ регистр, и расширять его НЕ НУЖНО.
+ * Это снимает вопрос, стоявший после 1r («нужно ли добывать исходник V67») —
+ * исходник не нужен, обобщённый примитив уже есть.
+ *
+ * ПОЧЕМУ ТОЛЬКО ДВЕ ЗАПИСИ, А НЕ ВСЯ ТАБЛИЦА.
+ * 1) Это ровно те два адреса, без которых GFX_SPEED_SELECT не встаёт.
+ *    Остальные 34 к рендер-селектору отношения не имеют.
+ * 2) У референса наблюдался ОДИН зависший гость на ~30 минициклах подряд
+ *    (GOTCHAS.md). Вся таблица = 36 записей, это заведомо за его порогом.
+ *    Две записи на проход, до 3 проходов = максимум 6 минициклов, с запасом.
+ * 3) Быстро: два миницикла вместо 10.8 минут полного свипа.
+ *
+ * ПОРЯДОК. Ставим ДО блока селекторов: референс делает именно так
+ * (маски -> GFX_SEL -> SS0/SS1), и GFX_SEL липнет только при открытых
+ * масках. Заодно не трогаем ни g_gen2Fire (селекторы продолжат выполняться),
+ * ни фикс Code 43 в обычном хвосте — обе причины, по которым полный свип
+ * был уведён в fire-режим.
+ *
+ * БЕЗОПАСНОСТЬ. WPR2 сохраняется и восстанавливается вокруг каждого вызова
+ * booter (42.10: booter_load_v67() портит WPR2 настоящим образом, сдвиг
+ * -836 КБ, и восстановление может не удержаться — поэтому результат проверяем
+ * и пишем в лог). После FLR BAR0 и command восстанавливаем сами, как в
+ * боевом цикле таблицы. NVRAM не пишем.
+ */
+#ifdef RENDER_MASKS
+/* Определения этих трёх лежат НИЖЕ по файлу, а наша функция стоит выше,
+ * поэтому нужны forward-декларации — иначе implicit declaration и
+ * conflicting types. */
+static EFI_STATUS do_flr(void);
+static EFI_STATUS early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys,
+                                    UINT64 wprMetaPhys);
+static EFI_STATUS booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys);
+
+static void
+render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
+                      UINT64 fwsecPhys, UINT64 v67Phys)
+{
+    /* Ровно две маски-предусловия GFX_SPEED_SELECT. Обе в таблице g_rj16,
+     * обе по замеру 1r заперты (XOR=0x70 -> заперты биты 4,5,6). */
+    static const UINT32 tgt[2] = { 0x00823800U, 0x00823B04U };
+    volatile UINT32 *pv = (volatile UINT32 *)(UINTN)(v67Phys + 0xf948);
+    volatile UINT32 *pa = (volatile UINT32 *)(UINTN)(v67Phys + 0xf960);
+    BOOLEAN fwsecDone = FALSE;
+    INTN pass, k, tries, done;
+    UINT32 v, m, saveBar, wLo, wHi;
+
+    ulogf(L"G2RMK  %s === открытие масок GFX_SPEED_SELECT через ботер#2 ===\n",
+          tag);
+    ulogf(L"G2RMK  %s цели: 0x00823800 (PLM стр.0x8238xx), 0x00823B04 "
+          L"(маска рендера); до: 0x%08x / 0x%08x\n", tag,
+          mmio_read32(0x00823800U), mmio_read32(0x00823B04U));
+
+    for (pass = 0; pass < 3; pass++) {
+        done = 0;
+        for (k = 0; k < 2; k++) {
+            if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) { done++; continue; }
+
+            /* --- FLR-разделение, 1:1 как в боевом цикле таблицы --------- */
+            saveBar = cfg_read32(0x10) & ~0xF;
+            do_flr();
+            uefi_call_wrapper(BS->Stall, 1, 300000);
+            cfg_write32(0x10, saveBar);
+            enable_mem_decode();
+            gBar0Base = saveBar;
+
+            /* --- ботер#1: открыть PLM заново (он ПЕРЕЖИВАЕТ FLR) ---------
+             * FWSEC нужен, чтобы открыть secure-путь, а не чтобы повторять
+             * его на каждой записи: образ уже залит и лежит в IMEM. */
+            if (!fwsecDone) {
+                fwsecDone = TRUE;
+                CopyMem((VOID *)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
+                __asm__ volatile("wbinvd" ::: "memory");
+                early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
+                ulogf(L"G2RMK  %s ботер#1: PLM=0x%08x SS0=0x%08x\n", tag,
+                      mmio_read32(0x00823804U),
+                      mmio_read32(REG_FEAT_OVR_SM_SPD));
+            }
+
+            /* --- ботер#2: параметризованный ROP пишет наш адрес --------- */
+            wLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+            wHi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+            *pv = 0xFFFFFFFFU;      /* значение */
+            *pa = tgt[k];           /* адрес  */
+            __asm__ volatile("wbinvd" ::: "memory");
+            ulogf(L"G2RMK  %s п%d ботер#2: 0x%08x <- 0xffffffff "
+                  L"(сейчас 0x%08x)\n", tag, (INTN)pass + 1, tgt[k],
+                  mmio_read32(tgt[k]));
+            (VOID)booter_load_v67(wprMetaPhys, ucodePhys);
+            /* 42.10: ботер портит WPR2. Восстанавливаем и ПИШЕМ РЕЗУЛЬТАТ,
+             * потому что восстановление может не удержаться. */
+            mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
+            mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
+
+            /* запись асинхронная: у референса 147..1000 polls по 1 мс */
+            v = mmio_read32(tgt[k]);
+            for (tries = 0; v != 0xFFFFFFFFU && tries < 1000; tries++) {
+                uefi_call_wrapper(BS->Stall, 1, 1000);
+                v = mmio_read32(tgt[k]);
+            }
+            ulogf(L"G2RMK  %s п%d 0x%08x стало 0x%08x %s (polls=%d) "
+                  L"WPR2=0x%08x/0x%08x %s\n", tag, (INTN)pass + 1, tgt[k], v,
+                  (v == 0xFFFFFFFFU) ? L"ОТКРЫТА" : L"осталась запертой",
+                  (INTN)tries,
+                  mmio_read32(REG_PFB_MMU_WPR2_LO),
+                  mmio_read32(REG_PFB_MMU_WPR2_HI),
+                  (mmio_read32(REG_PFB_MMU_WPR2_LO) == wLo &&
+                   mmio_read32(REG_PFB_MMU_WPR2_HI) == wHi)
+                      ? L"WPR2 OK" : L"*** WPR2 НЕ УДЕРЖАЛСЯ ***");
+            if (v == 0xFFFFFFFFU) done++;
+        }
+        ulogf(L"G2RMK  %s проход %d: открыто %d из 2\n", tag,
+              (INTN)pass + 1, (INTN)done);
+        if (done == 2) break;
+        uefi_call_wrapper(BS->Stall, 1, 20000);
+    }
+
+    v = mmio_read32(0x00823800U);
+    m = mmio_read32(0x00823B04U);
+    ulogf(L"G2RMS  %s ИТОГ: 0x823800=0x%08x %s | 0x823B04=0x%08x %s | "
+          L"GFX-гейт %s\n", tag, v,
+          (v == 0xFFFFFFFFU) ? L"ОТКРЫТ" : L"ЗАПЕРТА", m,
+          (m == 0xFFFFFFFFU) ? L"ОТКРЫТ" : L"ЗАПЕРТА",
+          (v == 0xFFFFFFFFU && m == 0xFFFFFFFFU)
+             ? L"ОТКРЫТ, GFX_SPEED_SELECT может встать"
+             : L"закрыт, GFX_SPEED_SELECT не встанет");
+}
+#endif /* RENDER_MASKS */
+
 static BOOLEAN
 fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
 {
@@ -8686,6 +8833,22 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                   L"direct=%d early=%d) - falling through\n",
                   (INTN)have2, (INTN)Status, (INTN)directOk, (INTN)earlyOk);
         }
+    }
+#endif
+
+#ifdef RENDER_MASKS
+    /* Маски-предусловия GFX_SPEED_SELECT. Ставим ДО блока селекторов:
+     * референс делает именно так (маски -> GFX_SEL -> SS0/SS1), и GFX_SEL
+     * липнет только при открытых масках. Не трогаем g_gen2Fire, поэтому
+     * селекторы продолжат выполняться, и не трогаем обычный хвост с
+     * фиксом Code 43. Гоняем только если анлок сам прошёл. */
+    if (Status == EFI_SUCCESS || directOk || earlyOk) {
+        render_open_gfx_masks(L"рендер-маски",
+                              wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+    } else {
+        ulogf(L"G2RMS  маски рендера ПРОПУЩЕНЫ: анлок не прошёл "
+              L"(success=%d direct=%d early=%d)\n",
+              (INTN)Status, (INTN)directOk, (INTN)earlyOk);
     }
 #endif
 
