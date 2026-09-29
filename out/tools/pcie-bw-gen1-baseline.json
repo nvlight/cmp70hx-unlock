@@ -1,0 +1,141 @@
+{
+  "tag": "gen1-baseline",
+  "device": 0,
+  "name": "NVIDIA CMP 70HX",
+  "gen_max": "2",
+  "width_max": "16",
+  "best_gbps": 3.3432444041495852,
+  "verdict": "Gen1-class: the link is on Gen1 - our target",
+  "rows": [
+    {
+      "bytes": 4096,
+      "dir": "h2d",
+      "gbps": 0.7957207969917274,
+      "seconds": 0.02108429999998407,
+      "gib": 0.015625,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 4096,
+      "dir": "d2h",
+      "gbps": 0.9883718025674836,
+      "seconds": 0.016974600000139617,
+      "gib": 0.015625,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 65536,
+      "dir": "h2d",
+      "gbps": 2.755128295663232,
+      "seconds": 0.09743119999984629,
+      "gib": 0.25,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 65536,
+      "dir": "d2h",
+      "gbps": 2.8947102598667422,
+      "seconds": 0.09273310000025958,
+      "gib": 0.25,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 1048576,
+      "dir": "h2d",
+      "gbps": 3.2636757764562105,
+      "seconds": 1.315990800000236,
+      "gib": 4.0,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 1048576,
+      "dir": "d2h",
+      "gbps": 3.3110518247157694,
+      "seconds": 1.29716099999996,
+      "gib": 4.0,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 16777216,
+      "dir": "h2d",
+      "gbps": 3.2924927955569863,
+      "seconds": 1.304472799999985,
+      "gib": 4.0,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 16777216,
+      "dir": "d2h",
+      "gbps": 3.3351542580765456,
+      "seconds": 1.287786700000197,
+      "gib": 4.0,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 268435456,
+      "dir": "h2d",
+      "gbps": 3.3046360981267697,
+      "seconds": 5.198717400000078,
+      "gib": 16.0,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 268435456,
+      "dir": "d2h",
+      "gbps": 3.338728494843924,
+      "seconds": 5.145632300000216,
+      "gib": 16.0,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 428867584,
+      "dir": "h2d",
+      "gbps": 3.3059430878223752,
+      "seconds": 8.302479699999822,
+      "gib": 25.5625,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 428867584,
+      "dir": "d2h",
+      "gbps": 3.3432444041495852,
+      "seconds": 8.209847100000388,
+      "gib": 25.5625,
+      "gen_under_load": [
+        1
+      ]
+    },
+    {
+      "bytes": 428867584,
+      "dir": "d2h-sustained",
+      "gbps": 3.3431445694513835,
+      "seconds": 3.0787845999998353,
+      "gib": 9.5859375,
+      "gen_under_load": [
+        1
+      ]
+    }
+  ]
+}
