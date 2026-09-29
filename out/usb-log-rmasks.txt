@@ -1,0 +1,792 @@
+﻿Флешка: X:  метка 'CMP70UNLOCK'  PhysicalDrive1  14,41 ГБ  30218842 секторов
+
+Магия найдена: сектор 1, LBA 4000001.
+
+Останов на: маркер конца
+Прогонов в области лога: 1 (чисто).
+
+================ ЛОГ С ФЛЕШКИ (43821 байт) ================
+CMPUNLOG v1 profile=CMP 70HX (GA104) pci=10de:248A fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+stick  lastLba=0x1CD1A59 partLba=0x800 logLba=0x3D0900 sec=1 by=geometry
+
+FIND  target 10de:248A bus=2 dev=0 fn=0 rb=0 card#0 fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+FIND  target 10de:248A bus=16 dev=0 fn=0 rb=0 card#1 fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+FIND  total targets=2 (MC_MAX=16)
+BARSCN card BAR0=0xF6000000 type=0 size=0x1000000
+BARSCN card BAR1=0xF800000C type=C size=0x4000000
+BARSCN card BAR2=0x0000002F (I/O BAR, ??????????)
+BARSCN card BAR3=0xFC00000C type=C size=0x2000000
+BARSCN card BAR4=0x0000002F (I/O BAR, ??????????)
+BARSCN card BAR5=0x0000E001 (I/O BAR, ??????????)
+VROM  expBAR(0x30)=0x00000000
+VROM  found @0xF6300000
+VROM  hdr: 55 aa 7f eb 4b 37 34 30 30 e9 4c 19 77 cc 56 49
+VROM  CRC32 ?????? 4?? = 0x31F7E28C (??????? ? GA104.rom)
+PROBE card#0 bus=2 dev=0 fn=0 id=10de:248A class=030200 bar0=0xF6000000
+PROBE   chip=0xB74000A1 gfw=0xBADF5040 fbsz=0xBADF1100 plm=0xFFFFFF8F wpr2=0x1FFFFE00/0x00000000
+SEC2W  POST-????????????? 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  POST-????????????? 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  POST-????????????? 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  POST-????????????? 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  POST-????????????? 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  POST-????????????? 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  POST-????????????? 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  POST-????????????? 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  POST-????????????? 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  POST-????????????? window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=0 idleTo=0
+GEN2M  POST-????????????? [ 0.. 3] 0x00823804=0xFFFFFF8F! 0x00088FE8=0xFFFFFFCF! 0x00088FEC=0xFFFFFFCF! 0x00088FF0=0xFFFFFFCF!
+GEN2M  POST-????????????? [ 4.. 7] 0x00088FF4=0xFFFFFF8F! 0x00088FF8=0xFFFFFF8F! 0x00088AB4=0xFFFFFF8F! 0x0008E1B0=0xFFFFFF8F!
+GEN2M  POST-????????????? [ 8..11] 0x0008E1B4=0xFFFFFFCF! 0x0008E1B8=0xFFFFFFCF! 0x0008E1BC=0xFFFFFFCF! 0x0008E1C0=0xFFFFFFCF!
+GEN2M  POST-????????????? [12..15] 0x0008E1C4=0xFFFFFFCF! 0x0008E1C8=0xFFFFFFCF! 0x0008E1CC=0xFFFFFFCF! 0x0008E1D0=0xFFFFFFCF!
+GEN2M  POST-????????????? [16..19] 0x0008E1D4=0xFFFFFFFF* 0x0008E1D8=0xFFFFFFCF! 0x0008E1DC=0xFFFFFF8F! 0x0008E1E0=0xFFFFFFCF!
+GEN2M  POST-????????????? [20..23] 0x0008E1E4=0xFFFFFFCF! 0x0008E1E8=0xFFFFFFCF! 0x0008E1EC=0xFFFFFFCF! 0x0008E1F0=0xFFFFFFFF*
+GEN2M  POST-????????????? [24..27] 0x008200D0=0xFFFFFF8F! 0x008200D4=0xFFFFFFFC! 0x008200D8=0xFFFFFF8F! 0x008200DC=0xFFFFFF8F!
+GEN2M  POST-????????????? [28..31] 0x008200E0=0xFFFFFF8F! 0x008200E4=0xFFFFFF8F! 0x008200E8=0xFFFFFFFC! 0x008200EC=0xFFFFFFFC!
+GEN2M  POST-????????????? [32..35] 0x008200F0=0xFFFFFFFC! 0x008200F4=0xFFFFFF8F! 0x00823800=0xFFFFFF8F! 0x00823B04=0xFFFFFF8F!
+GEN2M  POST-????????????? [36..39] 0x00088084=0x00453D01! 0x00088084=0x00453D01! 0x00088084=0x00453D01! 0x00088084=0x00453D01!
+GEN2S  POST-????????????? ????? ?? ???? 2 ?? 37, ?? ?? ???? 35, ?????? 0
+GEN2R  POST-?????????????       LINK_CAP 0x00088084 = 0x00453D01
+GEN2R  POST-?????????????   LNKSTA-????? 0x00088088 = 0x11010040
+GEN2R  POST-?????????????  LNKCTL2-????? 0x000880A8 = 0x00200001
+GEN2R  POST-?????????????  LINK_CONFIG_0 0x0008C040 = 0x80005800
+GEN2R  POST-?????????????    PRIV_MISC_1 0x0008841C = 0x20360500
+GEN2R  POST-?????????????          CYA_0 0x0008C2C0 = 0x00802005
+GEN2R  POST-?????????????      XP3G_OVR0 0x0008E110 = 0x00000000
+GEN2R  POST-?????????????      XP3G_OVR3 0x0008E11C = 0x00000000
+GEN2R  POST-?????????????      XP3G_VAL0 0x0008E120 = 0x00000000
+GEN2R  POST-?????????????      XP3G_VAL3 0x0008E12C = 0x00000000
+GEN2R  POST-?????????????    PLM-??????? 0x00823B04 = 0xFFFFFF8F
+GEN2R  POST-?????????????   PLM-???????? 0x00823804 = 0xFFFFFF8F
+GEN2R  POST-?????????????            SS0 0x0082381C = 0x00000000
+GEN2R  POST-?????????????            SS1 0x00823820 = 0x00000000
+GEN2R  POST-?????????????  GFX_SPEED_SEL 0x00823830 = 0x00000003
+GEN2C  POST-????????????? GPU   pcie_cap ?? ??????
+GEN2C  POST-????????????? BRIDGE pcie_cap ?? ??????
+BARSCN card BAR0=0xF6000000 type=0 size=0x1000000
+BARSCN card BAR1=0xF800000C type=C size=0x4000000
+BARSCN card BAR2=0x0000002F (I/O BAR, ??????????)
+BARSCN card BAR3=0xFC00000C type=C size=0x2000000
+BARSCN card BAR4=0x0000002F (I/O BAR, ??????????)
+BARSCN card BAR5=0x0000E001 (I/O BAR, ??????????)
+VROM  expBAR(0x30)=0x00000000
+VROM  found @0xF6300000
+VROM  hdr: 55 aa 7f eb 4b 37 34 30 30 e9 4c 19 77 cc 56 49
+VROM  CRC32 ?????? 4?? = 0x31F7E28C (??????? ? GA104.rom)
+PROBE card#1 bus=16 dev=0 fn=0 id=10de:248A class=030200 bar0=0xF6000000
+PROBE   chip=0xB74000A1 gfw=0xBADF5040 fbsz=0xBADF1100 plm=0xFFFFFF8F wpr2=0x1FFFFE00/0x00000000
+MC     g_mcIndex=0 g_mcCount=2 g_mcAdvance=1 SINGLE_CARD_ONLY=1 SKIP_FLR=0
+PICK  card#0 of 2 -> bus=2 dev=0 fn=0
+G2NVR  CMP90G2=37 ????, ?? ???? ???????? -> fire-????? ?? ????????, ??????? ???? ?????????? ????? ????????
+TIME  t=0?? ? ????? ???????
+MEM   v67 addr=0x110000000 W/R ?? ???????? (?????? 1)
+MEM   v67 CRC32 ????=0x2C6B1DB2 ?????=0x2C6B1DB2 OK | ????? ????=0x34A67FE9 ?????=0x34A67FE9 OK
+MEM   v67 ?????: 0x0000:0000019C/0000019C 0x1F40:0000019C/0000019C 0x3E80:0000019C/0000019C 0x5DC0:0000019C/0000019C 0x7D00:0000019C/0000019C 0x9C40:0000019C/0000019C 0xBB80:0000019C/0000019C 0xDAC0:0000019C/0000019C
+MEM   ucode addr=0x111010000 W/R ?? ???????? (?????? 1)
+MEM   ucode CRC32 ????=0xF920DD5E ?????=0xF920DD5E OK | ????? ????=0x98B2714A ?????=0x98B2714A OK
+MEM   ucode ?????: 0x0000:00000000/00000000 0x1D80:9F21FDFD/9F21FDFD 0x3B00:D24B5B98/D24B5B98 0x5880:84D0E702/84D0E702 0x7600:52D0F90A/52D0F90A 0x9380:00000000/00000000 0xB100:00000000/00000000 0xCE80:00000000/00000000
+MEM   gsp_rm_boot addr=0x11201F000 W/R ?? ???????? (?????? 1)
+MEM   gsp_rm_boot CRC32 ????=0x1C751EB7 ?????=0x1C751EB7 OK | ????? ????=0x2565B982 ?????=0x2565B982 OK
+MEM   gsp_rm_boot ?????: 0x0000:34F9AA8A/34F9AA8A 0x0C00:424D162A/424D162A 0x1800:BC82ED91/BC82ED91 0x2400:9D7C85D1/9D7C85D1 0x3000:1C3B7D4B/1C3B7D4B 0x3C00:DEE8FDD3/DEE8FDD3 0x4800:00000000/00000000 0x5400:C3986705/C3986705
+MEM   fwsec addr=0xC1051000 W/R ?? ???????? (?????? 1)
+MEM   fwsec CRC32 ????=0xE735DD44 ?????=0xE735DD44 OK | ????? ????=0x9C78069E ?????=0x9C78069E OK
+MEM   fwsec ?????: 0x0000:EC547D23/EC547D23 0x1D40:1B7EF0D4/1B7EF0D4 0x3A80:2A689492/2A689492 0x57C0:A254B0C6/A254B0C6 0x7500:A1EA14D0/A1EA14D0 0x9240:5E340DB4/5E340DB4 0xAF80:57DEF6F6/57DEF6F6 0xCCC0:82F5A975/82F5A975
+BUF   radtab addr=0x11F103000 size=0x5053000 src0=0x00000000 buf0=0x00000000 src4=0x00000000 buf4=0x00000000 OK
+FBIOS fbreg_0x440=0xBADF1100 profile_fb=0x200000000 READABLE
+META  meta@0x125156000 radix@0x11F0D8000 ucode@0x111010000 v67@0xC1041000 fbSize=0x200000000 frtsOffset=0x1F7E00000 frtsSize=0x100000 wprEnd=0x1F7F00000 vgaWS=0x1FFF00000 bootBin=0x1F7DFA000 bootCount=0x0
+GEOM  margin=0x8000000 (128 MB)  wprEnd=0x1F7F00000  frts=0x1F7E00000  frtsPG=0x1F7E00  expectWPR2=0x01F7E000/0x01F7EE00
+GEOM  profile and wpr meta agree
+PRE   WPR2=0x1FFFFE00/0x00000000 PLM=0xFFFFFE8E SS0=0x00000000 SS1=0x00000000 GFW=0xBADF5040
+TIME  t=4247??  ????? ??????? ? ????????? ??????
+FBP    ==== step 1: framebuffer access probe ====
+FBP    frts=0x1F7E00000 wprEnd=0x1F7F00000 fbSize=0x200000000
+FBP    gsp ready cpuctl=0x00000010 fbifctl=0x00000190 transcfg0=0x00000115
+FBP-A  sysmem->dmem ok  got=0xEC547D23 want=0xEC547D23  PASS
+FBP-A  w[1]=0x9E41D714 w[2]=0xAB4D9CAC w[3]=0xA04AC0FB  or=0xFF5FFFFF
+FBP-B  sysmem->dmem bad  addr=0x600000000 got=0x00000000 0x00000000 0x00000000 0x00000000  or=0x00000000
+FBP-C  frts@0x1F7E00000: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000  or=0x00000000  ZERO
+FBP-D  wprEnd@0x1F7F00000: 0x00000000 0x00000000 0x00000000 0x00000000  or=0x00000000
+FBP-D  midfb@0x100000000: 0x00000000 0x00000000 0x00000000 0x00000000  or=0x00000000
+FBP-E  frts[0..0x1000] crc32=0x38E3FFEE  zerocrc=0x38E3FFEE  (all zero, consistent with C)
+FBP-F  dmem->frts wrote 0xA5F00FB5.. to 0x1F7E00000 (256 bytes)
+FBP-G  readback 0x6C617470 0x00080008 0x00000090 0x00000000  MISMATCH (nonzero, not ours - looks like stale DMEM, not the address)
+FBP-G  first bad word idx=0 got=0x6C617470 want=0xA5F00FB5
+FBP-G  NOTE: nonzero junk here means the write did not land where we read. Combined with FBP-C ZERO this points at the address, not at the transfer.
+FBP    VERDICT ctrlA=PASS frtsRead=zero write=sent roundTrip=FAIL conclusion=frts-NOT-reachable-via-dma
+FBP    CONCLUSION: 0x1F7E00000 is not addressable by the GSP dma engine (C reads zero, E matches no data, G does not return our pattern).
+FBP    CONCLUSION: the frts region cannot be filled directly. Work on the mapper command instead - gfwImageSize/flags in readVbiosDesc; see docs/70HX-NEXT-STEPS.md S4a.
+FBP    ==== probe done ====
+TIME  t=5438??  ????? FB ?????????
+TIME  t=16094??  ?? ??????? ???? (????????? ?????????)
+DMAQ   FULL timeout #1 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #2 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #3 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #4 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #5 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #6 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #7 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #8 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #9 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #10 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #11 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #12 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #13 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #14 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #15 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #16 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #17 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #18 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #19 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #20 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #21 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #22 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #23 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #24 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #25 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #26 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #27 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #28 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #29 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #30 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #31 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #32 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   IDLE timeout #1 cmd=0x00000615 (bit1=IDLE ?????, bit0=FULL ????)
+DMAQ   FULL timeout #33 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #34 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #35 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #36 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #37 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #38 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #39 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #40 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #41 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #42 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #43 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #44 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #45 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #46 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #47 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #48 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #49 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #50 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #51 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #52 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #53 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #54 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #55 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #56 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #57 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #58 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #59 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #60 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #61 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #62 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #63 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #64 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #65 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #66 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #67 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #68 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #69 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   IDLE timeout #2 cmd=0x00000615 (bit1=IDLE ?????, bit0=FULL ????)
+PROBE  E1-?????-BL WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+PROBE  E2-??-fwsec WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+SEC2W  E2-??-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-??-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-??-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-??-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-??-fwsec 0x00840340=0x001C0004 0x00840344=0xBADF5720 0x00840348=0xBADF5720 0x0084034C=0xBADF5720  <<0x001C0004
+SEC2W  E2-??-fwsec 0x00840350=0x00000000 0x00840354=0xBADF5720 0x00840358=0xBADF5720 0x0084035C=0xBADF5720
+SEC2W  E2-??-fwsec 0x00840360=0xBADF5720 0x00840364=0xBADF5040 0x00840368=0xBADF5040 0x0084036C=0xBADF5040
+SEC2W  E2-??-fwsec 0x00840370=0x001C0004 0x00840374=0xBADF5720 0x00840378=0xBADF5720 0x0084037C=0xBADF5720  <<0x001C0004
+SEC2W  E2-??-fwsec 0x00840380=0x00000000 0x00840384=0xBADF5720 0x00840388=0xBADF5720 0x0084038C=0xBADF5720
+SEC2S  E2-??-fwsec window 0x00840300..0x00840380 words=33 BADF=29 live=4 dmatrfcmd=0x00000615 fullTo=69 idleTo=2
+FWSEC   ????? ?????????: CRC32 ????=0xE735DD44 ?????=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x01F7E000/0x01F7EE00 cpuctl=0x00000000 dbg=0xDA550000 expect=0x01F7E000/0x01F7EE00
+WAIT   *** WPR2 ?????????? lo=0x01F7E000 hi=0x01F7EE00 ????? 0 ms ***
+OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+PROBE  ?????-????????-0x10..0x1F WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+PROBE  ?????-return-TRUE WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+PROBE  E2-?????-fwsec WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+SEC2W  E2-?????-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-?????-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-?????-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-?????-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-?????-fwsec 0x00840340=0x001C0004 0x00840344=0xBADF5720 0x00840348=0xBADF5720 0x0084034C=0xBADF5720  <<0x001C0004
+SEC2W  E2-?????-fwsec 0x00840350=0x00000000 0x00840354=0xBADF5720 0x00840358=0xBADF5720 0x0084035C=0xBADF5720
+SEC2W  E2-?????-fwsec 0x00840360=0xBADF5720 0x00840364=0xBADF5040 0x00840368=0xBADF5040 0x0084036C=0xBADF5040
+SEC2W  E2-?????-fwsec 0x00840370=0x001C0004 0x00840374=0xBADF5720 0x00840378=0xBADF5720 0x0084037C=0xBADF5720  <<0x001C0004
+SEC2W  E2-?????-fwsec 0x00840380=0x00000000 0x00840384=0xBADF5720 0x00840388=0xBADF5720 0x0084038C=0xBADF5720
+SEC2S  E2-?????-fwsec window 0x00840300..0x00840380 words=33 BADF=29 live=4 dmatrfcmd=0x00000602 fullTo=69 idleTo=2
+PROBE  E3-?????-ResetIntoRiscv WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+PROBE  E5-?????-?????????????? WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+FLRX   WPR2 ???????????? ????? V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** ?? ?????????? ***
+PROBE  ?????-???????-???? WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+SEC2W  ?????-???????-???? 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  ?????-???????-???? 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  ?????-???????-???? 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  ?????-???????-???? 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  ?????-???????-???? 0x00840340=0x001C0004 0x00840344=0xBADF5720 0x00840348=0xBADF5720 0x0084034C=0xBADF5720  <<0x001C0004
+SEC2W  ?????-???????-???? 0x00840350=0x00000000 0x00840354=0xBADF5720 0x00840358=0xBADF5720 0x0084035C=0xBADF5720
+SEC2W  ?????-???????-???? 0x00840360=0xBADF5720 0x00840364=0xBADF5040 0x00840368=0xBADF5040 0x0084036C=0xBADF5040
+SEC2W  ?????-???????-???? 0x00840370=0x001C0004 0x00840374=0xBADF5720 0x00840378=0xBADF5720 0x0084037C=0xBADF5720  <<0x001C0004
+SEC2W  ?????-???????-???? 0x00840380=0x00000000 0x00840384=0xBADF5720 0x00840388=0xBADF5720 0x0084038C=0xBADF5720
+SEC2S  ?????-???????-???? window 0x00840300..0x00840380 words=33 BADF=29 live=4 dmatrfcmd=0xBADF5620 fullTo=69 idleTo=2
+TIME  t=31273??  ?????? ???? ????????
+GEN2  ?????????: fire=0 have2=1 enable=0 -> ???? ????????
+STG   enter gen2 block fire=0 have2=1 enable=0
+STG   gen2: no branch taken (have2=1 success=0 direct=0 early=0) - falling through
+G2RMK  ??????-????? === ???????? ????? GFX_SPEED_SELECT ????? ?????#2 ===
+G2RMK  ??????-????? ????: 0x00823800 (PLM ???.0x8238xx), 0x00823B04 (????? ???????); ??: 0xFFFFFF8F / 0xFFFFFF8F
+DMAQ   FULL timeout #70 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #71 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #72 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #73 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #74 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #75 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #76 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #77 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #78 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #79 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #80 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #81 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #82 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #83 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #84 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #85 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #86 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #87 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #88 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #89 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #90 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #91 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #92 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #93 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #94 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #95 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #96 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #97 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #98 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #99 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #100 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #101 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   IDLE timeout #3 cmd=0x00000615 (bit1=IDLE ?????, bit0=FULL ????)
+DMAQ   FULL timeout #102 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #103 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #104 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #105 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #106 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #107 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #108 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #109 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #110 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #111 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #112 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #113 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #114 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #115 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #116 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #117 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #118 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #119 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #120 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #121 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #122 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #123 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #124 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #125 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #126 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #127 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #128 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #129 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #130 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #131 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #132 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #133 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #134 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #135 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #136 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #137 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   FULL timeout #138 cmd=0x00000615 (bit0=FULL ?????, bit1=IDLE ????)
+DMAQ   IDLE timeout #4 cmd=0x00000615 (bit1=IDLE ?????, bit0=FULL ????)
+PROBE  E1-?????-BL WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+PROBE  E2-??-fwsec WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+SEC2W  E2-??-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-??-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-??-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-??-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-??-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-??-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-??-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-??-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-??-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-??-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000615 fullTo=138 idleTo=4
+FWSEC   ????? ?????????: CRC32 ????=0xE735DD44 ?????=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x01F7E000/0x01F7EE00 cpuctl=0x00000000 dbg=0xDA550000 expect=0x01F7E000/0x01F7EE00
+WAIT   *** WPR2 ?????????? lo=0x01F7E000 hi=0x01F7EE00 ????? 0 ms ***
+OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+PROBE  ?????-????????-0x10..0x1F WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+PROBE  ?????-return-TRUE WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+PROBE  E2-?????-fwsec WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+SEC2W  E2-?????-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-?????-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-?????-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-?????-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-?????-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-?????-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-?????-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-?????-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-?????-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-?????-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000602 fullTo=138 idleTo=4
+PROBE  E3-?????-ResetIntoRiscv WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+PROBE  E5-?????-?????????????? WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+FLRX   WPR2 ???????????? ????? V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** ?? ?????????? ***
+G2RMK  ??????-????? ?????#1: PLM=0xFFFFFFFF SS0=0x00000000
+G2RMK  ??????-????? ?1 ?????#2: 0x00823800 <- 0xffffffff (?????? 0xFFFFFF8F)
+BOOTER iters=5 ?? 67.889?? PLM-OPEN
+G2RMK  ??????-????? ?1 0x00823800 ????? 0xFFFFFFFF ??????? (polls=0) WPR2=0x01EAD000/0x01F7EE00 *** WPR2 ?? ????????? ***
+G2RMK  ??????-????? ?1 ?????#2: 0x00823B04 <- 0xffffffff (?????? 0xFFFFFF8F)
+BOOTER iters=5 ?? 67.859?? HALT
+G2RMK  ??????-????? ?1 0x00823B04 ????? 0xFFFFFF8F ???????? ???????? (polls=1000) WPR2=0x1FFFFE00/0x00000000 WPR2 OK
+G2RMK  ??????-????? ?????? 1: ??????? 1 ?? 2
+G2RMK  ??????-????? ?2 ?????#2: 0x00823B04 <- 0xffffffff (?????? 0xFFFFFF8F)
+BOOTER iters=5 ?? 67.848?? HALT
+G2RMK  ??????-????? ?2 0x00823B04 ????? 0xFFFFFF8F ???????? ???????? (polls=1000) WPR2=0x1FFFFE00/0x00000000 WPR2 OK
+G2RMK  ??????-????? ?????? 2: ??????? 1 ?? 2
+G2RMK  ??????-????? ?3 ?????#2: 0x00823B04 <- 0xffffffff (?????? 0xFFFFFF8F)
+BOOTER iters=5 ?? 67.856?? HALT
+G2RMK  ??????-????? ?3 0x00823B04 ????? 0xFFFFFF8F ???????? ???????? (polls=1000) WPR2=0x1FFFFE00/0x00000000 WPR2 OK
+G2RMK  ??????-????? ?????? 3: ??????? 1 ?? 2
+G2RMS  ??????-????? ????: 0x823800=0xFFFFFFFF ?????? | 0x823B04=0xFFFFFF8F ??????? | GFX-???? ??????, GFX_SPEED_SELECT ?? ???????
+STG   reached selector block success=0 direct=0 early=0 gen2Fire=0
+FUSE   before 0x00823780 = 0xBADF5040
+FUSE   before 0x00823784 = 0xBADF5040
+FUSE   before 0x00823788 = 0xBADF5040
+FUSE   before 0x0082378C = 0xBADF5040
+FUSE   before 0x00823790 = 0xBADF5040
+FUSE   before 0x00823794 = 0xBADF5040
+FUSE   before 0x00823798 = 0xBADF5040
+FUSE   before 0x0082379C = 0xBADF5040
+FUSE   before 0x008237A0 = 0xBADF5040
+FUSE   before 0x008237A4 = 0xBADF5040
+FUSE   before 0x008237A8 = 0xBADF5040
+FUSE   before 0x008237AC = 0xBADF5040
+FUSE   before 0x008237B0 = 0xBADF5040
+FUSE   before 0x008237B4 = 0xBADF5040
+FUSE   before 0x008237B8 = 0xBADF5040
+FUSE   before 0x008237BC = 0xBADF5040
+FUSE   before 0x008237C0 = 0xBADF5040
+FUSE   before 0x008237C4 = 0xBADF5040
+FUSE   before 0x008237C8 = 0xBADF5040
+FUSE   before 0x008237CC = 0xBADF5040
+FUSE   before 0x008237D0 = 0xBADF5040
+FUSE   before 0x008237D4 = 0xBADF5040
+FUSE   before 0x008237D8 = 0xBADF5040
+FUSE   before 0x008237DC = 0xBADF5040
+FUSE   before 0x008237E0 = 0xBADF5040
+FUSE   before 0x008237E4 = 0xBADF5040
+FUSE   before 0x008237E8 = 0xBADF5040
+FUSE   before 0x008237EC = 0xBADF5040
+FUSE   before 0x008237F0 = 0xBADF5040
+FUSE   before 0x008237F4 = 0xBADF5040
+FUSE   before 0x008237F8 = 0xBADF5040
+FUSE   before 0x008237FC = 0xBADF5040
+FUSE   before 0x00823800 = 0xFFFFFFFF
+FUSE   before 0x00823804 = 0xFFFFFFFF
+FUSE   before 0x00823808 = 0x01100380
+FUSE   before 0x0082380C = 0x00888888
+FUSE   before 0x00823810 = 0x002AAAAA
+FUSE   before 0x00823814 = 0x00000033  <- NV_FUSE_FEATURE_READOUT (only ECC_DRAM doc'd)
+FUSE   before 0x00823818 = 0x016DB6ED
+FUSE   before 0x0082381C = 0x00000000  <- SS0 (we write here)
+FUSE   before 0x00823820 = 0x00000000  <- SS1 (we write here)
+FUSE   before 0x00823824 = 0x00000001
+FUSE   before 0x00823828 = 0x00000000
+FUSE   before 0x0082382C = 0x00000008
+FUSE   before 0x00823830 = 0x00000003
+FUSE   before 0x00823834 = 0x00000003
+FUSE   before 0x00823838 = 0x00000001
+FUSE   before 0x0082383C = 0xBADF5040
+STG   PLM 0xFFFFFFFF -> 0xFFFFFFFF readback 0xFFFFFFFF OPEN
+WATCH  before WPR2=0x1FFFFE00/0x00000000 GFW=0x000003FF dbg=0xDA550000 cpuctl=0x00000010 scratch0e=0x00000000 privMask=0x0004CB8F/0x0045CB8F fuse18=0x016DB6ED fuse0C=0x00888888
+WATCH  after  WPR2=0x1FFFFE00/0x00000000 GFW=0x000003FF dbg=0xDA550000 cpuctl=0x00000010 scratch0e=0x00000000 privMask=0x0004CB8F/0x0045CB8F fuse18=0x00000000 fuse0C=0x00888888
+IRM    before 0x504200=0x00090000 0x504204=0x00000005 0x504208=0x00000221 0x50420C=0x00120000
+IRM    after  0x504200=0x00090000 0x504204=0x00000005 0x504208=0x00000221 0x50420C=0x00120000
+STG   selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 written OK
+STG   is_selectors_written()=1  (??? ??????????: ???????????? ?????? ??? ??????????; ????? ?? ??????????)
+FUSE   CHANGED 0x00823818: 0x016DB6ED -> 0x00000000 (xor 0x016DB6ED)  <- UNREQUESTED SIDE EFFECT
+FUSE   CHANGED 0x0082381C: 0x00000000 -> 0x88888888 (xor 0x88888888)
+FUSE   CHANGED 0x00823820: 0x00000000 -> 0x00000008 (xor 0x00000008)
+FUSE   3 of 48 changed; FEATURE_READOUT=0x00000033->0x00000033 UNCHANGED (?? ???? ??????????????? ?????? ??? ECC_DRAM ??? 16 - ??? ?? ??????? ??????)
+PROBE  0x0082380C = 0x00888888 (???????? ? ????????), 0x00823810 = 0x002AAAAA
+PROBE  ????????? -> ???? 0x88888888 (???????? ??????? ????)
+PROBE  readback 0x0082380C = 0x00888888 NOT STUCK (???????? ??? ??????????) | 0x00823810 = 0x002AAAAA (?? ?????????)
+GEN2M  ?????-?????? [ 0.. 3] 0x00823804=0xFFFFFFFF* 0x00088FE8=0xFFFFFFCF! 0x00088FEC=0xFFFFFFCF! 0x00088FF0=0xFFFFFFCF!
+GEN2M  ?????-?????? [ 4.. 7] 0x00088FF4=0xFFFFFF8F! 0x00088FF8=0xFFFFFF8F! 0x00088AB4=0xFFFFFF8F! 0x0008E1B0=0xFFFFFF8F!
+GEN2M  ?????-?????? [ 8..11] 0x0008E1B4=0xFFFFFFCF! 0x0008E1B8=0xFFFFFFCF! 0x0008E1BC=0xFFFFFFCF! 0x0008E1C0=0xFFFFFFCF!
+GEN2M  ?????-?????? [12..15] 0x0008E1C4=0xFFFFFFCF! 0x0008E1C8=0xFFFFFFCF! 0x0008E1CC=0xFFFFFFCF! 0x0008E1D0=0xFFFFFFCF!
+GEN2M  ?????-?????? [16..19] 0x0008E1D4=0xFFFFFFFF* 0x0008E1D8=0xFFFFFFCF! 0x0008E1DC=0xFFFFFF8F! 0x0008E1E0=0xFFFFFFCF!
+GEN2M  ?????-?????? [20..23] 0x0008E1E4=0xFFFFFFCF! 0x0008E1E8=0xFFFFFFCF! 0x0008E1EC=0xFFFFFFCF! 0x0008E1F0=0xFFFFFFFF*
+GEN2M  ?????-?????? [24..27] 0x008200D0=0xFFFFFF8F! 0x008200D4=0xFFFFFFFC! 0x008200D8=0xFFFFFF8F! 0x008200DC=0xFFFFFF8F!
+GEN2M  ?????-?????? [28..31] 0x008200E0=0xFFFFFF8F! 0x008200E4=0xFFFFFF8F! 0x008200E8=0xFFFFFFFC! 0x008200EC=0xFFFFFFFC!
+GEN2M  ?????-?????? [32..35] 0x008200F0=0xFFFFFFFC! 0x008200F4=0xFFFFFF8F! 0x00823800=0xFFFFFFFF* 0x00823B04=0xFFFFFF8F!
+GEN2M  ?????-?????? [36..39] 0x00088084=0x00453D01! 0x00088084=0x00453D01! 0x00088084=0x00453D01! 0x00088084=0x00453D01!
+GEN2S  ?????-?????? ????? ?? ???? 4 ?? 37, ?? ?? ???? 33, ?????? 1
+GEN2R  ?????-??????       LINK_CAP 0x00088084 = 0x00453D01
+GEN2R  ?????-??????   LNKSTA-????? 0x00088088 = 0x11010040
+GEN2R  ?????-??????  LNKCTL2-????? 0x000880A8 = 0x00000001
+GEN2R  ?????-??????  LINK_CONFIG_0 0x0008C040 = 0x80005800
+GEN2R  ?????-??????    PRIV_MISC_1 0x0008841C = 0x20360500
+GEN2R  ?????-??????          CYA_0 0x0008C2C0 = 0x00802005
+GEN2R  ?????-??????      XP3G_OVR0 0x0008E110 = 0x00000000
+GEN2R  ?????-??????      XP3G_OVR3 0x0008E11C = 0x00000000
+GEN2R  ?????-??????      XP3G_VAL0 0x0008E120 = 0x00000000
+GEN2R  ?????-??????      XP3G_VAL3 0x0008E12C = 0x00000000
+GEN2R  ?????-??????    PLM-??????? 0x00823B04 = 0xFFFFFF8F
+GEN2R  ?????-??????   PLM-???????? 0x00823804 = 0xFFFFFFFF
+GEN2R  ?????-??????            SS0 0x0082381C = 0x88888888
+GEN2R  ?????-??????            SS1 0x00823820 = 0x00000008
+GEN2R  ?????-??????  GFX_SPEED_SEL 0x00823830 = 0x00000003
+GEN2C  ?????-?????? GPU   pcie_cap ?? ??????
+GEN2C  ?????-?????? BRIDGE pcie_cap ?? ??????
+G2GFX  ???1-GFX_SEL ?? : GFX_SPEED_SELECT=0x00000003 (???? 0x3)  0x823800=0xFFFFFFFF  0x823B04=0xFFFFFF8F
+G2GFX  ???1-GFX_SEL ?? : FEAT_READOUT_0=0x00000033  bit8 PGRAPH=0
+G2GFX  ???1-GFX_SEL ??????? A ??????? 1: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? A ??????? 2: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? A ??????? 3: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? A ??????? 4: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? A ??????? 5: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? A (GFX ????? SS): GFX_SPEED_SELECT=0x00000003 ?? ?????
+G2GFX  ???1-GFX_SEL ??????? B ??????? 1: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? B ??????? 2: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? B ??????? 3: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? B ??????? 4: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? B ??????? 5: readback 0x00000003 != 4, ??????
+G2GFX  ???1-GFX_SEL ??????? B (GFX ????? SS): GFX_SPEED_SELECT=0x00000003 ?? ?????
+G2GFX  ???1-GFX_SEL ?????: GFX_SPEED_SELECT=0x00000003  0x823800=0xFFFFFFFF  0x823B04=0xFFFFFF8F
+G2GFX  ???1-GFX_SEL ?????: FEAT_READOUT_0=0x00000033  bit8 PGRAPH=0  (?? ?????????)
+G2SUM  ???1-GFX_SEL GFX_SPEED_SELECT: ??????? A ???, ??????? B ???; ???? 0x00000003. ???????? GPU-Z: 167.4 -> >=185.4 GTexels/s ???? ??????. ?????/TLS/???/??????? ?? ???????
+PREFLR PLM=0xFFFFFFFF SS0=0x88888888 SS1=0x00000008 WPR2=0x1FFFFE00/0x00000000 GFW=0xBADF1100 dbg=0xDA550000 cpuctl=0x00000010 scratch0e=0x00000000
+PREFLR want SS0=0x88888888 SS1=0x00000008 -> written OK
+FLRX   do_flr() ????????, ?????? MMIO ?? ????????
+MC     g_mcIndex=0 g_mcCount=2 g_mcAdvance=1 -> BootNext=self ???????? (SINGLE_CARD_ONLY=1): ???????????? ?? ?????? = POST = ???????? fuse-shadow
+STG   reached 'done' label
+STG   post-FLR: MMIO ??????????, ?????? ????? ?????? ?? ??????? ?? FLR
+SEC2W  END-????? 0x00840300=0xFFFFFFFF 0x00840304=0xFFFFFFFF 0x00840308=0xFFFFFFFF 0x0084030C=0xFFFFFFFF
+SEC2W  END-????? 0x00840310=0xFFFFFFFF 0x00840314=0xFFFFFFFF 0x00840318=0xFFFFFFFF 0x0084031C=0xFFFFFFFF
+SEC2W  END-????? 0x00840320=0xFFFFFFFF 0x00840324=0xFFFFFFFF 0x00840328=0xFFFFFFFF 0x0084032C=0xFFFFFFFF
+SEC2W  END-????? 0x00840330=0xFFFFFFFF 0x00840334=0xFFFFFFFF 0x00840338=0xFFFFFFFF 0x0084033C=0xFFFFFFFF
+SEC2W  END-????? 0x00840340=0xFFFFFFFF 0x00840344=0xFFFFFFFF 0x00840348=0xFFFFFFFF 0x0084034C=0xFFFFFFFF
+SEC2W  END-????? 0x00840350=0xFFFFFFFF 0x00840354=0xFFFFFFFF 0x00840358=0xFFFFFFFF 0x0084035C=0xFFFFFFFF
+SEC2W  END-????? 0x00840360=0xFFFFFFFF 0x00840364=0xFFFFFFFF 0x00840368=0xFFFFFFFF 0x0084036C=0xFFFFFFFF
+SEC2W  END-????? 0x00840370=0xFFFFFFFF 0x00840374=0xFFFFFFFF 0x00840378=0xFFFFFFFF 0x0084037C=0xFFFFFFFF
+SEC2W  END-????? 0x00840380=0xFFFFFFFF 0x00840384=0xFFFFFFFF 0x00840388=0xFFFFFFFF 0x0084038C=0xFFFFFFFF
+SEC2S  END-????? window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0xFFFFFFFF fullTo=138 idleTo=4
+END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF WPR2=0x1FFFFE00/0x00000000 dbg=0xDA550000 cpuctl=0x00000010 scratch0e=0x00000000
+END   ---- end of log ----
+
+=================== КОНЕЦ ЛОГА ===================
+
+--- ключевые строки ---
+  FIND  target 10de:248A bus=2 dev=0 fn=0 rb=0 card#0 fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+  FIND  target 10de:248A bus=16 dev=0 fn=0 rb=0 card#1 fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+  FIND  total targets=2 (MC_MAX=16)
+  BARSCN card BAR0=0xF6000000 type=0 size=0x1000000
+  BARSCN card BAR1=0xF800000C type=C size=0x4000000
+  BARSCN card BAR2=0x0000002F (I/O BAR, ??????????)
+  BARSCN card BAR3=0xFC00000C type=C size=0x2000000
+  BARSCN card BAR4=0x0000002F (I/O BAR, ??????????)
+  BARSCN card BAR5=0x0000E001 (I/O BAR, ??????????)
+  VROM  expBAR(0x30)=0x00000000
+  VROM  found @0xF6300000
+  VROM  hdr: 55 aa 7f eb 4b 37 34 30 30 e9 4c 19 77 cc 56 49
+  VROM  CRC32 ?????? 4?? = 0x31F7E28C (??????? ? GA104.rom)
+  PROBE card#0 bus=2 dev=0 fn=0 id=10de:248A class=030200 bar0=0xF6000000
+  PROBE   chip=0xB74000A1 gfw=0xBADF5040 fbsz=0xBADF1100 plm=0xFFFFFF8F wpr2=0x1FFFFE00/0x00000000
+  BARSCN card BAR0=0xF6000000 type=0 size=0x1000000
+  BARSCN card BAR1=0xF800000C type=C size=0x4000000
+  BARSCN card BAR2=0x0000002F (I/O BAR, ??????????)
+  BARSCN card BAR3=0xFC00000C type=C size=0x2000000
+  BARSCN card BAR4=0x0000002F (I/O BAR, ??????????)
+  BARSCN card BAR5=0x0000E001 (I/O BAR, ??????????)
+  VROM  expBAR(0x30)=0x00000000
+  VROM  found @0xF6300000
+  VROM  hdr: 55 aa 7f eb 4b 37 34 30 30 e9 4c 19 77 cc 56 49
+  VROM  CRC32 ?????? 4?? = 0x31F7E28C (??????? ? GA104.rom)
+  PROBE card#1 bus=16 dev=0 fn=0 id=10de:248A class=030200 bar0=0xF6000000
+  PROBE   chip=0xB74000A1 gfw=0xBADF5040 fbsz=0xBADF1100 plm=0xFFFFFF8F wpr2=0x1FFFFE00/0x00000000
+  MC     g_mcIndex=0 g_mcCount=2 g_mcAdvance=1 SINGLE_CARD_ONLY=1 SKIP_FLR=0
+  PICK  card#0 of 2 -> bus=2 dev=0 fn=0
+  G2NVR  CMP90G2=37 ????, ?? ???? ???????? -> fire-????? ?? ????????, ??????? ???? ?????????? ????? ????????
+  TIME  t=0?? ? ????? ???????
+  MEM   v67 addr=0x110000000 W/R ?? ???????? (?????? 1)
+  MEM   v67 CRC32 ????=0x2C6B1DB2 ?????=0x2C6B1DB2 OK | ????? ????=0x34A67FE9 ?????=0x34A67FE9 OK
+  MEM   v67 ?????: 0x0000:0000019C/0000019C 0x1F40:0000019C/0000019C 0x3E80:0000019C/0000019C 0x5DC0:0000019C/0000019C 0x7D00:0000019C/0000019C 0x9C40:0000019C/0000019C 0xBB80:0000019C/0000019C 0xDAC0:0000019C/0000019C
+  MEM   ucode addr=0x111010000 W/R ?? ???????? (?????? 1)
+  MEM   ucode CRC32 ????=0xF920DD5E ?????=0xF920DD5E OK | ????? ????=0x98B2714A ?????=0x98B2714A OK
+  MEM   ucode ?????: 0x0000:00000000/00000000 0x1D80:9F21FDFD/9F21FDFD 0x3B00:D24B5B98/D24B5B98 0x5880:84D0E702/84D0E702 0x7600:52D0F90A/52D0F90A 0x9380:00000000/00000000 0xB100:00000000/00000000 0xCE80:00000000/00000000
+  MEM   gsp_rm_boot addr=0x11201F000 W/R ?? ???????? (?????? 1)
+  MEM   gsp_rm_boot CRC32 ????=0x1C751EB7 ?????=0x1C751EB7 OK | ????? ????=0x2565B982 ?????=0x2565B982 OK
+  MEM   gsp_rm_boot ?????: 0x0000:34F9AA8A/34F9AA8A 0x0C00:424D162A/424D162A 0x1800:BC82ED91/BC82ED91 0x2400:9D7C85D1/9D7C85D1 0x3000:1C3B7D4B/1C3B7D4B 0x3C00:DEE8FDD3/DEE8FDD3 0x4800:00000000/00000000 0x5400:C3986705/C3986705
+  MEM   fwsec addr=0xC1051000 W/R ?? ???????? (?????? 1)
+  MEM   fwsec CRC32 ????=0xE735DD44 ?????=0xE735DD44 OK | ????? ????=0x9C78069E ?????=0x9C78069E OK
+  MEM   fwsec ?????: 0x0000:EC547D23/EC547D23 0x1D40:1B7EF0D4/1B7EF0D4 0x3A80:2A689492/2A689492 0x57C0:A254B0C6/A254B0C6 0x7500:A1EA14D0/A1EA14D0 0x9240:5E340DB4/5E340DB4 0xAF80:57DEF6F6/57DEF6F6 0xCCC0:82F5A975/82F5A975
+  BUF   radtab addr=0x11F103000 size=0x5053000 src0=0x00000000 buf0=0x00000000 src4=0x00000000 buf4=0x00000000 OK
+  FBIOS fbreg_0x440=0xBADF1100 profile_fb=0x200000000 READABLE
+  META  meta@0x125156000 radix@0x11F0D8000 ucode@0x111010000 v67@0xC1041000 fbSize=0x200000000 frtsOffset=0x1F7E00000 frtsSize=0x100000 wprEnd=0x1F7F00000 vgaWS=0x1FFF00000 bootBin=0x1F7DFA000 bootCount=0x0
+  GEOM  margin=0x8000000 (128 MB)  wprEnd=0x1F7F00000  frts=0x1F7E00000  frtsPG=0x1F7E00  expectWPR2=0x01F7E000/0x01F7EE00
+  GEOM  profile and wpr meta agree
+  PRE   WPR2=0x1FFFFE00/0x00000000 PLM=0xFFFFFE8E SS0=0x00000000 SS1=0x00000000 GFW=0xBADF5040
+  TIME  t=4247??  ????? ??????? ? ????????? ??????
+  FBP    ==== step 1: framebuffer access probe ====
+  FBP    frts=0x1F7E00000 wprEnd=0x1F7F00000 fbSize=0x200000000
+  FBP    gsp ready cpuctl=0x00000010 fbifctl=0x00000190 transcfg0=0x00000115
+  FBP-A  sysmem->dmem ok  got=0xEC547D23 want=0xEC547D23  PASS
+  FBP-A  w[1]=0x9E41D714 w[2]=0xAB4D9CAC w[3]=0xA04AC0FB  or=0xFF5FFFFF
+  FBP-B  sysmem->dmem bad  addr=0x600000000 got=0x00000000 0x00000000 0x00000000 0x00000000  or=0x00000000
+  FBP-C  frts@0x1F7E00000: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000  or=0x00000000  ZERO
+  FBP-D  wprEnd@0x1F7F00000: 0x00000000 0x00000000 0x00000000 0x00000000  or=0x00000000
+  FBP-D  midfb@0x100000000: 0x00000000 0x00000000 0x00000000 0x00000000  or=0x00000000
+  FBP-E  frts[0..0x1000] crc32=0x38E3FFEE  zerocrc=0x38E3FFEE  (all zero, consistent with C)
+  FBP-F  dmem->frts wrote 0xA5F00FB5.. to 0x1F7E00000 (256 bytes)
+  FBP-G  readback 0x6C617470 0x00080008 0x00000090 0x00000000  MISMATCH (nonzero, not ours - looks like stale DMEM, not the address)
+  FBP-G  first bad word idx=0 got=0x6C617470 want=0xA5F00FB5
+  FBP-G  NOTE: nonzero junk here means the write did not land where we read. Combined with FBP-C ZERO this points at the address, not at the transfer.
+  FBP    VERDICT ctrlA=PASS frtsRead=zero write=sent roundTrip=FAIL conclusion=frts-NOT-reachable-via-dma
+  FBP    CONCLUSION: 0x1F7E00000 is not addressable by the GSP dma engine (C reads zero, E matches no data, G does not return our pattern).
+  FBP    CONCLUSION: the frts region cannot be filled directly. Work on the mapper command instead - gfwImageSize/flags in readVbiosDesc; see docs/70HX-NEXT-STEPS.md S4a.
+  FBP    ==== probe done ====
+  TIME  t=5438??  ????? FB ?????????
+  TIME  t=16094??  ?? ??????? ???? (????????? ?????????)
+  PROBE  E1-?????-BL WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+  PROBE  E2-??-fwsec WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+  FWSEC   ????? ?????????: CRC32 ????=0xE735DD44 ?????=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x01F7E000/0x01F7EE00 cpuctl=0x00000000 dbg=0xDA550000 expect=0x01F7E000/0x01F7EE00
+  WAIT   *** WPR2 ?????????? lo=0x01F7E000 hi=0x01F7EE00 ????? 0 ms ***
+  OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+  OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+  OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+  OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+  OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+  OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+  OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+  OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+  PROBE  ?????-????????-0x10..0x1F WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  PROBE  ?????-return-TRUE WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  PROBE  E2-?????-fwsec WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  PROBE  E3-?????-ResetIntoRiscv WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+  PROBE  E5-?????-?????????????? WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+  FLRX   WPR2 ???????????? ????? V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** ?? ?????????? ***
+  PROBE  ?????-???????-???? WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+  TIME  t=31273??  ?????? ???? ????????
+  GEN2  ?????????: fire=0 have2=1 enable=0 -> ???? ????????
+  STG   enter gen2 block fire=0 have2=1 enable=0
+  STG   gen2: no branch taken (have2=1 success=0 direct=0 early=0) - falling through
+  PROBE  E1-?????-BL WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+  PROBE  E2-??-fwsec WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+  FWSEC   ????? ?????????: CRC32 ????=0xE735DD44 ?????=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x01F7E000/0x01F7EE00 cpuctl=0x00000000 dbg=0xDA550000 expect=0x01F7E000/0x01F7EE00
+  WAIT   *** WPR2 ?????????? lo=0x01F7E000 hi=0x01F7EE00 ????? 0 ms ***
+  OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+  OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+  OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+  OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+  OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+  OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+  OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+  OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+  PROBE  ?????-????????-0x10..0x1F WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  PROBE  ?????-return-TRUE WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  PROBE  E2-?????-fwsec WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  PROBE  E3-?????-ResetIntoRiscv WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+  PROBE  E5-?????-?????????????? WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+  FLRX   WPR2 ???????????? ????? V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** ?? ?????????? ***
+  BOOTER iters=5 ?? 67.889?? PLM-OPEN
+  BOOTER iters=5 ?? 67.859?? HALT
+  BOOTER iters=5 ?? 67.848?? HALT
+  BOOTER iters=5 ?? 67.856?? HALT
+  STG   reached selector block success=0 direct=0 early=0 gen2Fire=0
+  FUSE   before 0x00823780 = 0xBADF5040
+  FUSE   before 0x00823784 = 0xBADF5040
+  FUSE   before 0x00823788 = 0xBADF5040
+  FUSE   before 0x0082378C = 0xBADF5040
+  FUSE   before 0x00823790 = 0xBADF5040
+  FUSE   before 0x00823794 = 0xBADF5040
+  FUSE   before 0x00823798 = 0xBADF5040
+  FUSE   before 0x0082379C = 0xBADF5040
+  FUSE   before 0x008237A0 = 0xBADF5040
+  FUSE   before 0x008237A4 = 0xBADF5040
+  FUSE   before 0x008237A8 = 0xBADF5040
+  FUSE   before 0x008237AC = 0xBADF5040
+  FUSE   before 0x008237B0 = 0xBADF5040
+  FUSE   before 0x008237B4 = 0xBADF5040
+  FUSE   before 0x008237B8 = 0xBADF5040
+  FUSE   before 0x008237BC = 0xBADF5040
+  FUSE   before 0x008237C0 = 0xBADF5040
+  FUSE   before 0x008237C4 = 0xBADF5040
+  FUSE   before 0x008237C8 = 0xBADF5040
+  FUSE   before 0x008237CC = 0xBADF5040
+  FUSE   before 0x008237D0 = 0xBADF5040
+  FUSE   before 0x008237D4 = 0xBADF5040
+  FUSE   before 0x008237D8 = 0xBADF5040
+  FUSE   before 0x008237DC = 0xBADF5040
+  FUSE   before 0x008237E0 = 0xBADF5040
+  FUSE   before 0x008237E4 = 0xBADF5040
+  FUSE   before 0x008237E8 = 0xBADF5040
+  FUSE   before 0x008237EC = 0xBADF5040
+  FUSE   before 0x008237F0 = 0xBADF5040
+  FUSE   before 0x008237F4 = 0xBADF5040
+  FUSE   before 0x008237F8 = 0xBADF5040
+  FUSE   before 0x008237FC = 0xBADF5040
+  FUSE   before 0x00823800 = 0xFFFFFFFF
+  FUSE   before 0x00823804 = 0xFFFFFFFF
+  FUSE   before 0x00823808 = 0x01100380
+  FUSE   before 0x0082380C = 0x00888888
+  FUSE   before 0x00823810 = 0x002AAAAA
+  FUSE   before 0x00823814 = 0x00000033  <- NV_FUSE_FEATURE_READOUT (only ECC_DRAM doc'd)
+  FUSE   before 0x00823818 = 0x016DB6ED
+  FUSE   before 0x0082381C = 0x00000000  <- SS0 (we write here)
+  FUSE   before 0x00823820 = 0x00000000  <- SS1 (we write here)
+  FUSE   before 0x00823824 = 0x00000001
+  FUSE   before 0x00823828 = 0x00000000
+  FUSE   before 0x0082382C = 0x00000008
+  FUSE   before 0x00823830 = 0x00000003
+  FUSE   before 0x00823834 = 0x00000003
+  FUSE   before 0x00823838 = 0x00000001
+  FUSE   before 0x0082383C = 0xBADF5040
+  STG   PLM 0xFFFFFFFF -> 0xFFFFFFFF readback 0xFFFFFFFF OPEN
+  STG   selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 written OK
+  STG   is_selectors_written()=1  (??? ??????????: ???????????? ?????? ??? ??????????; ????? ?? ??????????)
+  FUSE   CHANGED 0x00823818: 0x016DB6ED -> 0x00000000 (xor 0x016DB6ED)  <- UNREQUESTED SIDE EFFECT
+  FUSE   CHANGED 0x0082381C: 0x00000000 -> 0x88888888 (xor 0x88888888)
+  FUSE   CHANGED 0x00823820: 0x00000000 -> 0x00000008 (xor 0x00000008)
+  FUSE   3 of 48 changed; FEATURE_READOUT=0x00000033->0x00000033 UNCHANGED (?? ???? ??????????????? ?????? ??? ECC_DRAM ??? 16 - ??? ?? ??????? ??????)
+  PROBE  0x0082380C = 0x00888888 (???????? ? ????????), 0x00823810 = 0x002AAAAA
+  PROBE  ????????? -> ???? 0x88888888 (???????? ??????? ????)
+  PROBE  readback 0x0082380C = 0x00888888 NOT STUCK (???????? ??? ??????????) | 0x00823810 = 0x002AAAAA (?? ?????????)
+  PREFLR PLM=0xFFFFFFFF SS0=0x88888888 SS1=0x00000008 WPR2=0x1FFFFE00/0x00000000 GFW=0xBADF1100 dbg=0xDA550000 cpuctl=0x00000010 scratch0e=0x00000000
+  PREFLR want SS0=0x88888888 SS1=0x00000008 -> written OK
+  FLRX   do_flr() ????????, ?????? MMIO ?? ????????
+  MC     g_mcIndex=0 g_mcCount=2 g_mcAdvance=1 -> BootNext=self ???????? (SINGLE_CARD_ONLY=1): ???????????? ?? ?????? = POST = ???????? fuse-shadow
+  STG   reached 'done' label
+  STG   post-FLR: MMIO ??????????, ?????? ????? ?????? ?? ??????? ?? FLR
+  END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF WPR2=0x1FFFFE00/0x00000000 dbg=0xDA550000 cpuctl=0x00000010 scratch0e=0x00000000
+  END   ---- end of log ----
+
+--- что делать дальше ---
+  ШАГ 1 (проба FB): ctrlA=PASS frtsRead=zero write=sent roundTrip=FAIL conclusion=frts-NOT-reachable-via-dma
+    -> FB по 0x1F7E00000 недоступен: работать с командой маппера
+       (gfwImageSize в readVbiosDesc) — см. docs/70HX-NEXT-STEPS.md §4a.

@@ -3125,24 +3125,41 @@ static void
 render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                       UINT64 fwsecPhys, UINT64 v67Phys)
 {
-    /* Ровно две маски-предусловия GFX_SPEED_SELECT. Обе в таблице g_rj16,
-     * обе по замеру 1r заперты (XOR=0x70 -> заперты биты 4,5,6). */
-    static const UINT32 tgt[2] = { 0x00823800U, 0x00823B04U };
+    /* ОКНО XVE — «дверь» GFX_SPEED_SELECT. Это написано в нашем же коде
+     * (unlock_v2.c:1760): «окно XVE (0x88xxx, «дверь» GFX_SPEED_SELECT)».
+     * Независимо то же называют референс (docs/REGISTERS.md: 0x88FE8 =
+     * «XVE mask», в таблице Render/движки) и iatethelogs (открывает 0x88FE8).
+     *
+     * Первый прогон (v3.08) целился в 0x823B04 по комментарию v2.100
+     * («липнет только при открытом PLM 0x823b04») и в 0x823800. Итог:
+     *   0x00823800 -> 0xFFFFFFFF ОТКРЫТА (polls=0)   механизм рабочий
+     *   0x00823B04 -> 0xFFFFFF8F   3 попытки по 1000 polls, не сдвинулась
+     * То есть v2.100-комментарий про 0x823B04 — единственный источник этого
+     * требования, и на 70HX он не подтвердился. А 0x823800, который
+     * референс называет вполне достаточным («без него GFX_SEL не пишется»),
+     * открылся — и GFX_SPEED_SELECT всё равно не встал. Значит дверь
+     * другая, и наш собственный комментарий называет её прямо.
+     *
+     * Шесть адресов окна XVE из таблицы g_rj16. Порядок — как в таблице.
+     */
+    static const UINT32 tgt[6] = { 0x00088FE8U, 0x00088FECU, 0x00088FF0U,
+                                   0x00088FF4U, 0x00088FF8U, 0x00088AB4U };
+#define NTGT ((INTN)(sizeof(tgt) / sizeof(tgt[0])))
     volatile UINT32 *pv = (volatile UINT32 *)(UINTN)(v67Phys + 0xf948);
     volatile UINT32 *pa = (volatile UINT32 *)(UINTN)(v67Phys + 0xf960);
     BOOLEAN fwsecDone = FALSE;
     INTN pass, k, tries, done;
-    UINT32 v, m, saveBar, wLo, wHi;
+    UINT32 v, saveBar, wLo, wHi;
 
-    ulogf(L"G2RMK  %s === открытие масок GFX_SPEED_SELECT через ботер#2 ===\n",
-          tag);
-    ulogf(L"G2RMK  %s цели: 0x00823800 (PLM стр.0x8238xx), 0x00823B04 "
-          L"(маска рендера); до: 0x%08x / 0x%08x\n", tag,
-          mmio_read32(0x00823800U), mmio_read32(0x00823B04U));
+    ulogf(L"G2RMK  %s === открытие окна XVE (дверь GFX_SPEED_SELECT) "
+          L"через ботер#2 ===\n", tag);
+    for (k = 0; k < NTGT; k++)
+        ulogf(L"G2RMK  %s ДО  0x%08x = 0x%08x\n", tag, tgt[k],
+              mmio_read32(tgt[k]));
 
-    for (pass = 0; pass < 3; pass++) {
+    for (pass = 0; pass < 2; pass++) {
         done = 0;
-        for (k = 0; k < 2; k++) {
+        for (k = 0; k < NTGT; k++) {
             if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) { done++; continue; }
 
             /* --- FLR-разделение, 1:1 как в боевом цикле таблицы --------- */
@@ -3187,32 +3204,41 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                 uefi_call_wrapper(BS->Stall, 1, 1000);
                 v = mmio_read32(tgt[k]);
             }
-            ulogf(L"G2RMK  %s п%d 0x%08x стало 0x%08x %s (polls=%d) "
-                  L"WPR2=0x%08x/0x%08x %s\n", tag, (INTN)pass + 1, tgt[k], v,
+            ulogf(L"G2RMK  %s п%d 0x%08x стало 0x%08x %s (polls=%d)\n",
+                  tag, (INTN)pass + 1, tgt[k], v,
                   (v == 0xFFFFFFFFU) ? L"ОТКРЫТА" : L"осталась запертой",
-                  (INTN)tries,
-                  mmio_read32(REG_PFB_MMU_WPR2_LO),
-                  mmio_read32(REG_PFB_MMU_WPR2_HI),
-                  (mmio_read32(REG_PFB_MMU_WPR2_LO) == wLo &&
-                   mmio_read32(REG_PFB_MMU_WPR2_HI) == wHi)
-                      ? L"WPR2 OK" : L"*** WPR2 НЕ УДЕРЖАЛСЯ ***");
+                  (INTN)tries);
             if (v == 0xFFFFFFFFU) done++;
         }
-        ulogf(L"G2RMK  %s проход %d: открыто %d из 2\n", tag,
-              (INTN)pass + 1, (INTN)done);
-        if (done == 2) break;
+        ulogf(L"G2RMK  %s проход %d: открыто %d из %d\n", tag,
+              (INTN)pass + 1, (INTN)done, (INTN)NTGT);
+        if (done == NTGT) break;
         uefi_call_wrapper(BS->Stall, 1, 20000);
     }
 
+    for (k = 0; k < NTGT; k++)
+        ulogf(L"G2RMK  %s ПОСЛЕ 0x%08x = 0x%08x %s\n", tag, tgt[k],
+              mmio_read32(tgt[k]),
+              (mmio_read32(tgt[k]) == 0xFFFFFFFFU) ? L"ОТКРЫТА" : L"заперта");
+
+    /* 0x823800 открылся в прошлом прогоне и этого тоже недостаточно —
+     * показываем, что он по-прежнему открыт. 0x823B04 для информации:
+     * он не подтвердился как условие (3 попытки, ноль). */
+    done = 0;
+    for (k = 0; k < NTGT; k++)
+        if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) done++;
     v = mmio_read32(0x00823800U);
-    m = mmio_read32(0x00823B04U);
-    ulogf(L"G2RMS  %s ИТОГ: 0x823800=0x%08x %s | 0x823B04=0x%08x %s | "
-          L"GFX-гейт %s\n", tag, v,
-          (v == 0xFFFFFFFFU) ? L"ОТКРЫТ" : L"ЗАПЕРТА", m,
-          (m == 0xFFFFFFFFU) ? L"ОТКРЫТ" : L"ЗАПЕРТА",
-          (v == 0xFFFFFFFFU && m == 0xFFFFFFFFU)
-             ? L"ОТКРЫТ, GFX_SPEED_SELECT может встать"
-             : L"закрыт, GFX_SPEED_SELECT не встанет");
+    ulogf(L"G2RMS  %s ИТОГ: окно XVE открыто %d из %d | 0x823800=0x%08x | "
+          L"0x823B04=0x%08x | WPR2=0x%08x/0x%08x %s | GFX-гейт %s\n", tag,
+          (INTN)done, (INTN)NTGT, v, mmio_read32(0x00823B04U),
+          mmio_read32(REG_PFB_MMU_WPR2_LO),
+          mmio_read32(REG_PFB_MMU_WPR2_HI),
+          (mmio_read32(REG_PFB_MMU_WPR2_LO) == TARGET_WPR2_LO &&
+           mmio_read32(REG_PFB_MMU_WPR2_HI) == TARGET_WPR2_HI)
+              ? L"ожидаемое" : L"*** НЕ ОЖИДАЕМОЕ ***",
+          (done > 0) ? L"открыт, GFX_SPEED_SELECT может встать"
+                     : L"закрыт, GFX_SPEED_SELECT не встанет");
+#undef NTGT
 }
 #endif /* RENDER_MASKS */
 
