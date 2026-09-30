@@ -2036,6 +2036,16 @@ gsp_dma_wait_not_full(void)
     }
     g_dmaFullTo++;
     g_dmaFullLast = mmio_read32(GSP_DMATRFCMD);
+#ifdef RENDER_MASKS
+    /* v3.13: ПРОБЕЛ БУДИЛЬНИКА. На 17 вызовах early_unlock_path набралось
+     * 1704 строки DMAQ - 80 % кольцевого лога, из-за чего начало прогона
+     * затиралось. Счётчики g_dmaFullTo/g_dmaIdleTo и их итоговая печать
+     * остаются, поэтому данные не теряются: полные первые 2 события,
+     * дальше каждая 32-я. Под #ifdef RENDER_MASKS - см. предупреждение
+     * в wpr2_probe: без ограждения откат v3n перестаёт быть тем бинарём,
+     * который дал x11.25, и это происходит МОЛЧА. */
+    if (g_dmaFullTo > 2 && (g_dmaFullTo % 32) != 0) return;
+#endif
     Print(L"fwsec: ВНИМАНИЕ DMA queue FULL (cmd=0x%08x)\n", g_dmaFullLast);
     ulogf(L"DMAQ   FULL timeout #%d cmd=0x%08x (bit0=FULL стоит, bit1=IDLE снят)\n",
           (INTN)g_dmaFullTo, (INTN)g_dmaFullLast);
@@ -2050,6 +2060,11 @@ gsp_dma_wait_idle(void)
     }
     g_dmaIdleTo++;
     g_dmaIdleLast = mmio_read32(GSP_DMATRFCMD);
+#ifdef RENDER_MASKS
+    /* см. комментарий в gsp_dma_wait_not_full: тот же пробел будильника
+     * и то же обязательное ограждение RENDER_MASKS */
+    if (g_dmaIdleTo > 2 && (g_dmaIdleTo % 32) != 0) return;
+#endif
     Print(L"fwsec: ВНИМАНИЕ DMA не IDLE (cmd=0x%08x)\n", g_dmaIdleLast);
     ulogf(L"DMAQ   IDLE timeout #%d cmd=0x%08x (bit1=IDLE стоит, bit0=FULL снят)\n",
           (INTN)g_dmaIdleTo, (INTN)g_dmaIdleLast);
@@ -3119,15 +3134,35 @@ gen2_gfx_try(const CHAR16 *tag)
               mmio_read32(REG_FEAT_OVR_SM_SPD_1));
     }
 
-    /* возврат к подтверждённо рабочему 0x4 */
-    mmio_write32(0x00823830U, 0x00000004U);
+    /* Возврат к значению для теста в игре.
+     *
+     * ЗАМЕР v3.13 (скан 0x0..0x7): ВСЕ ВОСЕМЬ значений ПРИНЯТЫ, readback
+     * точно совпал с записанным в каждом случае. Значит это обычный
+     * 3-битный RW-регистр, а не enable-флаг с валидацией, и референсное
+     * значение 0x4 — не «единственно верное», а просто то, которое
+     * получилось у него. FEAT_READOUT_0 bit8 остался 0 на всех восьми,
+     * то есть bit8 и этот селектор не связаны.
+     *
+     * Ставим 0x7 — максимум диапазона, максимальная разница с рабочим
+     * 0x4, значит максимум информации от одного замера в игре. Если fps
+     * вырастет — селектор действительно подбирает скорость и мы нашли
+     * рычаг. Если останется 50 — значит 50 fps дали маски, а селектор на
+     * рендер не влияет, и это тоже ответ, закрывающий вопрос.
+     *
+     * Риск: 0x7 принят регистром, но это самый высокий бин. Если карта
+     * окажется нестабильна в игре — откат v3n, минута. */
+    mmio_write32(0x00823830U, 0x00000007U);
     uefi_call_wrapper(BS->Stall, 1, 100000);
     v     = mmio_read32(0x00823830U);
     feat1 = mmio_read32(0x00823814U);
-    ulogf(L"G2SUM  %s СКАН ЗАВЕРШЁН, вернули 0x4: readback 0x%08x %s; "
-          L"FEAT_READOUT_0=0x%08x bit8=%u\n",
-          tag, v, (v == 0x00000004U) ? L"OK" : L"*** НЕ УДЕРЖАЛСЯ ***",
-          feat1, (INTN)((feat1 >> 8) & 1u));
+    ulogf(L"G2SUM  %s СКАН ЗАВЕРШЁН, оставили 0x7 (максимум диапазона): "
+          L"readback 0x%08x %s; FEAT_READOUT_0=0x%08x bit8=%u; "
+          L"DMAQ full=%d idle=%d; SS0=0x%08x SS1=0x%08x\n",
+          tag, v, (v == 0x00000007U) ? L"OK" : L"*** НЕ УДЕРЖАЛСЯ ***",
+          feat1, (INTN)((feat1 >> 8) & 1u),
+          (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo,
+          mmio_read32(REG_FEAT_OVR_SM_SPD),
+          mmio_read32(REG_FEAT_OVR_SM_SPD_1));
 }
 #endif /* GEN2_LINK_TRY */
 
