@@ -420,6 +420,39 @@ static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
  * После теста это значение надо вернуть в 1, если сработает (а). */
 #define PROBE_ISSUE_RATE_MOD 0
 #endif
+
+/* v3.15: privLevelMask (NV_PFB_MMU_WPR2_PLM).
+ *
+ * Комментарий в okchk_check() в нашем же коде говорит: «без его нуля
+ * значение WPR2 может быть прикрытым, и "успех" окажется ложным».
+ * То есть самый старый и самый непрочитанный прямой регистр анлока.
+ *
+ * Текущее значение по логу: 0x0004CB8F / 0x0045CB8F (то есть НЕ ноль,
+ * и не нулевое ни в младшей, ни в старшей половине).
+ *
+ * Ставим ПОСЛЕ того, как compute-разблокировка уже отработала и
+ * проверена, и ПЕРЕД записью GFX_SPEED_SELECT. Порядок важен: обнуление
+ * не должно иметь возможности сломать уже работающий путь FWSEC, а
+ * посмотреть на GFX_SPEED_SELECT надо уже после изменения масок.
+ *
+ * Критерий - только fps в игре и неизменность OKCHK. Если FWSEC
+ * рассыплется, это будет видно по wpr2Lo/wpr2Hi/frtsErrCode, а не
+ * «заметим позже». */
+#ifndef PROBE_PRIV_LEVEL_MASK
+#define PROBE_PRIV_LEVEL_MASK 0
+#endif
+
+/* v3.15: скан BAR0 на размер кристалла.
+ *
+ * ВАЖНО, ПОЧЕМУ ЗА ФЛАГОМ: функция ниже не пустая, и если её оставить
+ * безусловной, она меняет КАЖДУЮ сборку, включая откатную unlock_v3n.
+ * Откат обязан оставаться побайтово тем же самым - это единственная
+ * точка возврата. Ошибка ровно такого класса уже дважды ловила нас
+ * молча, поэтому проверяем md5 отката в каждом цикле. */
+#ifndef CHIP_SIZE_SCAN
+#define CHIP_SIZE_SCAN 0
+#endif
+
 #define REG_PCIE_FUSE_OVR       0x00823810UL
 #define REG_PFB_MMU_WPR2_LO     0x001FA824UL
 #define REG_PFB_MMU_WPR2_HI     0x001FA828UL
@@ -2885,6 +2918,62 @@ static const struct { UINT32 addr; const CHAR16 *name; } g_gen2regs[] = {
     { 0x00823830U, L"GFX_SPEED_SEL"},
 };
 #define GEN2REGS_N ((INTN)(sizeof(g_gen2regs)/sizeof(g_gen2regs[0])))
+
+#if CHIP_SIZE_SCAN
+/* --- Скан конфигурационных окон BAR0 на кандидаты «размер кристалла» ---
+ *
+ * Кандидаты: 30 = наш SM, 56 = SM 50HX, плюс реальные конфиги GA104
+ * (38/40/46/48) и TU102 (68/72). Одна сборка годится для обеих карт,
+ * поэтому сравнение будет адрес-к-адресу, а не «вроде похожее».
+ *
+ * Значения шины памяти (256/320) и L2 (2/5) намеренно НЕ в списке: они
+ * слишком частые и забили бы лог. Их проверяем позже, когда найдём
+ * кандидата на SM. */
+static const UINT32 g_chipCand[] = { 30, 38, 40, 46, 48, 56, 68, 72 };
+#define CHIPCAND_N ((INTN)(sizeof(g_chipCand) / sizeof(g_chipCand[0])))
+
+static const struct { UINT32 base, size; } g_chipWin[] = {
+    { 0x00820000UL, 0x00020000UL },   /* fuse-shadow + priv-страница 0x82xxxx */
+    { 0x00080000UL, 0x00010000UL },   /* misc / окно XVE 0x88xxx           */
+};
+#define CHIPWIN_N ((INTN)(sizeof(g_chipWin) / sizeof(g_chipWin[0])))
+
+#define CHIPLOG_MAX 160               /* лог кольцевой, переполнять нельзя */
+
+static void chip_size_scan(const CHAR16 *tag)
+{
+    INTN w, printed = 0, matched = 0;
+
+    for (w = 0; w < CHIPWIN_N; w++) {
+        UINT32 base = g_chipWin[w].base;
+        UINT32 end  = base + g_chipWin[w].size;
+        UINT32 a;
+        INTN   hits = 0;
+
+        for (a = base; a < end; a += 4) {
+            UINT32 v = mmio_read32(a);
+            INTN   c;
+            for (c = 0; c < CHIPCAND_N; c++) {
+                if (v == g_chipCand[c]) {
+                    hits++;
+                    if (printed < CHIPLOG_MAX) {
+                        ulogf(L"CHIP  %s 0x%08x = %u (0x%08x)\n",
+                              tag, a, (UINTN)v, v);
+                        printed++;
+                    }
+                    break;
+                }
+            }
+        }
+        matched += hits;
+        ulogf(L"CHIPS %s окно 0x%08x..0x%08x: совпадений %d\n",
+              tag, base, end - 4, (INTN)hits);
+    }
+    ulogf(L"CHIPS %s ИТОГО совпадений %d, напечатано %d%s\n",
+          tag, (INTN)matched, (INTN)printed,
+          (matched > printed) ? L" (лог обрезан)" : L"");
+}
+#endif /* CHIP_SIZE_SCAN */
 
 static void
 gen2_readonly_dump(const CHAR16 *tag)
@@ -9275,11 +9364,45 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * и MMIO не читается (см. комментарий выше про «v2.88: БЕЗ FLR»).
          * Только чтение: ни одной записи, ни в GPU, ни в конфиг PCIe. */
         gen2_readonly_dump(L"после-анлока");
+#if CHIP_SIZE_SCAN
+        /* v3.15: ищем, где хранится размер кристалла. Только чтение. */
+        chip_size_scan(L"после-анлока");
+#endif
 #ifdef GEN2_LINK_TRY
         /* v3.07 ШАГ 1: GFX_SPEED_SELECT = 4, рендер-селектор. Ставим ЗДЕСЬ —
          * после снимка состояния и блока селекторов, до do_flr() ниже: после
          * FLR функция мертва и readback невозможен. Линком не управляем, маски
          * не трогаем, NVRAM не пишем. */
+#if PROBE_PRIV_LEVEL_MASK
+        /* v3.15: обнуляем privLevelMask. Наш комментарий в okchk_check()
+         * утверждает, что без нуля WPR2 может быть прикрыт и «успех» ложен.
+         * Стоим здесь: разблокировка уже отработала и проверена, до
+         * GFX_SPEED_SELECT ещё не дошли. */
+        {
+            UINT32 p0 = mmio_read32(REG_PFB_MMU_WPR2_PLM);
+            UINT32 p1 = mmio_read32(REG_PFB_MMU_WPR2_PLM + 4);
+            UINT32 l0, l1;
+            mmio_write32(REG_PFB_MMU_WPR2_PLM, 0);
+            mmio_write32(REG_PFB_MMU_WPR2_PLM + 4, 0);
+            uefi_call_wrapper(BS->Stall, 1, 100000);
+            ulogf(L"PLMZ  before 0x%08x/0x%08x -> write 0 -> after 0x%08x/0x%08x %s\n",
+                  p0, p1,
+                  mmio_read32(REG_PFB_MMU_WPR2_PLM),
+                  mmio_read32(REG_PFB_MMU_WPR2_PLM + 4),
+                  ((mmio_read32(REG_PFB_MMU_WPR2_PLM) == 0) &&
+                   (mmio_read32(REG_PFB_MMU_WPR2_PLM + 4) == 0))
+                      ? L"STUCK" : L"NOT STUCK (RO)");
+            l0 = mmio_read32(REG_PFB_MMU_WPR2_LO);
+            l1 = mmio_read32(REG_PFB_MMU_WPR2_HI);
+            ulogf(L"PLMZ  wpr2Lo=0x%08x (want 0x%08x) %s | wpr2Hi=0x%08x %s\n",
+                  l0, TARGET_WPR2_LO, (l0 == TARGET_WPR2_LO) ? L"OK" : L"CHANGED",
+                  l1, (l1 == TARGET_WPR2_HI) ? L"OK" : L"CHANGED");
+            ulogf(L"PLMZ  SS0=0x%08x SS1=0x%08x (не должны сбиться: 0x%08x/0x%08x)\n",
+                  mmio_read32(REG_FEAT_OVR_SM_SPD),
+                  mmio_read32(REG_FEAT_OVR_SM_SPD_1),
+                  VAL_SS0_UNLOCKED, VAL_SS1_UNLOCKED);
+        }
+#endif
         gen2_gfx_try(L"шаг1-GFX_SEL");
 #endif
 

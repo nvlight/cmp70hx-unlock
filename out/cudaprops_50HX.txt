@@ -1,0 +1,31 @@
+﻿devices.visible = 1
+
+[device 0]
+  name                               = NVIDIA CMP 50HX
+  compute_capability                 = 7.5
+  multiProcessorCount                = 56
+  maxThreadsPerMultiProcessor        = 1024
+  maxRegistersPerMultiprocessor      = 65536
+  maxSharedMemoryPerMultiprocessor   = 65536
+  maxBlocksPerMultiProcessor         = 16
+  warpSize                           = 32
+  maxThreadsPerBlock                 = 1024
+  regsPerBlock                       = 65536
+  sharedMemPerBlock                  = 49152
+  l2CacheSize                        = 5242880 bytes
+  memoryBusWidth                     = 320 bit
+  memoryClockRate                    = 7001000 kHz
+  clockRate                          = 1545000 kHz
+  totalGlobalMem                     = 21175926784 bytes
+  integrated                         = 0
+  isMultiGpuBoard                    = 0
+  concurrentKernels                  = 1
+  cooperativeLaunch                  = 1
+  unifiedAddressing                  = 1
+  asyncEngineCount                   = 6
+  canMapHostMemory                   = 1
+  ECCEnabled                         = 0
+  derived_mem_bandwidth              = 560.1 GB/s (2x, raw clock)
+  derived_sm_clock                   = 1545 MHz
+  deviceOrdinal                      = 0
+  pci                                = 0000:01:00.0

@@ -1,0 +1,31 @@
+﻿devices.visible = 1
+
+[device 0]
+  name                               = NVIDIA CMP 70HX
+  compute_capability                 = 8.6
+  multiProcessorCount                = 30
+  maxThreadsPerMultiProcessor        = 1536
+  maxRegistersPerMultiprocessor      = 65536
+  maxSharedMemoryPerMultiprocessor   = 102400
+  maxBlocksPerMultiProcessor         = 16
+  warpSize                           = 32
+  maxThreadsPerBlock                 = 1024
+  regsPerBlock                       = 65536
+  sharedMemPerBlock                  = 49152
+  l2CacheSize                        = 2097152 bytes
+  memoryBusWidth                     = 256 bit
+  memoryClockRate                    = 9501000 kHz
+  clockRate                          = 1395000 kHz
+  totalGlobalMem                     = 8589475840 bytes
+  integrated                         = 0
+  isMultiGpuBoard                    = 0
+  concurrentKernels                  = 1
+  cooperativeLaunch                  = 1
+  unifiedAddressing                  = 1
+  asyncEngineCount                   = 5
+  canMapHostMemory                   = 1
+  ECCEnabled                         = 0
+  derived_mem_bandwidth              = 608.1 GB/s (2x, raw clock)
+  derived_sm_clock                   = 1395 MHz
+  deviceOrdinal                      = 0
+  pci                                = 0000:01:00.0
