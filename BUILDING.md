@@ -160,6 +160,31 @@ steps are the difference between a verified change and a change that is merely
 compiled. Skipping them makes logs lie: you end up reading a log written by
 the *previous* build and drawing conclusions from it.
 
+### 6.0 The rollback must stay byte-identical — CHECK IT EVERY BUILD
+
+`unlock_v3n.efi` is the only way back. Expected:
+
+```
+md5    1863C4B1EBB8BF038A5C630001BB671A
+size   648192 bytes
+```
+
+**This breaks silently and without a size change.** In one session it broke
+twice, and both times the file was still exactly 648192 bytes — only the
+md5 differed. Causes, in order of likelihood:
+
+1. a `ulogf()` line added outside `#ifdef` — the string is compiled into
+   every build, including the rollback;
+2. a helper function or table added without a build flag — it lands in
+   every build too.
+
+So: **any probe, scan or diagnostic must be behind a flag that defaults to
+0 and is set to 1 only in `unlock_v3r`.** An `#else` branch may be empty,
+but it must not contain code or log strings. Verify the content, not just
+the file: search both binaries for the probe's marker string (note the log
+strings are UTF-16, so an ASCII search finds nothing and reports a false
+all-clear).
+
 ### 6.1 After any change to `src/unlock_v2.c` → flash the stick, unasked
 
 Once a build of `unlock_v3n.efi` exists, the following **must** happen
