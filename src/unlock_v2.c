@@ -453,35 +453,6 @@ static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
 #define CHIP_SIZE_SCAN 0
 #endif
 
-/* v3.16: кандидат в регистр числа SM.
- *
- * Скан CHIP_SIZE_SCAN нашёл в окне 0x8C4xx:
- *     0x0008C440 = 30    <- ровно cudaGetDeviceProperties multiProcessorCount
- *     0x0008C448 = 30    <- та же пара, соседнее слово
- *     0x0008C48C = 48    <- полное число SM у GA104
- * Два соседних слова с одинаковым значением плюс третье с полным размером
- * кристалла - это сильный кандидат, но пока КОРРЕЛЯЦИЯ, а не переключатель.
- *
- * Критерий успеха прежний и жёсткий: значение принялось регистром НЕ значит
- * ничего. Проверка внешняя - cudaGetDeviceProperties(multiProcessorCount)
- * после загрузки Windows и fps в игре. Если число SM не изменилось, то
- * регистр не тот, и мы это фиксируем как отрицательный результат.
- *
- * Значение 48, а не 56: 56 это конфигурация TU102 у эталонной карты, а у
- * GA104 полный кристалл - 48 SM. Просить карту о чужом размере бессмысленно.
- *
- * Пишем оба слова пары. Риск не в самом значении, а в том, что адрес может
- * оказаться не тем, чем кажется: 0x8C4xx соседствует с PCIe-конфигом
- * (0x8C040 = LINK_CONFIG_0 в нашем дампе). Откат v3n на флешке всегда
- * рядом, поэтому цена ошибки - одна перезагрузка. */
-#ifndef PROBE_SM_COUNT_REG
-#define PROBE_SM_COUNT_REG 0
-#endif
-
-#define REG_SM_COUNT_CAND0  0x0008C440UL
-#define REG_SM_COUNT_CAND1  0x0008C448UL
-#define SM_COUNT_TARGET     48UL
-
 #define REG_PCIE_FUSE_OVR       0x00823810UL
 #define REG_PFB_MMU_WPR2_LO     0x001FA824UL
 #define REG_PFB_MMU_WPR2_HI     0x001FA828UL
@@ -9402,43 +9373,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * после снимка состояния и блока селекторов, до do_flr() ниже: после
          * FLR функция мертва и readback невозможен. Линком не управляем, маски
          * не трогаем, NVRAM не пишем. */
-#if PROBE_SM_COUNT_REG
-        /* v3.16: пробуем поднять число SM в паре 0x8C440/0x8C448.
-         * Стоим перед GFX_SPEED_SELECT: анлок к этому моменту отработал и
-         * проверен, а MMIO ещё живо. */
-        {
-            UINT32 c0 = mmio_read32(REG_SM_COUNT_CAND0);
-            UINT32 c1 = mmio_read32(REG_SM_COUNT_CAND1);
-            UINT32 n0 = mmio_read32(REG_SM_COUNT_CAND0 - 4);
-            UINT32 n1 = mmio_read32(REG_SM_COUNT_CAND0 + 4);
-            UINT32 n2 = mmio_read32(REG_SM_COUNT_CAND1 + 4);
-            UINT32 full = mmio_read32(0x0008C48CUL);
-            ulogf(L"SMCT  до: 0x%08x=%u 0x%08x=%u | контекст "
-                  L"0x%08x=%u 0x%08x=%u 0x%08x=%u полное=0x%08x=%u\n",
-                  REG_SM_COUNT_CAND0, (UINTN)c0, REG_SM_COUNT_CAND1, (UINTN)c1,
-                  REG_SM_COUNT_CAND0 - 4, (UINTN)n0, REG_SM_COUNT_CAND0 + 4, (UINTN)n1,
-                  REG_SM_COUNT_CAND1 + 4, (UINTN)n2, 0x0008C48CUL, (UINTN)full);
-            if (c0 != SM_COUNT_TARGET)
-                mmio_write32(REG_SM_COUNT_CAND0, SM_COUNT_TARGET);
-            if (c1 != SM_COUNT_TARGET)
-                mmio_write32(REG_SM_COUNT_CAND1, SM_COUNT_TARGET);
-            uefi_call_wrapper(BS->Stall, 1, 200000);
-            ulogf(L"SMCT  после: 0x%08x=%u %s | 0x%08x=%u %s (писали %u)\n",
-                  REG_SM_COUNT_CAND0,
-                  (UINTN)mmio_read32(REG_SM_COUNT_CAND0),
-                  (mmio_read32(REG_SM_COUNT_CAND0) == SM_COUNT_TARGET) ? L"STUCK" : L"NOT STUCK",
-                  REG_SM_COUNT_CAND1,
-                  (UINTN)mmio_read32(REG_SM_COUNT_CAND1),
-                  (mmio_read32(REG_SM_COUNT_CAND1) == SM_COUNT_TARGET) ? L"STUCK" : L"NOT STUCK",
-                  (UINTN)SM_COUNT_TARGET);
-            ulogf(L"SMCT  анлок цел? SS0=0x%08x SS1=0x%08x wpr2Lo=0x%08x "
-                  L"(хотим 0x%08x/0x%08x/0x%08x)\n",
-                  mmio_read32(REG_FEAT_OVR_SM_SPD),
-                  mmio_read32(REG_FEAT_OVR_SM_SPD_1),
-                  mmio_read32(REG_PFB_MMU_WPR2_LO),
-                  VAL_SS0_UNLOCKED, VAL_SS1_UNLOCKED, TARGET_WPR2_LO);
-        }
-#endif
 #if PROBE_PRIV_LEVEL_MASK
         /* v3.15: обнуляем privLevelMask. Наш комментарий в okchk_check()
          * утверждает, что без нуля WPR2 может быть прикрыт и «успех» ложен.
