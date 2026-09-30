@@ -3060,11 +3060,11 @@ gen2_gfx_try(const CHAR16 *tag)
      * результат был бы неоднозначен: не встало из-за маски или из-за
      * порядка. */
     for (t = 0; t < 5; t++) {
-        mmio_write32(0x00823830U, 0x00000004U);
+        mmio_write32(0x00823830U, 0x00000005U);
         uefi_call_wrapper(BS->Stall, 1, 50000);
         v = mmio_read32(0x00823830U);
-        if (v == 0x00000004U) { okA = 1; break; }
-        ulogf(L"G2GFX  %s порядок A попытка %d: readback 0x%08x != 4, повтор\n",
+        if (v == 0x00000005U) { okA = 1; break; }
+        ulogf(L"G2GFX  %s порядок A попытка %d: readback 0x%08x != 5, повтор\n",
               tag, (INTN)t + 1, v);
         uefi_call_wrapper(BS->Stall, 1, 50000);
     }
@@ -3079,11 +3079,11 @@ gen2_gfx_try(const CHAR16 *tag)
         mmio_write32(REG_FEAT_OVR_SM_SPD_1, 0x00000008u);
         uefi_call_wrapper(BS->Stall, 1, 50000);
         for (t = 0; t < 5; t++) {
-            mmio_write32(0x00823830U, 0x00000004U);
+            mmio_write32(0x00823830U, 0x00000005U);
             uefi_call_wrapper(BS->Stall, 1, 50000);
             v = mmio_read32(0x00823830U);
-            if (v == 0x00000004U) { okB = 1; break; }
-            ulogf(L"G2GFX  %s порядок B попытка %d: readback 0x%08x != 4, повтор\n",
+            if (v == 0x00000005U) { okB = 1; break; }
+            ulogf(L"G2GFX  %s порядок B попытка %d: readback 0x%08x != 5, повтор\n",
                   tag, (INTN)t + 1, v);
             uefi_call_wrapper(BS->Stall, 1, 50000);
         }
@@ -3127,15 +3127,15 @@ gen2_gfx_try(const CHAR16 *tag)
      *
      * Ставим единственное измеренно рабочее значение. Проверять 0x5 и 0x6
      * имеет смысл, только если увидим, что игра стоит 0x4, а не 0x7. */
-    mmio_write32(0x00823830U, 0x00000004U);
+    mmio_write32(0x00823830U, 0x00000005U);
     uefi_call_wrapper(BS->Stall, 1, 100000);
     v     = mmio_read32(0x00823830U);
     feat1 = mmio_read32(0x00823814U);
-    ulogf(L"G2SUM  %s GFX_SPEED_SELECT=0x4 (50 fps, 135 Вт - измеренное; "
-          L"0x7 дало 9 fps, деградация): readback 0x%08x %s; "
+     ulogf(L"G2SUM  %s GFX_SPEED_SELECT=0x5 (test: 0x4=50 fps, 0x7=9 fps): "
+          L"readback 0x%08x %s; "
           L"FEAT_READOUT_0=0x%08x bit8=%u; DMAQ full=%d idle=%d; "
           L"SS0=0x%08x SS1=0x%08x\n",
-          tag, v, (v == 0x00000004U) ? L"OK" : L"*** НЕ УДЕРЖАЛСЯ ***",
+          tag, v, (v == 0x00000005U) ? L"OK" : L"*** НЕ УДЕРЖАЛСЯ ***",
           feat1, (INTN)((feat1 >> 8) & 1u),
           (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo,
           mmio_read32(REG_FEAT_OVR_SM_SPD),
