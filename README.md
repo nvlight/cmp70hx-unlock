@@ -1,102 +1,109 @@
-# 🎮 NVIDIA CMP Unlock for Windows — CMP 70HX / 90HX
+# 🎮 Разблокировка CMP 70HX
 
-🇬🇧 English | [🇷🇺 Русский](README.ru.md)
+Полная разблокировка вычислительной и графической мочи **NVIDIA CMP 70HX** (GA104, 8 ГБ, PCI ID `10de:248a`) в Windows — с помощью обычной флешки, EFI-загрузчика и **без перезагрузок**.
 
-Unlock the full computing and graphics power of the **NVIDIA CMP 70HX** (GA104, 8 GB, PCI ID `10de:248a`) or **CMP 90HX** (GA102, 10 GB, `10de:220d`) on any system with Windows — using a simple USB stick, an EFI bootloader, and **no reboots**.
+Анлок выполняется **до загрузки ОС**, поэтому Windows просто стартует с уже полностью открытой картой.
 
-The unlock runs **before any OS boots**, so Windows simply starts with the card already at full power.
 
-> ℹ️ **Scope of this tree.** The source started out targeting the CMP 90HX. This
-> port targets the **CMP 70HX**; the original 90HX is one command away
-> (`TARGET=90HX bash build.sh`). Every card-specific number lives in a single
-> `TARGET PROFILE` block at the top of `src/unlock_v2.c` and is *derived* from
-> the framebuffer size. What is field-proven versus extrapolated is spelled out
-> in [KNOWN-ISSUES.md](KNOWN-ISSUES.md) §13–16.
 
-> ## 🚧 CMP 70HX status as of 2026-09-29 — UNLOCK CONFIRMED
+> ℹ️ **О приведённом коде.** Исходники начинали с CMP 90HX. Этот порт
+> нацелен на **CMP 70HX**; оригинальный 90HX собирается обратно одной
+> командой `TARGET=90HX bash build.sh`. Всё, что зависит от карты, лежит
+> в одном блоке `TARGET PROFILE` в начале `src/unlock_v2.c` и **выводится**
+> из размера кадрового буфера. Что подтверждено на железе, а что
+> экстраполировано — в [KNOWN-ISSUES.md](KNOWN-ISSUES.md) §13–16.
+
+> ## 🚧 Статус 70HX на 2026-09-29 — АНЛОК ПОДТВЕРЖДЁН
 >
-> Measured with `llama-bench -m llama-2-7b.Q4_0.gguf -ngl 99 -p 512 -n 16`,
-> same model, same card, clean runs:
+> Замер: `llama-bench -m llama-2-7b.Q4_0.gguf -ngl 99 -p 512 -n 16`,
+> та же модель и та же карта, чистые прогоны:
 >
 > | | pp512 | tg16 |
 > |---|---|---|
-> | without the unlock (plain Windows boot) | 201.85 t/s | 32.50 t/s |
-> | **with the unlock (EFI + USB stick)** | **2262.22 t/s** | **102.38 t/s** |
-> | gain | **x11.25** | **x3.16** |
+> | без анлока (обычная загрузка Windows) | 201.85 t/s | 32.50 t/s |
+> | **с анлоком (EFI + флешка)** | **2262.22 t/s** | **102.38 t/s** |
+> | прирост | **x11.25** | **x3.16** |
 >
-> Compute is unlocked. The earlier 3D measurements (GPU-Z render test at
-> **75 W**, Cyberpunk at 9 FPS) are *not* affected by the unlock and were
-> never a valid success criterion: PGRAPH on CMP parts is gated by the
-> compute-only GSP-RM firmware, independently of the selectors
-> (bendy2's BAR0 analysis of five cards: PGRAPH top config is byte-identical
-> to an RTX 3090, so the silicon is there and simply is not initialised).
+> Вычислительный анлок работает. Прежние
+> ранее в 3D (render test GPU-Z — **75 Вт**, Cyberpunk 9 FPS)
+> не менялись от анлока и никогда не были
+> верным критерием: PGRAPH у CMP заблокирован
+> compute-only прошивкой GSP-RM независимо от
+> селекторов (разбор BAR0 пяти карт
+> bendy2: топ-конфиг PGRAPH совпадает по байтам
+> с RTX 3090, тем кремний есть, но просто не
+> инициализирован).
 >
 > ```
 > STG    selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 written OK
 > END    ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF
 > ```
 >
-> Those two lines alone prove nothing — `is_selectors_written()` is a
-> tautology and the application prints ТАВТОЛОГИЯ itself. The proof is the
-> table above. What is still open (second card, graphics, the 2262-vs-3705
-> gap to the 90HX) is in
-> [docs/70HX-PORT-STATUS.md](docs/70HX-PORT-STATUS.md).
+> Эти две строки сами по себе ни доказывают
+> ничего: `is_selectors_written()` — тавтология, и
+> само приложение само печатает
+> ТАВТОЛОГИЯ. Доказательство — таблица
+> выше. Оставшееся (вторая карта, графика,
+> разрыв 2262 против 3705 у 90HX) — в
+> [70HX-PORT-STATUS.md](docs/70HX-PORT-STATUS.md).
 >
-> The figures quoted below are from the field-proven **90HX** build.
-> PCIe Gen2 is off by default ([PORT-STATUS §3a](docs/70HX-PORT-STATUS.md));
+> Приведённые ниже цифры — по-прежнему результат проверенной сборки для
+> **90HX**. Домен PCIe Gen2 по умолчанию выключен
+> ([PORT-STATUS §3a](docs/70HX-PORT-STATUS.md)) — на сам анлок не влияет.
+>
+> Разбор причины, разбор VBIOS этой карты и история шагов:
+> **[docs/70HX-FINAL-SUMMARY.md](docs/70HX-FINAL-SUMMARY.md)** (с неё начать),
+> **[docs/70HX-PORT-STATUS.md](docs/70HX-PORT-STATUS.md)**,
+> **[docs/70HX-VBIOS-ANALYSIS.md](docs/70HX-VBIOS-ANALYSIS.md)**,
+> **[docs/70HX-NEXT-STEPS.md](docs/70HX-NEXT-STEPS.md)**.
 
-> ⚠️ **Honest expectations:** this is a mining card, and it is *not* a gaming
-> GPU replacement — no display outputs, PCIe Gen1 ×16 in the current release,
-> and gaming requires a community-patched driver (see below). Compute/AI is
-> what it excels at after the unlock. Details in [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
+## Что такое CMP 70HX / 90HX?
 
-## What are the CMP 70HX / 90HX?
+Обе карты — кристаллы семейства GA10x, которые NVIDIA продавала как **«только для майнинга»**. Прошивка урезает карту: производительность составляет малую долю реальной. Залоченная карта выдаёт ~230 t/s в llama-bench; разлоченная 90HX — **~3700 t/s** (в 16 раз больше).
 
-Both are GA10x dies sold by NVIDIA as **"mining-only" cards**. NVIDIA crippled them in firmware: performance is a fraction of what the die can do. The typical locked card delivers ~230 t/s on llama-bench; an unlocked 90HX delivers **~3700 t/s** (16× more).
+Этот проект возвращает кристаллу всю вычислительную мощь: EFI-приложение запускается с загрузочной флешки ещё до загрузки ОС. **Проект открыт** — исходники в [`src/`](src/), сборка описана в [BUILDING.md](BUILDING.md).
 
-This project re-enables the die's **compute** performance using an EFI application that runs from the bootable USB, before the OS loads. **It is open source** — see [`src/`](src/) and [BUILDING.md](BUILDING.md).
+**Что именно разблокировано на 70HX** ([подробно, п. 1k](docs/70HX-PORT-STATUS.md)):
 
-**What is actually unlocked on the 70HX** ([PORT-STATUS §1k](docs/70HX-PORT-STATUS.md)):
-
-| | state |
+| | состояние |
 |---|---|
-| compute | **unlocked**, ×11.25 on `pp512` |
-| lock mechanism | **issue-rate cap of 1/32** on FP32 and DP4A, fully lifted |
-| peripheral issue rate | **91–99.8 % of architectural peak**, no residual limits |
-| clock | 1545 MHz under load, no throttling, not the limiting factor |
-| cores | 3840 CUDA cores of 6144; the A/B is **done — the unlock does not change it** |
-| graphics | **not unlocked**: 75 W, 9 FPS. Blocked by firmware, independently of the selectors |
+| вычисления | **разблокированы**, ×11,25 по `pp512` |
+| механизм блокировки | **потолок issue-rate 1/32** на FP32 и DP4A, снят полностью |
+| периферийные issue-rate | **на 91–99,8 % от архитектурного пика**, остаточных лимитов нет |
+| частота | 1545 MHz под нагрузкой, троттлинга нет, потолком не является |
+| ядра | 3840 CUDA core из 6144; **A/B сделан — анлок это число не меняет** |
+| графика | **не разблокирована**: 75 Вт, 9 FPS. Блокировка прошивкой, независимая от селекторов |
 
-The A/B is the key result: a locked card delivers exactly **1/32** of peak
-on FP32 and DP4A (3.99 of 128, 2.00 of 64), while FP16, BF16 and INT32 are
-never limited at all. So the lock is an issue-rate cap, not disabled cores,
-and this unlock removes it completely.
+Ключевой результат A/B: заблокированная карта отдаёт ровно **1/32** от
+пика на FP32 и DP4A (3,99 из 128, 2,00 из 64), при этом FP16, BF16 и
+INT32 не ограничены никогда. То есть блокировка — это потолок выдачи
+команд, а не отключение ядер, и наш анлок снимает его целиком.
 
-That is the "compute limitations only" class, the same one bendy2 targets. For comparison, an unlocked **CMP 50HX** (GA107) on dartraiden's patched drivers also loses the graphics lock: 230 W under load, 3D playable, LLMs fast. So 50HX is ahead on graphics, and closing that on 70HX looks like separate work.
+Это класс «только вычислительные ограничения», тот же, что у bendy2. Для сравнения: у разблокированного **CMP 50HX** (GA107) на патчах от dartraiden снята и графика — 230 Вт под нагрузкой, 3D играет, LLM быстрый. То есть по графике 50HX уходит вперёд, и добиться этого на 70HX, судя по всему, отдельной работой.
 
-## How the unlock works
+## Как работает анлок
 
-1. **Preload.** The Windows boot manager (`bootmgfw.efi`) is read into RAM using raw block I/O and a built-in FAT32 parser. (No UEFI SimpleFileSystem is used — it hangs on some AMI boards.)
-2. **Unlock.** A custom EFI application drives the GPU's SEC2 (Falcon) microcontroller through its secure boot sequence:
-   - opens the memory-write-protection registers (WPR2),
-   - loads a signed "canary" payload (V67) into the SEC2 booter,
-   - opens the GPU's protected mode (PLM),
-   - sets the compute selectors (SS0/SS1) and render masks.
-3. **Reset.** A Function Level Reset (FLR) clears the latched protection registers while the compute selectors survive.
-4. **Boot.** The app returns into the firmware without a POST, and Windows loads with the card already unlocked. **The system is never rebooted** — a POST would reset the GPU and drop the unlock.
+1. **Предзагрузка.** Загрузчик Windows (`bootmgfw.efi`) читается в ОЗУ через сырой блочный ввод-вывод собственным FAT32-парсером. (UEFI SimpleFileSystem не используется — на некоторых платах AMI он вешает систему.)
+2. **Анлок.** Приложение проводит SEC2 (Falcon) видеокарты через её защищённую загрузку:
+   - снимает защиту записи памяти (WPR2),
+   - загружает подписанный «канареечный» пейлоад (V67) в ботер SEC2,
+   - открывает защищённый режим GPU (PLM),
+   - прописывает compute-селекторы (SS0/SS1) и маски рендера.
+3. **Ресет.** Function Level Reset (FLR) сбрасывает защёлкнутые регистры защиты — селекторы его переживают.
+4. **Загрузка.** Приложение возвращается в прошивку без POST, и Windows грузится с уже разлоченной картой. **Перезагрузки нет** — POST сбросил бы анлок.
 
-The exploit itself: the NVIDIA-signed SEC2 booter has a stack-canary bug (Jon Pry, *"A Canary in the Crypto Mine"*). When it validates our oversized 64 KB "signature", execution runs into a ROP chain that performs arbitrary privileged register writes — including PLM open.
+Сам эксплойт: подписанный ботер SEC2 содержит баг stack-canary (Jon Pry, *"A Canary in the Crypto Mine"*). При проверке нашего увеличенного 64-КБ «подписанта» исполнение уходит в ROP-цепочку, которая выполняет произвольные привилегированные записи в регистры — включая открытие PLM.
 
-## What happens after you pick the USB in the boot menu (F12)
+## Что происходит после выбора флешки в boot-меню (F12)
 
-| Scenario | Result |
+| Сценарий | Результат |
 |---|---|
-| **Windows boots** | The unlock ran, and Windows loads with the card at full power. ✅ |
-| **Back to the boot menu** | If the chainload path can't proceed, the app returns to the firmware **without rebooting**, so you can pick any other boot device. The unlock state persists until the next full reboot (POST). |
+| **Windows загружается** | Анлок выполнен, Windows стартует с картой на полной мощности. ✅ |
+| **Возврат в boot-меню** | Если chainload не смог продолжиться, приложение возвращается в прошивку **без перезагрузки** — можно выбрать другое устройство загрузки. Состояние анлока живёт до следующего полного ребута (POST). |
 
-## Test results
+## Результаты тестов
 
-Verified on two real systems.
+Проверено на двух реальных системах.
 
 ### llama-bench (CUDA, llama-2-7B Q4_0, `-ngl 99`)
 ```
@@ -104,113 +111,101 @@ Verified on two real systems.
 | llama 7B Q4_0| 3.56 GiB | 6.74 B | CUDA    | 99  | pp512 | 3705.40 ± 410.21 |
 | llama 7B Q4_0| 3.56 GiB | 6.74 B | CUDA    | 99  | tg16  | 139.20 ± 2.56    |
 ```
-Device 0: NVIDIA CMP 90HX, compute capability 8.6, VRAM: **10239 MiB** (full 10 GB).
+Устройство 0: NVIDIA CMP 90HX, compute capability 8.6, VRAM: **10239 МиБ** (все 10 ГБ).
 
-### Gaming (with caveats!)
 
-**Resident Evil Requiem** was tested and is playable when streamed via Moonlight (screenshot and HWiNFO log in [`tests/`](tests/)):
+### Модифицированный драйвер для рендера/игр
 
-| Metric | Value |
-|---|---|
-| FPS | **31 – 63**, average **48.7** |
-| GPU core clock | **1875 MHz** (full boost) |
-| VRAM in use | up to **6.9 GB** of 10 GB |
-| GPU power draw | up to **145 W** |
-| GPU temperature | 44 – 57 °C |
-
-That session used soldered capacitors (hardware mod) and PCIe Gen 1 ×16. Treat gaming as a bonus: no display outputs on the card, limited link bandwidth, and a patched driver is mandatory.
-
-### Modified driver for rendering/gaming
-
-The stock NVIDIA driver still blocks CMP cards from rendering (the restriction lives in the driver too, not only the firmware). To run graphics after the unlock, install a patched NVIDIA driver:
+Стоковый драйвер NVIDIA по-прежнему блокирует CMP-карты в рендере (ограничение сидит и в драйвере, не только в прошивке). Для графики после анлока установите патченный драйвер:
 
 👉 **[https://github.com/dartraiden/NVIDIA-patcher](https://github.com/dartraiden/NVIDIA-patcher)**
 
-## Requirements
+## Требования
 
-- NVIDIA CMP 70HX (PCI ID `10de:248a`) **or** CMP 90HX (`10de:220d`)
-- UEFI motherboard with a boot menu (F12)
-- Windows installed on a GPT disk with an EFI System Partition
-- **Secure Boot disabled** (the loader is unsigned)
-- A USB stick (≥ 256 MB)
-- `gsp_ga10x.bin` from the NVIDIA **610.43.03** driver package on the stick,
-  next to `BOOTX64.EFI`
+- NVIDIA CMP 70HX (PCI ID `10de:248a`)
+- Материнская плата UEFI с boot-меню (F12)
+- Windows на GPT-диске с EFI-разделом
+- **Secure Boot выключен** (загрузчик не подписан)
+- Флешка (≥ 256 МБ)
+- Образ `gsp_ga10x.bin` из пакета драйвера NVIDIA **610.43.03** на флешке
+  рядом с `BOOTX64.EFI`
 
-## Installation
+## Установка
 
-1. Download the latest release image from the [Releases](https://github.com/WildFlash1st/cmp90hx-unlock-for-windows/releases) page.
-2. Write the image to the USB stick with [Balena Etcher](https://etcher.balena.io/), [Rufus](https://rufus.ie/) (DD mode), or `dd`:
+1. Скачайте последний образ со страницы [Releases](https://github.com/WildFlash1st/cmp90hx-unlock-for-windows/releases).
+2. Запишите образ на флешку через [Balena Etcher](https://etcher.balena.io/), [Rufus](https://rufus.ie/) (режим DD) или `dd`:
    ```bash
-   dd if=<image>.img of=/dev/sdX bs=4M status=progress
+   dd if=<образ>.img of=/dev/sdX bs=4M status=progress
    ```
-   ⚠️ Double-check the device name — this wipes the target stick!
-3. Verify the md5 against the one published with the release.
-4. Reboot, press **F12** (or your board's boot-menu key), select the USB stick.
-5. The unlock runs automatically — Windows loads at full power. No keys to press, nothing to configure.
-6. *(For rendering/games only)* Install the patched NVIDIA driver from [NVIDIA-patcher](https://github.com/dartraiden/NVIDIA-patcher).
+   ⚠️ Перепроверьте имя устройства — команда стирает всё на флешке!
+3. Сверьте md5 со значением из описания релиза.
+4. Перезагрузитесь, нажмите **F12** (или клавишу boot-меню вашей платы), выберите флешку.
+5. Анлок выполнится автоматически — Windows загрузится на полной мощности. Нажимать ничего не нужно.
+6. *(Только для рендера/игр)* Установите патченный драйвер из [NVIDIA-patcher](https://github.com/dartraiden/NVIDIA-patcher).
 
-### Re-applying after a reboot
+### Повторный запуск после перезагрузки
 
-The unlock is **volatile**: a full reboot (POST) resets the GPU. To unlock again, simply boot from the USB stick again and let it chainload Windows. That's it.
+Анлок **волатилен**: полный ребут (POST) сбрасывает GPU. Чтобы разблокировать снова — просто загрузитесь с флешки ещё раз и дайте ей передать управление Windows. Всё.
 
-## Building from source
+## Сборка из исходников
 
 ```bash
 git clone https://github.com/WildFlash1st/cmp90hx-unlock-for-windows
 cd cmp90hx-unlock-for-windows/src
-BLOBS=/path/to/blobs bash build.sh               # CMP 70HX (default)
-TARGET=90HX BLOBS=/path/to/blobs bash build.sh   # original CMP 90HX
+BLOBS=/путь/к/блобам bash build.sh            # CMP 70HX (по умолчанию)
+TARGET=90HX BLOBS=/путь/к/блобам bash build.sh  # оригинальный CMP 90HX
 ```
 
-`TARGET` selects the card profile in the `TARGET PROFILE` block at the top of
-`unlock_v2.c` (PCI ID, framebuffer size, and the derived FRTS/WPR2 geometry)
-and links the matching FWSEC blob. The boot banner always names the card, its
-PCI ID, FB size, FRTS offset and WPR2 pair — if that line does not say
-`CMP 70HX (GA104) 10de:248A`, the wrong build is on the stick.
+Пререквизиты, происхождение блобов и рецепт USB-образа — в **[BUILDING.md](BUILDING.md)**; известные ограничения и нерешённые проблемы — в **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)**.
 
-See **[BUILDING.md](BUILDING.md)** for prerequisites, blob provenance, the
-objcopy section-list trap, and the USB-image recipe. **[BUILDING.md §6](BUILDING.md)**
-is normative for the build→flash→pull-log loop: after any source change the
-stick is rewritten and verified, and after every boot the log is pulled and
-read — both without asking. Known limitations and
-unsolved problems live in **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)**.
+> 🔁 **[BUILDING.md §6](BUILDING.md)** — обязательный порядок цикла «сборка → флешка → лог»: после любой правки исходников загрузчик перезаписывается на флешку и проверяется по содержимому, а после каждой загрузки лог снимается и разбирается. Оба шага выполняются **без вопроса пользователю**. Перезагрузка и F12 остаются за человеком.
 
-## Repository layout
+### Как убедиться, что прошит правильный образ
 
-- `src/unlock_v2.c` — the entire EFI application (all build variants come from
-  it); the `TARGET PROFILE` block at the top is the only place with
-  card-specific constants
-- `src/build.sh` — build script (gnu-efi, `TARGET=70HX|90HX`); `src/tools/` — firmware extraction helpers
-- `docs/` — platform gotchas, register/geometry notes, Code 43 diagnostic report, blob patching procedure
-- `docs/70HX-FINAL-SUMMARY.md` — **where the CMP 70HX port stands**: what is proven, what was disproved, what is left
-- `docs/70HX-PORT-STATUS.md` — **CMP 70HX port status**: what works, what doesn't, the `WPR2` blocker
-- `docs/70HX-VBIOS-ANALYSIS.md` — **teardown of the 70HX VBIOS**: FWSEC signatures, the `DMEM_MAPPER_V3` layout
-- `docs/70HX-NEXT-STEPS.md` — **step plan** with a success criterion for every experiment
-- `docs/70HX-DRIVER-ANALYSIS.md` — **teardown of the 610.43.03 driver**: formula confirmations and the found `WPR_END_MARGIN`
-- `docs/FLASH-AND-LOG.md` — **procedure**: writing the loader to the stick, verifying it, pulling the log
-- `docs/LOGGING.md` — **logging mechanics**: on-disk format, the write path in `unlock_v2.c`, the read path in `out/read-log.ps1`, the keep-in-sync contract between them, log diagnostics
-- `tests/` — proof artifacts: game screenshot, HWiNFO log, llama-bench output
-- `out/` — `.efi` builds produced here for both cards
-- Release images are attached to the [Releases](https://github.com/WildFlash1st/cmp90hx-unlock-for-windows/releases) page
+Баннер на экране всегда печатает профиль карты. Строка вида
 
-## Credits
+```
+=== NVIDIA CMP 70HX (GA104) Unlock — PCI 10de:248A, FB 0x200000000 (8192 MB) ===
+=== FRTS=0x1F7E00000 (0x1F7E00 pages)  WPR2=0x01F7E000/0x01F7EE00  FWSEC=fwsec_ga104.bin ===
+```
 
-This unlock builds on years of public research and tooling. Special thanks to:
+Значения FRTS/WPR2 — из прогона 2026-09-29. Прежние `0x1FFE00000` /
+`0x01FFE000/0x01FFEE00` относились к старой формуле и разошлись с тем, что
+реально лежит в `DMEM_MAPPER_V3` карты. Точные значения для вашей карты
+всегда есть в первой строке лога: `CMPUNLOG v1 … frts=0x… wpr2=0x…/0x…`.
 
-- **[bendy2](https://github.com/bendy2/cmp90hx)** — the V67 exploit and the direct-compute patch for driver `580.159.03` — *the key that opened PLM*
-- **Jon Pry (Zenodo)** — *"A Canary in the Crypto Mine: Defeating Stack Protection in a GPU Secure Coprocessor"* ([DOI: 10.5281/zenodo.20916112](https://zenodo.org/records/20916112)) — the debug-booter overflow disclosure
-- **[cmpunlocker](https://github.com/jdowning100/cmpunlocker)** — the rejoin16 PLM/render-mask method and Gen2 research this project ports
-- **d3dx9** — the Python Falcon emulator & ROP chain
+должна совпасть с вашей картой. Если карта не найдена, приложение перечислит
+все видимые `10de:xxxx` — значит у вашего экземпляра другой Device ID, и его
+надо вписать в `TARGET_PCI_DEV` (см. [KNOWN-ISSUES.md](KNOWN-ISSUES.md) §13).
 
-## Donations
+## Структура репозитория
 
-This project took many nights of reverse engineering. If it helped you, consider supporting further development:
+- `src/unlock_v2.c` — всё EFI-приложение (все варианты сборки собираются из него);
+  блок `TARGET PROFILE` в начале файла — единственное место с константами карты
+- `src/build.sh` — скрипт сборки (gnu-efi, `TARGET=70HX|90HX`); `src/tools/` — хелперы извлечения прошивок
+- `docs/` — грабли платформы, заметки по регистрам, отчёт диагностики Code 43, процедура патча блобов
+- `docs/70HX-FINAL-SUMMARY.md` — **итог работы по 70HX**: что доказано, что опровергнуто, что осталось
+- `docs/70HX-PORT-STATUS.md` — **статус порта 70HX**: что работает, что нет, разбор блокера `WPR2`
+- `docs/70HX-VBIOS-ANALYSIS.md` — **разбор VBIOS карты 70HX**: подписи FWSEC, структура `DMEM_MAPPER_V3`
+- `docs/70HX-NEXT-STEPS.md` — **план дальнейших шагов** с критериями успеха каждого эксперимента
+- `docs/70HX-DRIVER-ANALYSIS.md` — **разбор драйвера 610.43.03**: подтверждение формул и найденная `WPR_END_MARGIN`
+- `docs/FLASH-AND-LOG.md` — **процедура**: запись загрузчика на флешку, проверка, снятие лога
+- `docs/LOGGING.md` — **механика логирования**: формат на диске, путь записи в `unlock_v2.c`, путь чтения в `out/read-log.ps1`, контракт синхронности между ними, диагностика отказов
+- `tests/` — доказательства: скриншот игры, лог HWiNFO, вывод llama-bench
+- `out/` — собранные здесь `.efi` для обеих карт
+- Образы релизов прикреплены к странице [Releases](https://github.com/WildFlash1st/cmp90hx-unlock-for-windows/releases)
 
-- **TON (Gram):** `UQCuMe07ZsrRpo6q5UdXw4y-AANG2nN8QJGpM8IZkf9M78yH`
-- **Litecoin:** `LTC1QTA33QANK4L6JLDVRCR9WP4C8MT555V3FA0RX5M`
+## Благодарности
 
-Thank you! 🙏
+Проект опирается на годы публичных исследований. Особые благодарности:
 
-## Disclaimer
+- **[WildFlash1st](https://github.com/WildFlash1st)** —
+  cmp90hx-unlock-for-windows, на его основе строился текущий анлог
+- **[bendy2](https://github.com/bendy2/cmp90hx)** — V67-эксплойт и direct-compute патч для драйвера `580.159.03` — *ключ, открывший PLM*
+- **Jon Pry (Zenodo)** — *"A Canary in the Crypto Mine: Defeating Stack Protection in a GPU Secure Coprocessor"* ([DOI: 10.5281/zenodo.20916112](https://zenodo.org/records/20916112)) — раскрытие переполнения в debug-ботере
+- **[cmpunlocker](https://github.com/jdowning100/cmpunlocker)** — метод rejoin16 (PLM/маски рендера) и исследования Gen2, портированные в этом проекте
+- **d3dx9** — Python-эмулятор Falcon и ROP-цепочка
 
-This project is for **educational and research purposes**. It modifies GPU behavior, may void warranties, and interacts with signed firmware in ways NVIDIA did not intend. Use at your own risk. The authors are not responsible for any damage, instability, or loss caused by using this software.
+## Отказ от ответственности
+
+Проект создан в **образовательных и исследовательских целях**. Он меняет поведение GPU, может лишить гарантии и взаимодействует с подписанной прошивкой способами, которые NVIDIA не предусматривала. Используйте на свой страх и риск. Авторы не несут ответственности за любой ущерб, нестабильность или потери, вызванные использованием этого ПО.
