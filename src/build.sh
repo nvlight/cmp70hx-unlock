@@ -147,24 +147,51 @@ build_one unlock_v3f          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN
 build_one unlock_v3n          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2
 
-# v3.07: unlock_v3n + запись GFX_SPEED_SELECT=4 (рендер-селектор) с проверкой
+# v3.07: unlock_v3n + попытка записи GFX_SPEED_SELECT=4 напрямую, с проверкой
 # обоих порядков. Замер показал: запись не липнет, пока маски 0x823800/0x823B04
 # заперты; обе в таблице g_rj16 и с хоста не открываются.
-# ОТКАТ: прошить unlock_v3n.efi (git-тег gen2-baseline-2026-09-29).
+# ОТКАЧИВАЕТСЯ на unlock_v3n.efi (git-тег gen2-baseline-2026-09-29).
+# Историческая сборка, на железе не используется — оставлена как ступень хронологии.
 build_one unlock_v3g          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2 -DGEN2_LINK_TRY
 
-# v3.08: unlock_v3g + РЕНДЕР-МАСКИ. Открывает ровно две маски, запирающие
-# GFX_SPEED_SELECT (0x823800 и 0x823B04), через параметризованный V67-ROP
-# (адрес/значение берутся из v67Phys+0xf960/+0xf948, payload менять не нужно).
-# Не полный свип: максимум 6 FLR-минициклов против ~30, на которых референс
-# ловил зависание гостя. Селекторы и фикс Code 43 обычного хвоста не трогаем,
-# g_gen2Fire не выставляется.
-# ОТКАТ: прошить unlock_v3n.efi.
+# РАБОЧАЯ СБОРКА (состояние исходников на v3.15). Именно она в проекте даёт и
+# compute-анлок (x11,25 по pp512), и игровую разблокировку (Cyberpunk 2077,
+# 50 fps / 135 Вт при GFX_SPEED_SELECT=0x4). ЭТО ТО, ЧТО ПРОШИВАЕТСЯ НА ФЛЕШКУ.
+#
+#   -DRENDER_MASKS     открывает маски, запирающие GFX_SPEED_SELECT, через
+#                      параметризованный V67-ROP (адрес/значение берутся из
+#                      v67Phys+0xf960/+0xf948 — payload менять не нужно), и
+#                      записывает сам селектор. Без этого флага сборка
+#                      compute-only и в играх даёт ноль.
+#   -DCHIP_SIZE_SCAN=1 сканирует BAR0 на признак размера кристалла
+#                      (v3.15, только чтение). НЕ переносить за пределы этого
+#                      флага: см. BUILDING.md §6.0 — откат обязан остаться
+#                      побайтово 1863C4B1EBB8BF038A5C630001BB671A.
+#
+# Селекторы и фикс Code 43 обычного хвоста не трогаем, g_gen2Fire не
+# выставляется (Gen2 выключен рубильником, см. PORT-STATUS §3a).
+#
+# Проверено на железе 2026-09-30: md5 DEE0BAAB1B7C222399C091EAD15D071B,
+# 657408 байт. Подробности — PORT-STATUS §1t, §1u, §9.
+#
+# ОТКАТ (единственный путь назад): прошить unlock_v3n.efi.
 build_one unlock_v3r          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS -DCHIP_SIZE_SCAN=1
 
-echo
-echo "Deploy to USB (FAT32, EFI/BOOT/BOOTX64.EFI) + gsp_ga10x.bin from the"
-echo "NVIDIA 610.43.03 package next to it. For real hardware use"
-echo "unlock_v3n.efi (v3.03, target $TARGET). See BUILDING.md."
+cat <<'EOF'
+
+================================================================================
+Deploy to USB (FAT32, EFI/BOOT/BOOTX64.EFI) + gsp_ga10x.bin from the
+NVIDIA 610.43.03 package next to it.
+
+  ПРОШИВАЕМ на реальное железо:  unlock_v3r.efi   <- compute + графика (50 fps)
+  ОТКАТ, единственный путь назад: unlock_v3n.efi   <- compute-only, v3.03
+
+  Внимание: unlock_v3n — это ОТКАТ, а не релиз. Он собирается всегда и лежит
+  в out/ как точка возврата. Прошивка v3n на карту с работающей графикой
+  ВЫКЛЮЧАЕТ 3D: compute работает, в играх снова ноль.
+
+Одноразовая автоматизация цикла: out\flash-build.ps1
+================================================================================
+EOF

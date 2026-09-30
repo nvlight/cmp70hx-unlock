@@ -18,11 +18,28 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$efi  = Join-Path $here 'unlock_v3n_CMP70HX.efi'
+# РАБОЧАЯ СБОРКА (compute + графика, 50 fps). Имя файла не связано с содержимым,
+# но исторически unlock_v3n_CMP70HX.efi в out/ — это ОТКАТ (compute-only),
+# и его использование здесь выключало бы 3D на свежесозданной флешке.
+$efi  = Join-Path $here 'unlock_v3w_CMP70HX.efi'
 $fw   = Join-Path $here 'gsp_ga10x.bin'
 
 foreach ($f in @($efi, $fw)) {
     if (-not (Test-Path $f)) { throw "missing payload: $f" }
+}
+
+# The stick must carry the graphics build: without these two strings in the
+# binary, the EFI app is a compute-only rollback and games run at zero.
+$need = @{ 'CMP 70HX (GA104)' = 'profile70'; 'GFX_SPEED_SELECT' = 'gfx (render selector)' }
+$blob = [IO.File]::ReadAllBytes($efi)
+if ($blob[0] -ne 0x4D -or $blob[1] -ne 0x5A) { throw "not a PE image: $efi" }
+$ascii = [Text.Encoding]::ASCII.GetString($blob)
+$utf16 = [Text.Encoding]::Unicode.GetString($blob)
+foreach ($k in $need.Keys) {
+    if ($ascii -notmatch [regex]::Escape($k) -and $utf16 -notmatch [regex]::Escape($k)) {
+        throw ("ABORT: marker '{0}' ({1}) MISSING in {2} — this is not the working" -f $k, $need[$k], (Split-Path $efi -Leaf)) +
+               " graphics build. Refusing to write a compute-only rollback onto a fresh stick."
+    }
 }
 
 # ---- pick the stick --------------------------------------------------------
