@@ -1,39 +1,43 @@
 #!/bin/bash
-# build.sh — build all CMP unlock EFI variants from unlock_v2.c (gnu-efi)
+# build.sh — build the CMP 70HX unlock EFI loader from unlock_v2.c (gnu-efi)
 #
 # Usage:
-#   bash build.sh                 # CMP 70HX / GA104 / 8 GB  (default target)
-#   TARGET=90HX bash build.sh     # original CMP 90HX / GA102 / 10 GB target
 #   BLOBS=/path/to/blobs bash build.sh
 #
-# The resulting binaries are byte-identical to the released ones when built
-# against the same blobs (release v3.03: unlock_v3n.efi md5 e27221f5ddd56360…).
+# ONE TARGET, ONE OUTPUT. The tree builds exactly one binary, unlock_v3r.efi,
+# which is simultaneously the loader you flash and the rollback you flash to go
+# back. There is deliberately no second variant.
+#
+# The compute-only release build (unlock_v3n, 3D disabled) was retired
+# 2026-10-01. Reason: it sat in out/ next to the working build under a name that
+# read like "the current release", and the flash instructions were followed
+# literally once — which put the card back to zero in games while compute kept
+# working, so nothing looked broken. A rollback that is a *degraded* build is
+# worse than no rollback: do not reintroduce a parallel compute-only target.
+#
+# Reproducibility, which is what makes this binary the rollback:
+#   unlock_v3r.efi  md5 DEE0BAAB1B7C222399C091EAD15D071B  657408 bytes
+# Verified on hardware 2026-09-30, and again after a reboot run on 2026-10-01
+# (G2GFX ... GFX_SPEED_SELECT=0x00000004 ***ВСТАЛ***, END marker in the log).
+# That md5 is pinned by git tag rollback-2026-10-01. If a rebuild stops matching
+# it, a string or a helper leaked in outside an #ifdef — see BUILDING.md §6.0.
 set -e
 
 WORK="$(cd "$(dirname "$0")" && pwd)"
 cd "$WORK"
 BLOBS="${BLOBS:-$WORK/blobs}"
-TARGET="${TARGET:-70HX}"
 
 # ---- target profile: chip, FB size and the matching FWSEC blob -------------
-# The FWSEC ucode is per-die (extracted from that die's VBIOS), so a target
-# and a blob go together. See the TARGET PROFILE block in unlock_v2.c.
-case "$TARGET" in
-    70hx|70HX)
-        DEF="-DTARGET_CMP70HX"
-        FWSEC="fwsec_ga104"          # extracted from a GA104 VBIOS
-        ;;
-    90hx|90HX)
-        DEF="-DTARGET_CMP90HX"
-        FWSEC="fwsec_ga102"          # extracted from the 10de:220d VBIOS
-        ;;
-    *)
-        echo "ERROR: unknown TARGET='$TARGET' (use 70HX or 90HX)"; exit 1
-        ;;
-esac
+# The FWSEC ucode is per-die (extracted from that die's VBIOS), so the profile
+# and the blob go together. See the TARGET PROFILE block in unlock_v2.c.
+# CMP 90HX / GA102 is no longer a build target. The port is 70HX-only, and the
+# 10 GB card must never be driven with this 8 GB profile — the alt device ID
+# still open to it is a known latent hazard, tracked in KNOWN-ISSUES.
+DEF="-DTARGET_CMP70HX"
+FWSEC="fwsec_ga104"          # extracted from a GA104 VBIOS
 export DEF FWSEC
 
-echo "=== NVIDIA CMP unlock EFI build — target: $TARGET ==="
+echo "=== NVIDIA CMP unlock EFI build — target: CMP 70HX / GA104 / 8 GB ==="
 
 # ---- required firmware/payload blobs (NOT in git — see BUILDING.md) ----
 for f in \
@@ -129,32 +133,13 @@ build_one() {
     echo "[*] Built: $out.efi ($(stat -c%s "$out.efi") bytes)"
 }
 
-# dev branch: interactive pauses, gen experiments, full fire machinery
-build_one unlock_v2      -DPCIE_GEN_EXPERIMENT -DMULTI_CARD -DPCIE_GEN2_REJOIN
-
-# QEMU test-stand builds (auto-advance, extra dumps)
-build_one unlock_v2_test      -DEFI_AUTOTEST -DPCIE_GEN_EXPERIMENT \
-                              -DMULTI_CARD -DPCIE_GEN2_REJOIN
-build_one unlock_v3n_test     -DEFI_AUTOTEST -DPCIE_GEN_EXPERIMENT \
-                              -DMULTI_CARD -DPCIE_GEN2_REJOIN -DFULL_NOGEN2
-
-# plan-B endgame (BootNext + warm reset) — not used in the field
-build_one unlock_v2_wr        -DEFI_AUTOTEST -DENDGAME_WARMRESET
-
-# releases
-build_one unlock_v3           -DRELEASE_BUILD -DMULTI_CARD
-build_one unlock_v3f          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN
-build_one unlock_v3n          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
-                              -DFULL_NOGEN2
-
-# v3.07: unlock_v3n + попытка записи GFX_SPEED_SELECT=4 напрямую, с проверкой
-# обоих порядков. Замер показал: запись не липнет, пока маски 0x823800/0x823B04
-# заперты; обе в таблице g_rj16 и с хоста не открываются.
-# ОТКАЧИВАЕТСЯ на unlock_v3n.efi (git-тег gen2-baseline-2026-09-29).
-# Историческая сборка, на железе не используется — оставлена как ступень хронологии.
-build_one unlock_v3g          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
-                              -DFULL_NOGEN2 -DGEN2_LINK_TRY
-
+# ---- единственная сборка ----------------------------------------------------
+# Все варианты, кроме этого, удалены 2026-10-01. Их история — в git: история
+# ступеней (dev-ветка, QEMU-стенд, plan-B endgame, релизы v3/v3f/v3n и
+# промежуточная v3g) восстанавливается из коммитов и раздела PORT-STATUS §1.
+# Хронология нужна для понимания, почему выбран именно этот набор флагов, но
+# сами бинарники не нужны: ни один из них не является точкой возврата.
+#
 # РАБОЧАЯ СБОРКА (состояние исходников на v3.15). Именно она в проекте даёт и
 # compute-анлок (x11,25 по pp512), и игровую разблокировку (Cyberpunk 2077,
 # 50 fps / 135 Вт при GFX_SPEED_SELECT=0x4). ЭТО ТО, ЧТО ПРОШИВАЕТСЯ НА ФЛЕШКУ.
@@ -165,17 +150,25 @@ build_one unlock_v3g          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
 #                      записывает сам селектор. Без этого флага сборка
 #                      compute-only и в играх даёт ноль.
 #   -DCHIP_SIZE_SCAN=1 сканирует BAR0 на признак размера кристалла
-#                      (v3.15, только чтение). НЕ переносить за пределы этого
-#                      флага: см. BUILDING.md §6.0 — откат обязан остаться
-#                      побайтово 1863C4B1EBB8BF038A5C630001BB671A.
+#                      (v3.15, только чтение).
 #
 # Селекторы и фикс Code 43 обычного хвоста не трогаем, g_gen2Fire не
 # выставляется (Gen2 выключен рубильником, см. PORT-STATUS §3a).
 #
-# Проверено на железе 2026-09-30: md5 DEE0BAAB1B7C222399C091EAD15D071B,
-# 657408 байт. Подробности — PORT-STATUS §1t, §1u, §9.
+# Проверено на железе дважды: 2026-09-30 и прогон после перезагрузки
+# 2026-10-01. md5 DEE0BAAB1B7C222399C091EAD15D071B, 657408 байт.
+# Подробности — PORT-STATUS §1t, §1u, §9.
 #
-# ОТКАТ (единственный путь назад): прошить unlock_v3n.efi.
+# ЭТА СБОРКА — ОДНОВРЕМЕННО И РАБОЧАЯ, И ОТКАТ. Отдельной откатной сборки
+# больше нет: прошивается и запасной вариант — один и тот же файл. Откат
+# держится не «замороженным бинарником», а воспроизводимостью от исходников
+# на теге rollback-2026-10-01:
+#
+#     git checkout rollback-2026-10-01 && bash build.sh   ->  DEE0BAAB…
+#
+# Пока пересборка даёт этот md5 — откат существует. Перестала давать — код
+# ушёл от известного-good состояния, и возвращаться некуда, пока тег не
+# передвинут осознанно. Механизм проверки — BUILDING.md §6.0 и out/flash-build.ps1.
 build_one unlock_v3r          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS -DCHIP_SIZE_SCAN=1
 
@@ -185,13 +178,23 @@ cat <<'EOF'
 Deploy to USB (FAT32, EFI/BOOT/BOOTX64.EFI) + gsp_ga10x.bin from the
 NVIDIA 610.43.03 package next to it.
 
-  ПРОШИВАЕМ на реальное железо:  unlock_v3r.efi   <- compute + графика (50 fps)
-  ОТКАТ, единственный путь назад: unlock_v3n.efi   <- compute-only, v3.03
+  ЕДИНСТВЕННЫЙ БИНАРНИК:  unlock_v3r.efi
+      md5 DEE0BAAB1B7C222399C091EAD15D071B, 657408 байт
+      compute x11.25 (pp512) + графика, Cyberpunk 2077 50 fps / 135 Вт
 
-  Внимание: unlock_v3n — это ОТКАТ, а не релиз. Он собирается всегда и лежит
-  в out/ как точка возврата. Прошивка v3n на карту с работающей графикой
-  ВЫКЛЮЧАЕТ 3D: compute работает, в играх снова ноль.
+  Это одновременно и то, что прошивается, и ОТКАТ. Отдельной откатной сборки
+  больше нет и не должно появляться: compute-only вариант unlock_v3n удалён
+  2026-10-01 именно потому, что его присутствие рядом с рабочим уже один раз
+  привело к прошивке без графики — compute при этом работал, и выглядело всё
+  исправно.
 
-Одноразовая автоматизация цикла: out\flash-build.ps1
+  ПРОВЕРЬТЕ md5 ПЕРЕД ЗАПИСЬЮ. Если не DEE0BAAB — строка лога или функция
+  попала в сборку вне #ifdef (BUILDING.md §6.0) и откат скомпрометирован.
+
+  Вернуться к известному-good состоянию:
+      git checkout rollback-2026-10-01 && bash build.sh
+
+Весь цикл сборки, записи и проверки — одной командой:
+    powershell -ExecutionPolicy Bypass -File out\flash-build.ps1
 ================================================================================
 EOF

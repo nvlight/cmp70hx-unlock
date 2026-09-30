@@ -88,7 +88,7 @@ if ($magicAt -lt 0) {
     Write-Host "ЧТО ДЕЛАТЬ:" -ForegroundColor Yellow
     Write-Host "  1. Убедитесь, что на флешке свежий загрузчик:"
     Write-Host "     X:\EFI\BOOT\BOOTX64.EFI"
-    Write-Host "     md5 должен совпадать с out\unlock_v3n_CMP70HX.efi"
+    Write-Host "     md5 должен совпадать с out\unlock_v3r_CMP70HX.efi"
     Write-Host "  2. ПЕРЕЗАГРУЗИТЕСЬ и загрузитесь с этой флешки."
     Write-Host "  3. Убедитесь на экране загрузки, что есть строка"
     Write-Host "     '[log] флешка = ...' и НЕТ строки 'только на экран'."

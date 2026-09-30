@@ -61,8 +61,12 @@
  *   RELEASE_BUILD        release behaviour: no pauses, return-to-firmware
  *   MULTI_CARD           enumerate every target card; NVRAM iteration between
  *                        cards
- *   TARGET_CMP70HX       (default) CMP 70HX / GA104 / 8 GB / 10de:248a
- *   TARGET_CMP90HX       build the original CMP 90HX / GA102 / 10 GB target
+ *   TARGET_CMP70HX       (default, and the only target that is built)
+ *                        CMP 70HX / GA104 / 8 GB / 10de:248a. CMP 90HX / GA102
+ *                        was dropped as a build target on 2026-10-01; the block
+ *                        below is kept only so this tree still parses, and the
+ *                        alt device ID at TARGET_PCI_DEV_ALT1 remains a known
+ *                        latent hazard (see KNOWN-ISSUES).
  *   PCIE_GEN2_REJOIN     include render-mask table + fire machinery.
  *                        WITHOUT IT THE RENDER PHASE IS NOT EVEN COMPILED
  *                        (that is how v3.01 shipped compute-only by mistake)
@@ -85,8 +89,9 @@
  *                                  SIG_PROD[0] patched at offset 0x8A10
  *   gsp_rm_boot_dbg.bin            GSP bootloader (GspRmBoot), 0x6000 bytes
  *   fwsec_ga104.bin (+_sig)        FWSEC ucode + signature, extracted from a
- *                                  GA104 VBIOS. PER-DIE: TARGET=90HX links
- *                                  fwsec_ga102 instead (see build.sh).
+ *                                  GA104 VBIOS. PER-DIE: this blob belongs to
+ *                                  GA104 only and must never be paired with
+ *                                  another profile (see KNOWN-ISSUES on 0x1555).
  *   sec2_ucode_vbios_{49,89}_patched.bin  preloaded-ucode experiments (dev)
  *   gsp_ga10x.bin                  NOT embedded: read from USB at runtime.
  *                                  Take it from the NVIDIA 610.43.03 package!
