@@ -162,7 +162,7 @@ build_one unlock_v3g          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
 # g_gen2Fire не выставляется.
 # ОТКАТ: прошить unlock_v3n.efi.
 build_one unlock_v3r          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
-                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS -DCHIP_SIZE_SCAN=1
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS -DCHIP_SIZE_SCAN=1 -DPROBE_WPR_FLAGS=1
 
 echo
 echo "Deploy to USB (FAT32, EFI/BOOT/BOOTX64.EFI) + gsp_ga10x.bin from the"

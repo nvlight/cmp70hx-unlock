@@ -453,6 +453,33 @@ static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
 #define CHIP_SIZE_SCAN 0
 #endif
 
+/* v3.17: незадействованные биты поля flags в GspFwWprMeta.
+ *
+ * УСТАНОВЛЕНО РАНЬШЕ: число SM (30) и L2 (2 МБ) задаются не регистром
+ * BAR0, а прошивкой при инициализации GPU. Проба записи 48 в 0x8C440
+ * встала и не изменила ничего - это подтвердило, что писать BAR0 на нашем
+ * этапе поздно.
+ *
+ * НО метаданные WPR - ЭТО НАША СОБСТВЕННАЯ СТРУКТУРА, мы собираем её
+ * руками в build_wpr_meta(), и именно через неё пакет 50HX делает свою
+ * "20 ГБ геометрию". То есть это точка управления, которая по времени
+ * РАНЬШЕ, чем BAR0, и она в нашей власти.
+ *
+ * Поле flags - ровно один байт. Бит 0 = GSP_FW_FLAGS_CLOCK_BOOST, он уже
+ * выставлен. Остальные семь бит не задействованы нигде в проекте.
+ *
+ * Стратегия пробы - максимум информации за одну перезагрузку: ставим 0xFF,
+ * то есть поднимаем ВСЕ оставшиеся биты разом, и смотрим, изменится ли
+ * multiProcessorCount. Если да - делить пополам. Если нет, и ничего не
+ * сломается, - поле flags закрыт целиком за один заход.
+ *
+ * Риск честно назван: назначение битов нигде не документировано, и
+ * неизвестный бит может навредить. Откат v3n рядом, цена ошибки - одна
+ * перезагрузка. Все контрольные величины печатаются в лог рядом. */
+#ifndef PROBE_WPR_FLAGS
+#define PROBE_WPR_FLAGS 0
+#endif
+
 #define REG_PCIE_FUSE_OVR       0x00823810UL
 #define REG_PFB_MMU_WPR2_LO     0x001FA824UL
 #define REG_PFB_MMU_WPR2_HI     0x001FA828UL
@@ -667,6 +694,10 @@ static BOOLEAN g_postFlr = FALSE;   /* после do_flr() MMIO не читат�
 #define GSP_FW_WPR_META_MAGIC   0xdc3aae21371a60b3ULL
 #define GSP_FW_WPR_META_REVISION 1
 #define GSP_FW_WPR_META_VERIFIED 0xa0a0a0a0a0a0a0a0ULL
+
+/* v3.17: маска пробы неиспользованных битов flags. Биты 1..7,
+ * 0x01 (CLOCK_BOOST) уже выставлен всегда. */
+#define WPR_FLAGS_PROBE_MASK 0xFEu
 
 typedef struct {
     UINT64 magic;
@@ -6592,6 +6623,18 @@ build_wpr_meta(GspFwWprMeta *m, UINT64 elfPhys, UINT64 elfSize,
     m->pmuReservedSize = 0;
     m->gspFwHeapVfPartitionCount = 0;
     m->flags = 0x1;                    /* GSP_FW_FLAGS_CLOCK_BOOST */
+#if PROBE_WPR_FLAGS
+    /* v3.17: поднимаем все остальные биты сразу - так одна перезагрузка
+     * либо находит эффект, либо закрывает поле целиком.
+     *
+     * Ветка #else обязана быть ПУСТОЙ, а не содержать ulogf: любая строка
+     * лога попадает в бинарь и ломает откат. На этом уже споткнулись
+     * дважды - откат менялся при НЕИЗМЕННОМ размере файла, и заметить
+     * это можно было только сверкой md5. */
+    m->flags |= WPR_FLAGS_PROBE_MASK;
+    ulogf(L"WPRF  flags=0x%02x (бит0=CLOCK_BOOST всегда, маска пробы 0x%02x)\n",
+          (UINTN)m->flags, (UINTN)WPR_FLAGS_PROBE_MASK);
+#endif
 }
 
 #define WINDOWS_BOOT_PATH L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi"
