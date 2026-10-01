@@ -1498,7 +1498,7 @@ dump_vrom(void)
         }
     }
     if (base == 0) {
-        ulogf(L"VROM  не найден (0x30 выключен, в BAR0 нет 55 AA)\n");
+        ulogf(L"VROM  not found (0x30 disabled, no 55 AA in BAR0)\n");
         return;
     }
 
@@ -1516,7 +1516,7 @@ dump_vrom(void)
     /* CRC32 первых 4 КБ — отпечаток для сверки с GA104.rom на хосте */
     for (i = 0; i < 4096; i++)
         buf[i] = p[i];
-    ulogf(L"VROM  CRC32 первых 4КБ = 0x%08x (сверить с GA104.rom)\n",
+    ulogf(L"VROM  CRC32 first 4KB = 0x%08x (compare with GA104.rom)\n",
           crc32_upd(0xFFFFFFFFu, buf, 4096));
 }
 
@@ -1551,12 +1551,12 @@ scan_bars(const CHAR16 *tag)
         UINT32 type;
 
         if (EFI_ERROR(pci_cfg_read(reg, &orig)) || orig == 0) {
-            ulogf(L"BARSCN %s %s=0 (не реализован)\n", tag, bars[b].nm);
+            ulogf(L"BARSCN %s %s=0 (not implemented)\n", tag, bars[b].nm);
             continue;
         }
         type = orig & 0xFU;
         if (type & 1U) {
-            ulogf(L"BARSCN %s %s=0x%08x (I/O BAR, пропускаем)\n",
+            ulogf(L"BARSCN %s %s=0x%08x (I/O BAR, skipping)\n",
                   tag, bars[b].nm, orig);
             continue;
         }
@@ -1583,13 +1583,13 @@ scan_bars(const CHAR16 *tag)
              * даёт 0xFFFFFFFF01000000 вместо 0x01000000 (256 МБ) */
             size = (UINT64)(UINT32)(~(UINT32)(probe & ~0xFU) + 1U);
         } else {
-            ulogf(L"BARSCN %s %s=0x%08x (type=%x — зарезервировано)\n",
+            ulogf(L"BARSCN %s %s=0x%08x (type=%x - reserved)\n",
                   tag, bars[b].nm, orig, type);
             continue;
         }
         ulogf(L"BARSCN %s %s=0x%08x type=%x size=0x%llx%s\n",
               tag, bars[b].nm, orig, type, size,
-              size >= 0x20000000ULL ? L"  <-- КАНДИДАТ В FB-АПЕРТУРУ" : L"");
+              size >= 0x20000000ULL ? L"  <-- FB-APERTURE CANDIDATE" : L"");
     }
 }
 
@@ -1683,11 +1683,11 @@ mc_probe_all(void)
              * вовсе, так что сравнивать два прогона бессмысленно: второй
              * просто повторяет первый (проверено 2026-09-29 — логи
              * различались только в 10 строках TIME t=). */
-            if (i == 0) sec2_window_dump(L"POST-заблокировано");
+            if (i == 0) sec2_window_dump(L"POST-locked");
             /* v3n: те же «до любых записей» основания, что и у SEC2W: карта
              * ещё в POST, то есть заблокирована. Даёт вторую половину A/B по
              * маскам Gen2 и регистрам скорости. */
-            if (i == 0) gen2_readonly_dump(L"POST-заблокировано");
+            if (i == 0) gen2_readonly_dump(L"POST-locked");
         } else {
             Print(L"[probe]   BAR0 = 0 — MMIO недоступна, это НЕ рабочая карта\n");
             ulogf(L"PROBE   bar0=0 -> MMIO unavailable, NOT a working card\n");
@@ -2087,7 +2087,7 @@ gsp_dma_wait_not_full(void)
     if (g_dmaFullTo > 2 && (g_dmaFullTo % 32) != 0) return;
 #endif
     Print(L"fwsec: ВНИМАНИЕ DMA queue FULL (cmd=0x%08x)\n", g_dmaFullLast);
-    ulogf(L"DMAQ   FULL timeout #%d cmd=0x%08x (bit0=FULL стоит, bit1=IDLE снят)\n",
+    ulogf(L"DMAQ   FULL timeout #%d cmd=0x%08x (bit0=FULL set, bit1=IDLE clear)\n",
           (INTN)g_dmaFullTo, (INTN)g_dmaFullLast);
 }
 
@@ -2106,7 +2106,7 @@ gsp_dma_wait_idle(void)
     if (g_dmaIdleTo > 2 && (g_dmaIdleTo % 32) != 0) return;
 #endif
     Print(L"fwsec: ВНИМАНИЕ DMA не IDLE (cmd=0x%08x)\n", g_dmaIdleLast);
-    ulogf(L"DMAQ   IDLE timeout #%d cmd=0x%08x (bit1=IDLE стоит, bit0=FULL снят)\n",
+    ulogf(L"DMAQ   IDLE timeout #%d cmd=0x%08x (bit1=IDLE set, bit0=FULL clear)\n",
           (INTN)g_dmaIdleTo, (INTN)g_dmaIdleLast);
 }
 
@@ -2909,8 +2909,8 @@ sec2_window_dump(const CHAR16 *tag)
  *            (cap+0x10), плюс фактическая скорость и ширина. */
 static const struct { UINT32 addr; const CHAR16 *name; } g_gen2regs[] = {
     { 0x00088084U, L"LINK_CAP"     },
-    { 0x00088088U, L"LNKSTA-внутр"  },
-    { 0x000880a8U, L"LNKCTL2-внутр" },
+    { 0x00088088U, L"LNKSTA-inner"  },
+    { 0x000880a8U, L"LNKCTL2-inner" },
     { 0x0008c040U, L"LINK_CONFIG_0"},
     { 0x0008841cU, L"PRIV_MISC_1"   },
     { 0x0008c2c0U, L"CYA_0"        },
@@ -2918,8 +2918,8 @@ static const struct { UINT32 addr; const CHAR16 *name; } g_gen2regs[] = {
     { 0x0008e11cU, L"XP3G_OVR3"    },
     { 0x0008e120U, L"XP3G_VAL0"    },
     { 0x0008e12cU, L"XP3G_VAL3"    },
-    { 0x00823b04U, L"PLM-графики"  },
-    { 0x00823804U, L"PLM-основной" },
+    { 0x00823b04U, L"PLM-gfx"  },
+    { 0x00823804U, L"PLM-main" },
     { 0x0082381cU, L"SS0"          },
     { 0x00823820U, L"SS1"          },
     { 0x00823830U, L"GFX_SPEED_SEL"},
@@ -2973,12 +2973,12 @@ static void chip_size_scan(const CHAR16 *tag)
             }
         }
         matched += hits;
-        ulogf(L"CHIPS %s окно 0x%08x..0x%08x: совпадений %d\n",
+        ulogf(L"CHIPS %s window 0x%08x..0x%08x: matches %d\n",
               tag, base, end - 4, (INTN)hits);
     }
-    ulogf(L"CHIPS %s ИТОГО совпадений %d, напечатано %d%s\n",
+    ulogf(L"CHIPS %s TOTAL matches %d, printed %d%s\n",
           tag, (INTN)matched, (INTN)printed,
-          (matched > printed) ? L" (лог обрезан)" : L"");
+          (matched > printed) ? L" (log truncated)" : L"");
 }
 #endif /* CHIP_SIZE_SCAN */
 
@@ -3018,7 +3018,7 @@ gen2_readonly_dump(const CHAR16 *tag)
                   g_rj16[i2].addr, v2, (v2 == g_rj16[i2].val) ? L"*" : L"!",
                   g_rj16[i3].addr, v3, (v3 == g_rj16[i3].val) ? L"*" : L"!");
         }
-        ulogf(L"GEN2S  %s маски на цели %d из %d, не на цели %d, первый %d\n",
+        ulogf(L"GEN2S  %s masks on target %d of %d, not on target %d, first %d\n",
               tag, (INTN)ok, (INTN)RJ16_N, (INTN)nbad, (INTN)first);
     }
 #endif /* PCIE_GEN2_REJOIN */
@@ -3041,7 +3041,7 @@ gen2_readonly_dump(const CHAR16 *tag)
                   (INTN)(lk & 0xFFFF), (INTN)((lk >> 16) & 0xFu),
                   (INTN)((lk >> 20) & 0xFu));
         } else {
-            ulogf(L"GEN2C  %s GPU   pcie_cap не найден\n", tag);
+            ulogf(L"GEN2C  %s GPU   pcie_cap not found\n", tag);
         }
     }
     {
@@ -3057,10 +3057,10 @@ gen2_readonly_dump(const CHAR16 *tag)
                       (INTN)(lk & 0xFFFF), (INTN)((lk >> 16) & 0xFu),
                       (INTN)((lk >> 20) & 0xFu));
             } else {
-                ulogf(L"GEN2C  %s BRIDGE pcie_cap не найден\n", tag);
+                ulogf(L"GEN2C  %s BRIDGE pcie_cap not found\n", tag);
             }
         } else {
-            ulogf(L"GEN2C  %s BRIDGE не найден\n", tag);
+            ulogf(L"GEN2C  %s BRIDGE not found\n", tag);
         }
     }
 }
@@ -3147,9 +3147,9 @@ gen2_gfx_try(const CHAR16 *tag)
      * Это нестабильное состояние железа, а не константа "сток", и
      * подпись обещала больше, чем показывала. Значение само по себе
      * печатается рядом - судить надо по нему. */
-    ulogf(L"G2GFX  %s ДО : GFX_SPEED_SELECT=0x%08x (nastoyashchee, ne 0x3)  "
+    ulogf(L"G2GFX  %s BEFORE : GFX_SPEED_SELECT=0x%08x (actual, not 0x3)  "
           L"0x823800=0x%08x  0x823B04=0x%08x\n", tag, v, m800, mb04);
-    ulogf(L"G2GFX  %s ДО : FEAT_READOUT_0=0x%08x  bit8 PGRAPH=%u\n",
+    ulogf(L"G2GFX  %s BEFORE : FEAT_READOUT_0=0x%08x  bit8 PGRAPH=%u\n",
           tag, feat0, (INTN)((feat0 >> 8) & 1u));
 
     /* ---- ПОРЯДОК A: GFX_SEL после SS0/SS1 (наш обычный путь) ----------
@@ -3166,12 +3166,12 @@ gen2_gfx_try(const CHAR16 *tag)
         uefi_call_wrapper(BS->Stall, 1, 50000);
         v = mmio_read32(0x00823830U);
         if (v == 0x00000004U) { okA = 1; break; }
-        ulogf(L"G2GFX  %s порядок A попытка %d: readback 0x%08x != 4, повтор\n",
+        ulogf(L"G2GFX  %s order A attempt %d: readback 0x%08x != 4, retry\n",
               tag, (INTN)t + 1, v);
         uefi_call_wrapper(BS->Stall, 1, 50000);
     }
-    ulogf(L"G2GFX  %s ПОРЯДОК A (GFX после SS): GFX_SPEED_SELECT=0x%08x %s\n",
-          tag, v, okA ? L"ВСТАЛ" : L"НЕ ВСТАЛ");
+    ulogf(L"G2GFX  %s ORDER A (GFX after SS): GFX_SPEED_SELECT=0x%08x %s\n",
+          tag, v, okA ? L"SET" : L"NOT SET");
 
     /* ---- ПОРЯДОК B: SS0/SS1 заново, потом GFX_SEL ---------------------- */
     if (!okA) {
@@ -3185,12 +3185,12 @@ gen2_gfx_try(const CHAR16 *tag)
             uefi_call_wrapper(BS->Stall, 1, 50000);
             v = mmio_read32(0x00823830U);
             if (v == 0x00000004U) { okB = 1; break; }
-            ulogf(L"G2GFX  %s порядок B попытка %d: readback 0x%08x != 4, повтор\n",
+            ulogf(L"G2GFX  %s order B attempt %d: readback 0x%08x != 4, retry\n",
                   tag, (INTN)t + 1, v);
             uefi_call_wrapper(BS->Stall, 1, 50000);
         }
-        ulogf(L"G2GFX  %s ПОРЯДОК B (GFX перед SS): GFX_SPEED_SELECT=0x%08x %s\n",
-              tag, v, okB ? L"ВСТАЛ" : L"НЕ ВСТАЛ");
+        ulogf(L"G2GFX  %s ORDER B (GFX before SS): GFX_SPEED_SELECT=0x%08x %s\n",
+              tag, v, okB ? L"SET" : L"NOT SET");
     }
 
     /* Скан 0x0..0x7 УДАЛЁН (v3.14).
@@ -3208,8 +3208,8 @@ gen2_gfx_try(const CHAR16 *tag)
      * состояния, часть из которых хуже. Поэтому скан убран и оставлено
      * единственное измеренно рабочее значение. Проверять 0x5 и 0x6 стоит
      * только отдельной задачей и только если игра вернётся к 50 fps. */
-    ulogf(L"G2SCN  %s скан бинов отключён после замера: 0x4 = 50 fps, "
-          L"0x7 = 9 fps (деградация), все 8 значений принимались\n", tag);
+    ulogf(L"G2SCN  %s bin scan disabled after measurement: 0x4 = 50 fps, "
+          L"0x7 = 9 fps (degradation), all 8 values were accepted\n", tag);
 
     /* Возврат к ПОДТВЕРЖДЁННО РАБОЧЕМУ значению.
      *
@@ -3276,7 +3276,7 @@ gen2_gfx_try(const CHAR16 *tag)
           L"readback 0x%08x %s; "
           L"FEAT_READOUT_0=0x%08x bit8=%u; DMAQ full=%d idle=%d; "
           L"SS0=0x%08x SS1=0x%08x\n",
-          tag, v, (v == 0x00000004U) ? L"OK" : L"*** НЕ УДЕРЖАЛСЯ ***",
+          tag, v, (v == 0x00000004U) ? L"OK" : L"*** DID NOT HOLD ***",
           feat1, (INTN)((feat1 >> 8) & 1u),
           (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo,
           mmio_read32(REG_FEAT_OVR_SM_SPD),
@@ -3412,10 +3412,10 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     INTN pass, k, tries, done;
     UINT32 v, saveBar, wLo, wHi;
 
-    ulogf(L"G2RMK  %s === открытие окна XVE (дверь GFX_SPEED_SELECT) "
-          L"через ботер#2 ===\n", tag);
+    ulogf(L"G2RMK  %s === opening XVE window (GFX_SPEED_SELECT door) "
+          L"via booter#2 ===\n", tag);
     for (k = 0; k < NTGT; k++)
-        ulogf(L"G2RMK  %s ДО  0x%08x = 0x%08x\n", tag, tgt[k],
+        ulogf(L"G2RMK  %s BEFORE  0x%08x = 0x%08x\n", tag, tgt[k],
               mmio_read32(tgt[k]));
 
     /* ОДИН проход. 25 целей x 2 прохода = 50 минициклов, а референс ловил
@@ -3447,7 +3447,7 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
             CopyMem((VOID *)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
             __asm__ volatile("wbinvd" ::: "memory");
             early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
-            ulogf(L"G2RMK  %s п%d ботер#1: PLM=0x%08x\n", tag, (INTN)pass + 1,
+            ulogf(L"G2RMK  %s pass%d booter#1: PLM=0x%08x\n", tag, (INTN)pass + 1,
                   mmio_read32(0x00823804U));
 
             /* --- ботер#2: параметризованный ROP пишет наш адрес --------- */
@@ -3456,8 +3456,8 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
             *pv = 0xFFFFFFFFU;      /* значение */
             *pa = tgt[k];           /* адрес  */
             __asm__ volatile("wbinvd" ::: "memory");
-            ulogf(L"G2RMK  %s п%d ботер#2: 0x%08x <- 0xffffffff "
-                  L"(сейчас 0x%08x)\n", tag, (INTN)pass + 1, tgt[k],
+            ulogf(L"G2RMK  %s pass%d booter#2: 0x%08x <- 0xffffffff "
+                  L"(now 0x%08x)\n", tag, (INTN)pass + 1, tgt[k],
                   mmio_read32(tgt[k]));
             (VOID)booter_load_v67(wprMetaPhys, ucodePhys);
             /* 42.10: ботер портит WPR2. Восстанавливаем и ПИШЕМ РЕЗУЛЬТАТ,
@@ -3474,22 +3474,22 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                 uefi_call_wrapper(BS->Stall, 1, 1000);
                 v = mmio_read32(tgt[k]);
             }
-            ulogf(L"G2RMK  %s п%d 0x%08x стало 0x%08x %s (polls=%d)\n",
+            ulogf(L"G2RMK  %s pass%d 0x%08x became 0x%08x %s (polls=%d)\n",
                   tag, (INTN)pass + 1, tgt[k], v,
-                  (v == 0xFFFFFFFFU) ? L"ОТКРЫТА" : L"осталась запертой",
+                  (v == 0xFFFFFFFFU) ? L"OPEN" : L"remained locked",
                   (INTN)tries);
             if (v == 0xFFFFFFFFU) done++;
         }
-        ulogf(L"G2RMK  %s проход %d: открыто %d из %d\n", tag,
+        ulogf(L"G2RMK  %s pass %d: open %d of %d\n", tag,
               (INTN)pass + 1, (INTN)done, (INTN)NTGT);
         if (done == NTGT) break;
         uefi_call_wrapper(BS->Stall, 1, 20000);
     }
 
     for (k = 0; k < NTGT; k++)
-        ulogf(L"G2RMK  %s ПОСЛЕ 0x%08x = 0x%08x %s\n", tag, tgt[k],
+        ulogf(L"G2RMK  %s AFTER 0x%08x = 0x%08x %s\n", tag, tgt[k],
               mmio_read32(tgt[k]),
-              (mmio_read32(tgt[k]) == 0xFFFFFFFFU) ? L"ОТКРЫТА" : L"заперта");
+              (mmio_read32(tgt[k]) == 0xFFFFFFFFU) ? L"OPEN" : L"locked");
 
     /* 0x823800 открылся в прошлом прогоне и этого тоже недостаточно —
      * показываем, что он по-прежнему открыт. 0x823B04 для информации:
@@ -3498,16 +3498,16 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     for (k = 0; k < NTGT; k++)
         if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) done++;
     v = mmio_read32(0x00823800U);
-    ulogf(L"G2RMS  %s ИТОГ: окно XVE открыто %d из %d | 0x823800=0x%08x | "
-          L"0x823B04=0x%08x | WPR2=0x%08x/0x%08x %s | GFX-гейт %s\n", tag,
+    ulogf(L"G2RMS  %s TOTAL: XVE window open %d of %d | 0x823800=0x%08x | "
+          L"0x823B04=0x%08x | WPR2=0x%08x/0x%08x %s | GFX-gate %s\n", tag,
           (INTN)done, (INTN)NTGT, v, mmio_read32(0x00823B04U),
           mmio_read32(REG_PFB_MMU_WPR2_LO),
           mmio_read32(REG_PFB_MMU_WPR2_HI),
           (mmio_read32(REG_PFB_MMU_WPR2_LO) == TARGET_WPR2_LO &&
            mmio_read32(REG_PFB_MMU_WPR2_HI) == TARGET_WPR2_HI)
-              ? L"ожидаемое" : L"*** НЕ ОЖИДАЕМОЕ ***",
-          (done > 0) ? L"открыт, GFX_SPEED_SELECT может встать"
-                     : L"закрыт, GFX_SPEED_SELECT не встанет");
+              ? L"expected" : L"*** UNEXPECTED ***",
+          (done > 0) ? L"open, GFX_SPEED_SELECT can engage"
+                     : L"closed, GFX_SPEED_SELECT will not engage");
 #undef NTGT
 }
 #endif /* RENDER_MASKS */
@@ -3553,8 +3553,8 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
         UINT32 ca = crc32_upd(0xFFFFFFFFU, fwsec_ga104_bin, FWSEC_SIZE);
         UINT32 cb = crc32_upd(0xFFFFFFFFU, (const UINT8 *)(UINTN)fwsecPhys,
                               FWSEC_SIZE);
-        ulogf(L"FWSEC   образ перезалит: CRC32 блоб=0x%08x буфер=0x%08x %s\n",
-              ca, cb, ca == cb ? L"OK" : L"РАСХОЖДЕНИЕ");
+        ulogf(L"FWSEC   image reflashed: CRC32 blob=0x%08x buffer=0x%08x %s\n",
+              ca, cb, ca == cb ? L"OK" : L"MISMATCH");
     }
 
     Print(L"fwsec: патчинг DMEM (sig[%d]@0x5a4, iface@0x1c, FRTS cmd)...\n",
@@ -3842,7 +3842,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
                   mmio_read32(GSP_BASE + 0x94));
         if ((lo & 0xFFFFFFF0) == (TARGET_WPR2_LO & 0xFFFFFFF0) &&
             (hi & 0xFFFFFFF0) == (TARGET_WPR2_HI & 0xFFFFFFF0)) {
-            ulogf(L"WAIT   *** WPR2 УСТАНОВЛЕН lo=0x%08x hi=0x%08x после %d ms ***\n",
+            ulogf(L"WAIT   *** WPR2 ESTABLISHED lo=0x%08x hi=0x%08x after %d ms ***\n",
                   lo, hi, (INTN) i);
             Print(L"fwsec: *** WPR2 УСТАНОВЛЕН lo=0x%08x hi=0x%08x после %d ms ***\n",
                   lo, hi, i);
@@ -4163,7 +4163,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
      * FRTS-команду) и что осталось нетронутым. */
     {
         UINT32 off, shown = 0;
-        ulogf(L"FWSEC   дамп DMEM после прогона (все ненулевые):\n");
+        ulogf(L"FWSEC   DMEM dump after run (all non-zero):\n");
         for (off = 0; off < FWSEC_DMEM_SIZE; off += 4) {
             UINT32 v;
             mmio_write32(GSP_BASE + 0x1C0, off);   /* тот же порт, что и в проверке dmem_* */
@@ -4171,14 +4171,14 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
             if (v == 0) continue;
             if (shown >= 110) {                  /* лог не должен упираться в 1 МБ */
                 if (shown == 110)
-                    ulogf(L"FWSEC   ... (дамп обрезан на 110 строках)\n");
+                    ulogf(L"FWSEC   ... (dump truncated at 110 lines)\n");
                 shown++;
                 continue;
             }
             ulogf(L"FWSEC   dmem[0x%03x]=0x%08x\n", off, v);
             shown++;
         }
-        ulogf(L"FWSEC   конец дампа DMEM (непустых слов: %d)\n", (INTN)shown);
+        ulogf(L"FWSEC   end of DMEM dump (non-empty words: %d)\n", (INTN)shown);
     }
 
     /* Проба доступа к кадровому буферу уехала на fb_access_probe(): там
@@ -4273,7 +4273,7 @@ static void
 log_t0(void)
 {
     g_t0 = cmp90_ptimer64();
-    ulogf(L"TIME  t=0мс — старт отсчёта\n");
+    ulogf(L"TIME  t=0ms - start of count\n");
 }
 
 static void
@@ -4282,7 +4282,7 @@ log_ms(const CHAR16 *tag)
     if (g_t0 == 0) return;
     {
         UINT64 ms = (cmp90_ptimer64() - g_t0) / 1000000ULL;
-        ulogf(L"TIME  t=%lldмс  %s\n", (INT64)ms, tag);
+        ulogf(L"TIME  t=%lldms  %s\n", (INT64)ms, tag);
     }
 }
 
@@ -4594,7 +4594,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
               plmOpen ? L"PLM OPEN" : halted ? L"HALT" : L"таймаут 5с");
         /* v3n: то же в лог — именно этот поллинг (до 200000 итераций по
          * ~0.65мс) подозреваем в съедании большей части 13 минут */
-        ulogf(L"BOOTER iters=%u за %u.%03uмс %s\n",
+        ulogf(L"BOOTER iters=%u in %u.%03ums %s\n",
               (INTN)it,
               (INTN)(elapsed / 1000000ULL),
               (INTN)((elapsed / 1000ULL) % 1000ULL),
@@ -4748,13 +4748,13 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     Print(L"[E2] FWSEC на GSP (WPR2)...\n");
     CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
     wpr2_probe(L"E2-до-fwsec");
-    sec2_window_dump(L"E2-до-fwsec");
+    sec2_window_dump(L"E2-pre-fwsec");
     if (!fwsec_boot_gsp_sig(fwsecPhys, fwsec_ga104_prod_sig2, 2)) {
         Print(L"[E2] WPR2 не встал — ранний путь не удался\n");
         return EFI_DEVICE_ERROR;
     }
     wpr2_probe(L"E2-после-fwsec");
-    sec2_window_dump(L"E2-после-fwsec");
+    sec2_window_dump(L"E2-post-fwsec");
 
     /* --- [E3] ResetIntoRiscv + LibosBootArgs.
      * v2.80: ТОЧНАЯ реплика kflcnResetIntoRiscv_GA102: PreResetWait →
@@ -4865,13 +4865,13 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
         mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
         uefi_call_wrapper(BS->Stall, 1, 50000);
         wpr2_probe(L"E5-после-восстановления");
-        ulogf(L"FLRX   WPR2 восстановлен после V67: "
+        ulogf(L"FLRX   WPR2 restored after V67: "
               L"lo 0x%08x->0x%08x hi 0x%08x->0x%08x %s\n",
               wLo, mmio_read32(REG_PFB_MMU_WPR2_LO),
               wHi, mmio_read32(REG_PFB_MMU_WPR2_HI),
               (mmio_read32(REG_PFB_MMU_WPR2_LO) == wLo &&
                mmio_read32(REG_PFB_MMU_WPR2_HI) == wHi)
-                  ? L"OK" : L"*** НЕ УДЕРЖАЛОСЬ ***");
+                  ? L"OK" : L"*** DID NOT HOLD ***");
 
         return bst;
     }
@@ -6796,8 +6796,8 @@ log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr, UINTN size)
         rb[i] = *(volatile UINT32 *)(UINTN)(addr + mo[i]);
         if (rb[i] != mag[i]) bad++;
     }
-    ulogf(L"MEM   %s addr=0x%llx W/R %s (плохих %d)\n", tag, addr,
-          bad ? L"НЕ РАБОТАЕТ" : L"ок", (INTN)bad);
+    ulogf(L"MEM   %s addr=0x%llx W/R %s (bad %d)\n", tag, addr,
+          bad ? L"DEAD" : L"ok", (INTN)bad);
 
     /* 2) копируем образ и сверяем CRC32 целиком и со второй половины */
     CopyMem((VOID *)(UINTN)addr, src, size);
@@ -6805,12 +6805,12 @@ log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr, UINTN size)
     cb = crc32_upd(0xFFFFFFFFU, (const UINT8 *)(UINTN)addr, size);
     ch  = crc32_upd(0xFFFFFFFFU, src + size / 2, size / 2);
     chb = crc32_upd(0xFFFFFFFFU, (const UINT8 *)(UINTN)(addr + size / 2), size / 2);
-    ulogf(L"MEM   %s CRC32 блоб=0x%08x буфер=0x%08x %s | хвост блоб=0x%08x "
-          L"буфер=0x%08x %s\n", tag, cs, cb, cs == cb ? L"OK" : L"РАСХОЖДЕНИЕ",
-          ch, chb, ch == chb ? L"OK" : L"РАСХОЖДЕНИЕ");
+    ulogf(L"MEM   %s CRC32 blob=0x%08x buffer=0x%08x %s | tail blob=0x%08x "
+          L"buffer=0x%08x %s\n", tag, cs, cb, cs == cb ? L"OK" : L"MISMATCH",
+          ch, chb, ch == chb ? L"OK" : L"MISMATCH");
 
     /* 3) где именно расходится — 8 слов через весь образ */
-    ulogf(L"MEM   %s слова:", tag);
+    ulogf(L"MEM   %s words:", tag);
     for (i = 0; i < 8; i++) {
         UINTN off = (size / 8) * (UINTN)i;
         UINT32 a = *(const UINT32 *)(const void *)(src + off);
@@ -7093,7 +7093,7 @@ log_clear_area(EFI_BLOCK_IO_PROTOCOL *bio)
     }
     /* указатель тоже сбрасываем — иначе останется старый номер */
     log_store_ptr(bio, 1);
-    ulogf(L"LOG   область очищена, следующий прогон с сектора 1\n");
+    ulogf(L"LOG   area cleared, next run starts at sector 1\n");
 }
 
 /* Заголовок лога + контрольная запись.
@@ -7924,8 +7924,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * обычный путь. Это также снимает необходимость вручную чистить
          * NVRAM. */
         if (!g_gen2Enable && have2)
-            ulogf(L"G2NVR  CMP90G2=%d есть, но свип выключен -> fire-режим "
-                  L"НЕ включаем, обычный путь селекторов будет выполнен\n",
+            ulogf(L"G2NVR  CMP90G2=%d present, but sweep disabled -> fire mode "
+                  L"NOT enabling, the normal selector path will run\n",
                   (INTN) gi);
         if (g_gen2Enable && have2 && gi <= RJ16_N && g_mcCount > 0) {
             UINT32 saveBar;
@@ -8063,7 +8063,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
              * Этот путь («карта уже разлочена») тоже писал BootNext на флешку,
              * то есть устраивал POST и стирал то, ради чего карта и
              * разблокировалась. */
-            ulogf(L"MC     already-unlocked path: BootNext=self ПРОПУЩЕН "
+            ulogf(L"MC     already-unlocked path: BootNext=self SKIPPED "
                   L"(SINGLE_CARD_ONLY=%d)\n", (INTN)SINGLE_CARD_ONLY);
 #if !SINGLE_CARD_ONLY
             mc_var_set(L"CMP90IDX", (UINT32)(g_mcIndex + 1));
@@ -8549,7 +8549,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * оба печатают через Print/ulogf по-разному, но WPR2 трогать могут
          * оба. */
         wpr2_probe(L"после-раннего-пути");
-        sec2_window_dump(L"после-раннего-пути");
+        sec2_window_dump(L"after-early-path");
         if (earlySt == EFI_SUCCESS) {
             Print(L"v2.70: *** ранний путь: PLM открыт ***\n");
             earlyOk = TRUE;
@@ -8724,10 +8724,10 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         /* v3n: g_gen2Enable — рубильник. По умолчанию выключен: замер показал,
          * что свип съедает ~10.8 мин из 13 и не доходит до FF. Включается
          * осознанно, когда WPR2 защёлкивается и понадобится полный PLM. */
-        ulogf(L"GEN2  рубильник: fire=%d have2=%d enable=%d -> %s\n",
+        ulogf(L"GEN2  switch: fire=%d have2=%d enable=%d -> %s\n",
               (INTN)g_gen2Fire, (INTN)have2, (INTN)g_gen2Enable,
-              (g_gen2Fire && have2 && g_gen2Enable) ? L"СВИП ИДЁТ"
-                                                    : L"свип ПРОПУЩЕН");
+              (g_gen2Fire && have2 && g_gen2Enable) ? L"SWEEP RUNNING"
+                                                    : L"sweep SKIPPED");
 
         /* v3n: МЕТКИ ПО ПУТИ (2026-09-28).
          *
@@ -8773,7 +8773,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
              * уже точный FF => миницикл не нужен. До 3 проходов. */
             for (pass = 0; pass < 3 && !g_gen2Quick && !done; pass++) {
                 Print(L"gen2: === ПРОХОД %d/3 ===\n", (INTN)pass + 1);
-                ulogf(L"GEN2  проход %d/3 начат\n", (INTN)pass + 1);
+                ulogf(L"GEN2  pass %d/3 started\n", (INTN)pass + 1);
                 for (i = 1; i < RJ16_N; i++) {
                     volatile UINT32 *pv =
                         (volatile UINT32 *)(UINTN)(v67Phys + 0xf948);
@@ -8796,7 +8796,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                     /* v2.100: уже точный FF — миницикл не тратим */
                     if (mmio_read32(g_rj16[i].addr) == g_rj16[i].val)
                         continue;
-                    ulogf(L"GEN2  п%d [%d] 0x%08x <- 0x%08x (сейчас 0x%08x)\n",
+                    ulogf(L"GEN2  pass%d [%d] 0x%08x <- 0x%08x (now 0x%08x)\n",
                           (INTN)pass + 1, (INTN)i + 1, g_rj16[i].addr,
                           g_rj16[i].val, mmio_read32(g_rj16[i].addr));
                     Print(L"gen2[%d/%d] 0x%08x <- 0x%08x\n",
@@ -8854,13 +8854,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                     if (cur != g_rj16[i].val) {
                         Print(L"gen2: свип п%d [%d] 0x%08x = 0x%08x — НЕ точный\n",
                               (INTN)pass + 1, (INTN)i + 1, a, cur);
-                        ulogf(L"GEN2  свип п%d [%d] 0x%08x = 0x%08x — НЕ точный\n",
+                        ulogf(L"GEN2  sweep pass%d [%d] 0x%08x = 0x%08x - NOT exact\n",
                               (INTN)pass + 1, (INTN)i + 1, a, cur);
                         done = FALSE;
                     }
                 }
-                ulogf(L"GEN2  проход %d завершён — маски %s\n", (INTN)pass + 1,
-                      done ? L"ВСЕ ТОЧНЫЕ FF" : L"НЕ все точные (ещё проход)");
+                ulogf(L"GEN2  pass %d finished - masks %s\n", (INTN)pass + 1,
+                      done ? L"ALL EXACT FF" : L"not all exact (another pass)");
                 {
                     /* v3n: замер времени проходa — без него 13 минут не
                      * разложить по фазам */
@@ -8877,12 +8877,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                 for (k = 0; k < RJ16_N; k++)
                     Print(L"gen2: [%d] 0x%08x = 0x%08x\n", (INTN)k,
                           g_rj16[k].addr, mmio_read32(g_rj16[k].addr));
-                ulogf(L"GEN2  итог по 41 записи (в лог, чтобы не читать с экрана):\n");
+                ulogf(L"GEN2  summary of 41 entries (to log, not to read on screen):\n");
                 for (k = 0; k < RJ16_N; k++)
                     ulogf(L"GEN2  [%d] 0x%08x = 0x%08x%s\n", (INTN)k,
                           g_rj16[k].addr, mmio_read32(g_rj16[k].addr),
                           (mmio_read32(g_rj16[k].addr) == g_rj16[k].val)
-                              ? L"  точный" : L"  НЕ точный");
+                              ? L"  exact" : L"  NOT exact");
             }
             Print(L"gen2: применяю конфиг\n");
 #ifndef FULL_NOGEN2
@@ -9116,7 +9116,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                     Print(L"multi-card: карта %d разлочена (fire) -> BootNext "
                           L"на себя (без ребута)\n", (INTN)g_mcIndex + 1);
                     /* v3n: тот же запрет — см. SINGLE_CARD_ONLY */
-                    ulogf(L"MC     fire path: BootNext=self ПРОПУЩЕН "
+                    ulogf(L"MC     fire path: BootNext=self SKIPPED "
                           L"(SINGLE_CARD_ONLY=%d)\n", (INTN)SINGLE_CARD_ONLY);
 #if !SINGLE_CARD_ONLY
                     mc_var_set(L"CMP90IDX", (UINT32)(g_mcIndex + 1));
@@ -9153,7 +9153,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         render_open_gfx_masks(L"рендер-маски",
                               wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
     } else {
-        ulogf(L"G2RMS  маски рендера ПРОПУЩЕНЫ: анлок не прошёл "
+        ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "
               L"(success=%d direct=%d early=%d)\n",
               (INTN)Status, (INTN)directOk, (INTN)earlyOk);
     }
@@ -9306,7 +9306,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                   REG_SM_ISSUE_RATE_MOD, ISSUE_RATE_MOD_UNLOCKED,
                   mmio_read32(REG_SM_ISSUE_RATE_MOD),
                   (mmio_read32(REG_SM_ISSUE_RATE_MOD) == ISSUE_RATE_MOD_UNLOCKED)
-                      ? L"STUCK" : L"NOT STUCK (RO или иной контекст)");
+                      ? L"STUCK" : L"NOT STUCK (RO or another context)");
         }
         ulogf(L"IRM    after  0x504200=0x%08x 0x504204=0x%08x "
               L"0x504208=0x%08x 0x50420C=0x%08x\n",
@@ -9322,8 +9322,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                   ss0, ss1,
                   (ss0 == VAL_SS0_UNLOCKED && ss1 == VAL_SS1_UNLOCKED)
                       ? L"written OK" : L"*** DID NOT STICK ***");
-            ulogf(L"STG   is_selectors_written()=%d  (ЭТО ТАВТОЛОГИЯ: "
-                  L"перечитывает только что записанное; анлок не доказывает)\n",
+            ulogf(L"STG   is_selectors_written()=%d  (THIS IS A TAUTOLOGY: "
+                  L"it re-reads what was just written; does not prove unlock)\n",
                   (INTN) is_unlocked());
 
             /* Тот же блок fuse ПОСЛЕ записи — ищем реальный эффект. */
@@ -9346,8 +9346,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                   fafter[(0x00823814UL - FUSE_WIN_LO) / 4],
                   (fbefore[(0x00823814UL - FUSE_WIN_LO) / 4] ==
                    fafter[(0x00823814UL - FUSE_WIN_LO) / 4])
-                      ? L"UNCHANGED (но поле документировано только как "
-                        L"ECC_DRAM бит 16 - это НЕ признак анлока)"
+                      ? L"UNCHANGED (but the field is documented only as "
+                        L"ECC_DRAM bit 16 - that is NOT a sign of unlock)"
                       : L"moved");
 
         /* --- ГИПОТЕЗА B: пробуем 0x0082380C как настоящий селектор ------- */
@@ -9355,12 +9355,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         {
             UINT32 was  = mmio_read32(REG_FUSE_SEL_CAND);
             UINT32 was2 = mmio_read32(REG_FUSE_ROUTINE);
-            ulogf(L"PROBE  0x%08x = 0x%08x (кандидат в селектор), "
+            ulogf(L"PROBE  0x%08x = 0x%08x (selector candidate), "
                   L"0x%08x = 0x%08x\n",
                   REG_FUSE_SEL_CAND, was, REG_FUSE_ROUTINE, was2);
-            ulogf(L"PROBE  %s -> пишу 0x88888888 (добираем старший байт)\n",
-                  (was == 0x88888888UL) ? L"уже 0x88888888, писать нечего"
-                                         : L"ЗАПИСЫВАЮ");
+            ulogf(L"PROBE  %s -> writing 0x88888888 (fill in high byte)\n",
+                  (was == 0x88888888UL) ? L"already 0x88888888, nothing to write"
+                                         : L"WRITING");
             if (was != 0x88888888UL) {
                 mmio_write32(REG_FUSE_SEL_CAND, 0x88888888UL);
                 uefi_call_wrapper(BS->Stall, 1, 100000);
@@ -9368,10 +9368,10 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             ulogf(L"PROBE  readback 0x%08x = 0x%08x %s | 0x%08x = 0x%08x%s\n",
                   REG_FUSE_SEL_CAND, mmio_read32(REG_FUSE_SEL_CAND),
                   (mmio_read32(REG_FUSE_SEL_CAND) == 0x88888888UL)
-                      ? L"STUCK" : L"NOT STUCK (вероятно это отчётность)",
+                      ? L"STUCK" : L"NOT STUCK (probably just reporting)",
                   REG_FUSE_ROUTINE, mmio_read32(REG_FUSE_ROUTINE),
                   (mmio_read32(REG_FUSE_ROUTINE) == was2)
-                      ? L" (не изменился)" : L" *** ИЗМЕНИЛСЯ ***");
+                      ? L" (unchanged)" : L" *** CHANGED ***");
         }
 #endif
         }
@@ -9381,7 +9381,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * но до глушения SEC2 и до FLR, потому что после FLR функция мертва
          * и MMIO не читается (см. комментарий выше про «v2.88: БЕЗ FLR»).
          * Только чтение: ни одной записи, ни в GPU, ни в конфиг PCIe. */
-        gen2_readonly_dump(L"после-анлока");
+        gen2_readonly_dump(L"after-unlock");
 #if CHIP_SIZE_SCAN
         /* v3.15: ищем, где хранится размер кристалла. Только чтение. */
         chip_size_scan(L"после-анлока");
@@ -9415,7 +9415,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             ulogf(L"PLMZ  wpr2Lo=0x%08x (want 0x%08x) %s | wpr2Hi=0x%08x %s\n",
                   l0, TARGET_WPR2_LO, (l0 == TARGET_WPR2_LO) ? L"OK" : L"CHANGED",
                   l1, (l1 == TARGET_WPR2_HI) ? L"OK" : L"CHANGED");
-            ulogf(L"PLMZ  SS0=0x%08x SS1=0x%08x (не должны сбиться: 0x%08x/0x%08x)\n",
+            ulogf(L"PLMZ  SS0=0x%08x SS1=0x%08x (must not drop: 0x%08x/0x%08x)\n",
                   mmio_read32(REG_FEAT_OVR_SM_SPD),
                   mmio_read32(REG_FEAT_OVR_SM_SPD_1),
                   VAL_SS0_UNLOCKED, VAL_SS1_UNLOCKED);
@@ -9486,7 +9486,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         /* Эксперимент: FLR пропускаем, чтобы проверить, переживают ли
          * селекторы сброс. Всё, что было до сброса, уже записано в лог
          * строками выше. */
-        ulogf(L"FLRX   *** SKIP_FLR=%d - do_flr() ПРОПУЩЕН ***\n", (INTN) SKIP_FLR);
+        ulogf(L"FLRX   *** SKIP_FLR=%d - do_flr() SKIPPED ***\n", (INTN) SKIP_FLR);
         uefi_call_wrapper(BS->Stall, 1, 500000);
 #else
         Print(L"FLR (сброс защёлкнутого WPR2)...\n");
@@ -9494,7 +9494,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         uefi_call_wrapper(BS->Stall, 1, 300000);   /* PCIe: 100мс + запас */
         g_postFlr = TRUE;
         /* После FLR MMIO не читаем принципиально — только запись в лог. */
-        ulogf(L"FLRX   do_flr() выполнен, дальше MMIO не читается\n");
+        ulogf(L"FLRX   do_flr() done, no further MMIO reads\n");
 #endif
 
 #ifdef MULTI_CARD
@@ -9502,13 +9502,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             Print(L"multi-card: карта %d разлочена -> BootNext на себя (без ребута)\n",
                   (INTN)g_mcIndex + 1);
             ulogf(L"MC     g_mcIndex=%d g_mcCount=%d g_mcAdvance=1 -> "
-                  L"BootNext=self ПРОПУЩЕН (SINGLE_CARD_ONLY=%d): перезагрузка "
-                  L"на флешку = POST = стирание fuse-shadow\n",
+                  L"BootNext=self SKIPPED (SINGLE_CARD_ONLY=%d): reboot "
+                  L"from USB = POST = fuse-shadow erase\n",
                   (INTN)g_mcIndex, (INTN)g_mcCount, (INTN)SINGLE_CARD_ONLY);
 #if !SINGLE_CARD_ONLY
             mc_var_set(L"CMP90IDX", (UINT32)(g_mcIndex + 1));
-            ulogf(L"MC     mc_set_bootnext_self() = %d (0 = запись BootNext "
-                  L"не удалась, значит и перезагрузки не будет)\n",
+            ulogf(L"MC     mc_set_bootnext_self() = %d (0 = BootNext write "
+                  L"failed, so there will be no reboot)\n",
                   (INTN) mc_set_bootnext_self(ImageHandle));
 #else
             mc_var_set(L"CMP90IDX", 0);   /* счётчик сбрасываем, чтобы не крутить */
@@ -9560,8 +9560,8 @@ done:
      * устройстве. Теперь состояние просто переиспользуем. */
     if (!g_snapOk && !g_postFlr) snapshot_state();
     else if (g_postFlr)
-        ulogf(L"STG   post-FLR: MMIO недоступен, сводка берёт снимок "
-              L"от момента до FLR\n");
+        ulogf(L"STG   post-FLR: MMIO unavailable, summary takes a snapshot "
+              L"from the moment up to FLR\n");
     {
         Print(L"\n================ ИТОГ ================\n");
         Print(L" profile      %s  10de:%04x  bus=%d dev=%d fn=%d\n",
@@ -9582,7 +9582,7 @@ done:
         /* Финальный дамп окна SEC2: это последнее состояние перед уходом
          * в прошивку, то есть ровно то, что доживает до Windows. Именно
          * его и надо сравнивать между прогонами с флешкой и без. */
-        sec2_window_dump(L"END-финал");
+        sec2_window_dump(L"END-final");
         ulogf(L"END   ss0=0x%08x ss1=0x%08x PLM=0x%08x WPR2=0x%08x/0x%08x "
              "dbg=0x%08x cpuctl=0x%08x scratch0e=0x%08x\n",
              g_snapSs0, g_snapSs1, g_snapPlm, g_snapWLo, g_snapWHi,
