@@ -3952,7 +3952,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
                         break;
                     }
                 }
-                wpr2_probe(L"после-перебора-0x10..0x1F");
+                wpr2_probe(L"after-0x10..0x1F-scan");
             }
 
             /* v2.45: ДИСКРИМИНАЦИЯ SEC=1 на GSP — загружаем МОДИФИЦИРОВАННЫЙ
@@ -4024,7 +4024,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
              * Замер: OKCHK печатал 0x01F7E000, а в блоке селекторов было
              * 0x01EAD000 — и между этими точками больше ничего не пишет
              * WPR2, кроме этих блоков. */
-            wpr2_probe(L"перед-return-TRUE");
+            wpr2_probe(L"before-return-TRUE");
             return TRUE;
         }
         if ((i % 200) == 0)
@@ -4742,18 +4742,18 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     Print(L"[E1] после BL: cpuctl=0x%x dbg=0x%x mbox0=0x%x bcr=0x%x\n",
           mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
           mmio_read32(GSP_MAILBOX0), mmio_read32(GSP_BCR));
-    wpr2_probe(L"E1-после-BL");
+    wpr2_probe(L"E1-after-BL");
 
     /* --- [E2] FWSEC на GSP → WPR2 (fwsec_boot_gsp сам ресетит GSP) --- */
     Print(L"[E2] FWSEC на GSP (WPR2)...\n");
     CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
-    wpr2_probe(L"E2-до-fwsec");
+    wpr2_probe(L"E2-pre-fwsec");
     sec2_window_dump(L"E2-pre-fwsec");
     if (!fwsec_boot_gsp_sig(fwsecPhys, fwsec_ga104_prod_sig2, 2)) {
         Print(L"[E2] WPR2 не встал — ранний путь не удался\n");
         return EFI_DEVICE_ERROR;
     }
-    wpr2_probe(L"E2-после-fwsec");
+    wpr2_probe(L"E2-post-fwsec");
     sec2_window_dump(L"E2-post-fwsec");
 
     /* --- [E3] ResetIntoRiscv + LibosBootArgs.
@@ -4781,7 +4781,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
           mmio_read32(GSP_CPUCTL));
     mmio_write32(GSP_MAILBOX0, (UINT32)cmp90_meta_low(wprMetaPhys));
     mmio_write32(GSP_MAILBOX1, (UINT32)(cmp90_meta_low(wprMetaPhys) >> 32));
-    wpr2_probe(L"E3-после-ResetIntoRiscv");
+    wpr2_probe(L"E3-after-ResetIntoRiscv");
 
     sec2_health(L"E4-pre-booter");
 
@@ -4864,7 +4864,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
         mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
         mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
         uefi_call_wrapper(BS->Stall, 1, 50000);
-        wpr2_probe(L"E5-после-восстановления");
+        wpr2_probe(L"E5-after-restore");
         ulogf(L"FLRX   WPR2 restored after V67: "
               L"lo 0x%08x->0x%08x hi 0x%08x->0x%08x %s\n",
               wLo, mmio_read32(REG_PFB_MMU_WPR2_LO),
@@ -8483,9 +8483,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * и gsp_engine_reset() ниже всё равно приводит GSP в нужное состояние.
      * Ничего, кроме какого-нибудь мусора в неприкрытом FRTS-регионе, эта
      * проба испортить не может: WPR2 здесь ещё не защёлкнут. */
-    log_ms(L"проба доступа к кадровому буферу");
+    log_ms(L"framebuffer access probe");
     fb_access_probe(fwsecPhys);
-    log_ms(L"проба FB завершена");
+    log_ms(L"FB probe done");
 
     /* --- v2.12: убить GFW (как драйвер: kflcnReset(GSP) перед booter load) ---
      * Живой GFW из POST держит SEC2 залоченным. GSP ENGINE (0x1103C0)
@@ -8540,7 +8540,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * (записи не липнут, reset не лечит) — все последующие попытки исполняли
      * труп. Теперь BL(GSP)→FWSEC(GSP)→WPR2→libos→booter_load_v67 на живом. */
     earlyOk = FALSE;
-    log_ms(L"до раннего пути (аллокации закончены)");
+    log_ms(L"before early path (allocs done)");
     {
         EFI_STATUS earlySt = early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
         sec2_health(L"9-post-early");
@@ -8548,14 +8548,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * Нужна, чтобы отделить вклад FWSEC-перебора от вклада ботера:
          * оба печатают через Print/ulogf по-разному, но WPR2 трогать могут
          * оба. */
-        wpr2_probe(L"после-раннего-пути");
+        wpr2_probe(L"after-early-path");
         sec2_window_dump(L"after-early-path");
         if (earlySt == EFI_SUCCESS) {
             Print(L"v2.70: *** ранний путь: PLM открыт ***\n");
             earlyOk = TRUE;
         }
     }
-    log_ms(L"ранний путь завершён");
+    log_ms(L"early path finished");
 
     if (!earlyOk) {
     /* --- v2.28/32: FWSEC на GSP (FRTS/WPR2) + kflcnResetIntoRiscv + LibosBootArgs
@@ -8573,7 +8573,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             Print(L"v2.51: *** результат получен — разблокирую ***\n");
             Status = EFI_SUCCESS;
         } else {
-            log_ms(L"v2.51 без результата");
+            log_ms(L"v2.51 no result");
             Print(L"v2.51: без результата — пробую v2.46 полный реплей\n");
     /* v2.46: ПОЛНЫЙ РЕПЛЕЙ последовательности драйвера (3 стадии) — замена
      * v2.45 flow. Если реплей дал результат (наш код выполнился / PLM открыт) —
@@ -8598,7 +8598,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
              * единственный вариант, который не требует от нас знать
              * frtsOffset и не требует валидной подписи. */
             Print(L"\nv2.105: ПРОБА ШТАТНОГО FWSEC (без нашей подписи)...\n");
-            log_ms(L"до штатного FWSEC");
+            log_ms(L"before stock FWSEC");
             if (fwsec_preloaded_gsp()) {
                 fwOk = TRUE;
                 Print(L"v2.105: *** ШТАТНЫЙ FWSEC СРАБОТАЛ — WPR2 поднят ***\n");
@@ -8679,7 +8679,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                     sec2_health(L"5-fwsec-retry");
                 }
             }
-            log_ms(L"FWSEC-попытки закончены");
+            log_ms(L"FWSEC attempts finished");
             if (fwOk) {
         Print(L"fwsec: OK — WPR2 установлен. kflcnResetIntoRiscv(GSP)...\n");
         mmio_write32(GSP_ENGINE, 0x1);
@@ -8864,9 +8864,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                 {
                     /* v3n: замер времени проходa — без него 13 минут не
                      * разложить по фазам */
-                    static const CHAR16 *ptag[3] = { L"gen2 проход 1 завершён",
-                                                     L"gen2 проход 2 завершён",
-                                                     L"gen2 проход 3 завершён" };
+                    static const CHAR16 *ptag[3] = { L"gen2 pass 1 finished",
+                                                     L"gen2 pass 2 finished",
+                                                     L"gen2 pass 3 finished" };
                     if (pass < 3) log_ms(ptag[pass]);
                 }
             }
@@ -9150,7 +9150,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * селекторы продолжат выполняться, и не трогаем обычный хвост с
      * фиксом Code 43. Гоняем только если анлок сам прошёл. */
     if (Status == EFI_SUCCESS || directOk || earlyOk) {
-        render_open_gfx_masks(L"рендер-маски",
+        render_open_gfx_masks(L"render-masks",
                               wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "
@@ -9421,7 +9421,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                   VAL_SS0_UNLOCKED, VAL_SS1_UNLOCKED);
         }
 #endif
-        gen2_gfx_try(L"шаг1-GFX_SEL");
+        gen2_gfx_try(L"step1-GFX_SEL");
 #endif
 
         /* v2.88: БЕЗ FLR! На реальном железе (X570 F37d) FLR обнуляет BARs/
@@ -9526,7 +9526,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * (No mapping, OpenVolume-висняк, NVRAM-висяк). Возврат в
          * прошивку: BDS грузит Windows по BootOrder БЕЗ POST */
         Print(L"v3.0: возврат в прошивку — Windows по BootOrder без POST\n");
-        log_ms(L"финал: возврат в прошивку");
+        log_ms(L"final: return to firmware");
         goto done;
     }
 
