@@ -9384,7 +9384,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         gen2_readonly_dump(L"after-unlock");
 #if CHIP_SIZE_SCAN
         /* v3.15: ищем, где хранится размер кристалла. Только чтение. */
-        chip_size_scan(L"после-анлока");
+        chip_size_scan(L"after-unlock");
 #endif
 #ifdef GEN2_LINK_TRY
         /* v3.07 ШАГ 1: GFX_SPEED_SELECT = 4, рендер-селектор. Ставим ЗДЕСЬ —
