@@ -314,18 +314,22 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. 'TIME  FLRREADY calls=N fast=F waited=W never=X max=M us' <- READ FIRST" -ForegroundColor Yellow
-    Write-Host "       Stage 13 replaced ONE blind stall with an event wait: after initiating" -ForegroundColor Yellow
-    Write-Host "       FLR we now wait for config space to answer again (offset 0x00 stops" -ForegroundColor Yellow
-    Write-Host "       reading 0xFFFFFFFF). The budget stayed at 200 ms, so the WORST CASE" -ForegroundColor Yellow
-    Write-Host "       IS UNCHANGED - if the device never answers, we spend the same 200 ms." -ForegroundColor Yellow
-    Write-Host "       never=X  ->  the replacement buys nothing; the stall is genuinely needed." -ForegroundColor Yellow
-    Write-Host "       max=M    ->  the MEASURED responsiveness, which sizes the other 300 ms" -ForegroundColor Yellow
-    Write-Host "                     stall in stage 14. Do not size it by analogy." -ForegroundColor Yellow
-    Write-Host "" -ForegroundColor Yellow
-    Write-Host "       EXPECTED 16.6-18.1 s. The lower bound assumes the device answers fast;" -ForegroundColor Yellow
-    Write-Host "       the upper bound is guaranteed by the unchanged budget. I do NOT know" -ForegroundColor Yellow
-    Write-Host "       the responsiveness time - that is exactly what this run measures." -ForegroundColor Yellow
+    Write-Host "    7. STAGE 13r IS A REVERT. Expected: 18.1 s and 8 of 8, same as v3.28." -ForegroundColor Green
+    Write-Host "" -ForegroundColor Cyan
+    Write-Host "       Stage 13 removed the blind Stall(200000) after initiating FLR and" -ForegroundColor Cyan
+    Write-Host "       broke the render: 0 of 8 masks. It is now restored EXACTLY." -ForegroundColor Cyan
+    Write-Host "       The probe stays as measurement only (8-9 us per call, 81 us per run)." -ForegroundColor Cyan
+    Write-Host "" -ForegroundColor Cyan
+    Write-Host "       WHY IT BROKE - do not repeat it. The probe asked whether config" -ForegroundColor Cyan
+    Write-Host "       space answers. It answered in 8-9 us with 0x248A10DE, every time." -ForegroundColor Cyan
+    Write-Host "       LIVENESS is not READINESS. The device is alive at once but the" -ForegroundColor Cyan
+    Write-Host "       function needs ~500 ms to accept a BAR0 rewrite." -ForegroundColor Cyan
+    Write-Host "" -ForegroundColor Cyan
+    Write-Host "       NEW MEASUREMENT, read this one first:" -ForegroundColor Cyan
+    Write-Host "         BARR  bar0 write: want=0x.. got=0x.. STUCK / *** NOT STUCK ***" -ForegroundColor Cyan
+    Write-Host "       This is the FUNCTIONAL signal, and it is what stage 14 will use" -ForegroundColor Cyan
+    Write-Host "       to size the wait. All 8 must read STUCK - a single NOT STUCK means" -ForegroundColor Cyan
+    Write-Host "       the wait is too short, exactly as in v3.29." -ForegroundColor Cyan
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
