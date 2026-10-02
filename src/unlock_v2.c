@@ -2044,7 +2044,88 @@ falcon_dma_wait_not_full(void)
           (INTN)p.value);
 }
 
-static void
+/* ---- Ждать отработки Falcon после CPUCTL=STARTCPU --------------------
+ *
+ * ИСПОЛЬЗУЕТСЯ ТОЛЬКО ЗДЕСЬ. Ни в одном другом ожидании этот примитив
+ * неприменим: см. предупреждение в fx_wait_falcon_halt.
+ *
+ * Порядок действий, и он неarbitrary:
+ *   (1) дождаться, пока CPUCTL == STARTCPU — значит запись защёлкнулась и
+ *       Falcon действительно стартовал;
+ *   (2) дождаться, пока CPUCTL из STARTCPU уйдёт — значит Falcon отработал.
+ *
+ * Что НЕЛЬЗЯ делать: ждать «CPUCTL != STARTCPU». Запись CPUCTL=STARTCPU
+ * является posted — сразу после неё чтение ещё возвращает старое
+ * значение, и это условие истинно с первой итерации. Такая версия
+ * выходила через 0-2 мкс вместо 200 мс, и прогон 2026-10-02 это показал
+ * строкой «falcon settle 0us (budget 200000us)»: 200 мс ожидания после
+ * каждого STARTCPU пропали, WPR2 защёлкнулся 8 раз вместо 24,
+ * dbg=0x007E0009, маски открылись 5 из 25 вместо 24.
+ *
+ * Значение 0x00000000 НЕ считается «отработал»: это либо запись ещё не
+ * дошла, либо CPU снят с запуска. Ненулевое значение, отличное от
+ * STARTCPU (0x00000010 HALTED, 0xBADF5620 lockdown), читается как
+ * «отработал / упал» — там ранний выход оправдан.
+ *
+ * Бюджет СОХРАНЁН как потолок: если на какой-то карте код считает
+ * нужным ждать дольше, он и будет ждать дольше. Фактически затраченное
+ * печатается, чтобы недооборот был виден в логе, а не замаскирован.
+ */
+static UINT64
+fx_wait_falcon_halt(UINTN cpuctlReg, UINT64 budgetUs, const CHAR16 *what)
+{
+    UINT64 t0 = fx_now_us();
+    UINT64 dl = t0 + budgetUs;
+    UINT32 cc = 0;
+    BOOLEAN started = FALSE;
+
+    if (!t0) {                    /* часы не откалиброваны: старый режим */
+        uefi_call_wrapper(BS->Stall, 1, (UINTN)budgetUs);
+        return budgetUs;
+    }
+    for (;;) {
+        cc = mmio_read32(cpuctlReg);
+        if (cc == NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE) {
+            started = TRUE;                 /* старт защёлкнулся */
+        } else if (started || (cc != 0 && cc != 0xFFFFFFFFU)) {
+            break;                          /* отработал / упал */
+        }
+        if (fx_now_us() >= dl) {
+            Print(L"%s: HALT не дождались за %lldмкс (cpuctl=0x%08x, "
+                  L"started=%d)\n", what, (INT64)budgetUs, (INTN)cc,
+                  (INTN)started);
+            break;
+        }
+        fx_sleep_us(200);
+    }
+    {
+        UINT64 spent = fx_now_us() - t0;
+        ulogf(L"FWL    %s: falcon settle %lldus (budget %lldus, "
+              L"cpuctl=0x%08x, started=%d)\n", what, (INT64)spent,
+              (INT64)budgetUs, (INTN)cc, (INTN)started);
+        return spent;
+    }
+}
+
+/* Пауза после STARTCPU там, где раньше была слепая Stall(1 секунда).
+ *
+ * Пауза нужна, «чтобы код отработал». Но «отработал» — это наблюдаемое
+ * событие, а код просто спал фиксированное время независимо от
+ * результата. Заменяем на ожидание самого события через
+ * fx_wait_falcon_halt, бюджет 1 с сохранён как потолок.
+ *
+ * Оба таких места вызываются по 24 раза за прогон (по разу на маску),
+ * то есть слепая пауза стоила 24 секунды из пяти с половиной минут.
+ */
+static VOID
+fx_settle_after_startcpu(const CHAR16 *tag)
+{
+    UINT64 spent = fx_wait_falcon_halt(GSP_CPUCTL, 1000000, tag);
+    ulogf(L"TIME   [%s] BL settle %lldus of budget 1000000us\n", tag,
+          (INT64)spent);
+}
+
+static VOID
 falcon_dma_wait_idle(void)
 {
     FX_POLL p;
@@ -4934,7 +5015,10 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     __asm__ volatile("wbinvd" ::: "memory");
     mmio_write32(GSP_CPUCTL, 2);          /* STARTCPU */
     mmio_write32(GSP_BCR, 0x111);         /* RISCV+BRFETCH после старта */
-    uefi_call_wrapper(BS->Stall, 1, 1000000);
+    /* v3.16: было слепое Stall(1000000). Зовётся 24 раза за прогон = 24 с
+     * чистого расхода. Теперь ждём события; бюджет 1 с сохранён как
+     * потолок, фактическое время печатается в лог. */
+    fx_settle_after_startcpu(L"[E1]");
     Print(L"[E1] после BL: cpuctl=0x%x dbg=0x%x mbox0=0x%x bcr=0x%x\n",
           mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
           mmio_read32(GSP_MAILBOX0), mmio_read32(GSP_BCR));
@@ -5153,7 +5237,8 @@ driver_replay_v246(UINT64 booterPhys, UINT64 fwsecPhys, UINT64 ucodePhys,
     __asm__ volatile("wbinvd" ::: "memory");
     mmio_write32(GSP_CPUCTL, 2);          /* STARTCPU */
     mmio_write32(GSP_BCR, 0x111);         /* RISCV+BRFETCH после старта (трейс!) */
-    uefi_call_wrapper(BS->Stall, 1, 1000000);
+    /* v3.16: см. fx_settle_after_startcpu — было слепое Stall(1000000). */
+    fx_settle_after_startcpu(L"[1]");
     Print(L"[1] после booter: cpuctl=0x%x dbg=0x%x mbox0=0x%x bcr=0x%x "
           L"GFW=0x%x WPR2lo=0x%x PLM=0x%x\n",
           mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
