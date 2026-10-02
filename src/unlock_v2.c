@@ -2492,20 +2492,52 @@ fx_diag_gate(void)
  * Если early=0 и total ≈ 1000000*N, гипотеза подтверждена и следующим
  * этапом сокращается бюджет. Если early>0 - гипотеза опровергнута, и
  * сокращать нечего. */
-/* v3.23, этап 8: бюджет falcon_wait_reset_ready сокращён с 10 000 итераций
- * (1,000 с) до 500 (50 мс). Основание - измерение прогона v3.22:
- * calls=37 early=0 total=41538580us, то есть все 37 вызовов выжигали полную
- * секунду, а признак HWCFG2[31] не выставился ни разу. Полное обоснование
- * и разбор риска - в комментарии над самой функцией.
+/* v3.23, этап 8 (ОТВЕРГНУТ, см. ниже и out/BUILDS.md): бюджет
+ * falcon_wait_reset_ready был сокращён с 10 000 итераций (1,000 с) до 500
+ * (50 мс). Основание было измерение прогона v3.22: calls=37 early=0
+ * total=41538580us, то есть все 37 вызовов выжигали полную секунду, а признак
+ * HWCFG2[31] не выставился ни разу.
  *
- * Определено ЗДЕСЬ, а не над функцией, потому что значение печатается в
- * fx_mk_report, которая объявлена раньше. */
-#define FX_RR_ITERS  500      /* было 10000 -> 1,000 с -> стало 50 мс */
+ * ОСНОВАНИЕ ОКАЗАЛОСЬ НЕПОЛНЫМ. Прогон v3.23 дал 58 535 мс и 0 из 8 масок.
+ * early=0 доказывало, что условие HWCFG2[31] не выставляется, - и НИЧЕГО
+ * НЕ ГОВОРИЛО о том, нужна ли сама задержка. Она оказалась необходима.
+ * Ниже бюджет возвращён к 10 000, а перед ним добавлено ожидание события.
+ */
+
+/* v3.24, этап 9: бюджет СЛЕПОГО ожидания восстановлен на прежние 10 000
+ * (1,000 с), и ПЕРЕД ним добавлено ожидание РЕАЛЬНОГО события.
+ *
+ * Почему слепой бюджет вернулся. Этап 8 сократил его до 500 (50 мс) на
+ * основании того, что условие HWCFG2[31] не выставляется ни разу (0 из 37).
+ * Прогон v3.23 показал: этого недостаточно, render сломан, 0 из 8 масок.
+ * Механизм, измеренный по двум прогонам: FWSEC грузится при CPUCTL=0x00000000
+ * (18 из 18 строк WAIT в v322) и не грузится при CPUCTL=0x00000010=HALTED
+ * (64 из 64 в v323). То есть секунда ждала не признак, а УХОДА CPUCTL в
+ * нулевое состояние перед сбросом движка.
+ *
+ * То есть слепой цикл по HWCFG2[31] бесполезен (это осталось верным), но
+ * ЗАДЕРЖКА, которую он случайно давал, необходима. Значит надо ждать
+ * состояние, а не константу - и слепой бюджет равен прежнему, чтобы
+ * худший случай совпал с заведомо рабочим v322.
+ *
+ * Определения здесь, а не над функцией: и это значение, и счётчики
+ * печатаются в fx_mk_report, которая объявлена раньше функции. */
+#define FX_RR_ITERS      10000   /* слепой опрос HWCFG2[31]: 1,000 с */
+#define FX_RQ_BUDGET_US  1000000 /* ожидание CPUCTL==0: 1,000 с, равно
+                                   * прежней полной стоимости, то есть
+                                   * худший случай = рабочий v322 */
+#define FX_RQ_POLL_US    1000    /* период опроса CPUCTL */
 
 static UINTN  fx_rrCalls = 0;      /* вызовов за прогон */
 static UINTN  fx_rrEarly = 0;      /* вышли пораньше, по HWCFG2[31] */
-static UINTN  fx_rrBudgetOut = 0;  /* вышли по исчерпании бюджета */
+static UINTN  fx_rrBudgetOut = 0;  /* вышли по исчерпанию бюджета */
 static UINT32 fx_rrLast = 0;       /* последнее прочитанное HWCFG2 */
+static UINTN  fx_rqCalls = 0;      /* ожиданий покоя CPUCTL */
+static UINTN  fx_rqFast = 0;       /* усёклись по событию, до бюджета */
+static UINTN  fx_rqSlow = 0;       /* бюджет исчерпан, CPUCTL не ушёл в 0 */
+static UINT64 fx_rqUs = 0;         /* суммарно мкс */
+static UINT64 fx_rqUsMax = 0;      /* максимум по одному вызову */
+static UINT32 fx_rqLastCpu = 0;    /* последний прочитанный CPUCTL */
 static UINT64 fx_rrUs    = 0;      /* суммарно мкс */
 
 /* v3.21 (этап 7): разрыв между 'early path finished' и входом в рендер.
@@ -2593,6 +2625,14 @@ fx_mk_report(void)
           (INT64)fx_rrUs,
           (INT64)(fx_rrCalls ? fx_rrUs / fx_rrCalls : 0),
           fx_rrLast, FX_RR_ITERS);
+    /* ШАГ 1 ожидания - то, ради чего всё затевалось. max= это число, по
+     * которому этап 10 ставит бюджет. slow>0 означает: движок не ушёл в ноль
+     * за секунду, то есть версия о причине неполна и сокращать нельзя. */
+    ulogf(L"TIME   QUIESCE calls=%d fast=%d slow=%d total=%lldus "
+          L"max=%lldus last_cpuctl=0x%08x (budget=%dus)\n",
+          (INTN)fx_rqCalls, (INTN)fx_rqFast, (INTN)fx_rqSlow,
+          (INT64)fx_rqUs, (INT64)fx_rqUsMax, fx_rqLastCpu,
+          (INTN)FX_RQ_BUDGET_US);
     ulogf(L"TIME   NOTE: SUM is NOT a phase total and may EXCEED elapsed, "
           L"because marks are nested. For ONE duration use the difference "
           L"of two adjacent 'TIME t=' lines.\n");
@@ -2893,14 +2933,118 @@ done:
  * falcon_wait_scrub_done - тот ждёт РЕАЛЬНОЕ событие и отрабатывает за
  * 103 мкс (замерено), то есть трогать его нечего.
  *
- * ИТОГ ПРАВКИ: 41,54 с -> 2,08 с, то есть прогон 56,1 с -> ожидается
- * 16,6 с. Ожидание, а не факт: реальная цифра придёт из прогона.
+ * ИТОГ ПРАВКИ: 41,54 с -> 2,08 с, то есть прогон 56,1 с -> ожидалось
+ * 16,6 с.
+ *
+ * ============================ v3.24, ЭТАП 9 ============================
+ *
+ * ЭТОТ ПРОГОН ОПРОВЕРГ ПРАВКУ ВЫШЕ, И ЭТО ЗАСЛУЖЕННЫЙ ОТКАЗ.
+ *
+ * Факт: v3.23 (md5 5A1165367234A09EAD2A42334A90C97A, usb-log-v323.txt)
+ * дал 58 535 мс - МЕДЛЕННЕЕ v3.22 - и 0 из 8 масок. Счётчик при этом
+ * сработал точно по расчёту: RESETREADY calls=29 early=0 budgetout=29
+ * total=1629959us avg=56205us.
+ *
+ *   v322 (рабочий)             v323 (сломан)
+ *   WPR2 ESTABLISHED   18      2
+ *   FWSEC ours FAIL     0     16
+ *   XVE window open  8 из 8    0 из 8
+ *
+ * МЕХАНИЗМ, ИЗМЕРЕННЫЙ ПО ДВУМ ПРОГОНАМ. Строки WAIT показывают CPUCTL на
+ * момент загрузки FWSEC:
+ *   v322: cpuctl=0x00000000 в 18 из 18   -> FWSEC выполняется
+ *   v323: cpuctl=0x00000010 в 64 из 64   -> FWSEC не выполняется
+ * По собственному словарю кода (строка 2707) 0x00000010 = HALTED.
+ *
+ * То есть секунда ждала НЕ признака, а УХОДА CPUCTL в нулевое состояние
+ * перед сбросом движка. Слепой цикл по HWCFG2[31] действительно бесполезен
+ * (это осталось верным), но задержка, которую он случайно давал,
+ * НЕОБХОДИМА. Мой вывод 'функция ни на что не влияет, кроме ожидания' был
+ * верен - и я из него не сделал правильного следующего шага: я проверил
+ * стоимость и НЕ проверил необходимость.
+ *
+ * ЧТО СДЕЛАНО В ЭТАПЕ 9. Перед слепым циклом добавлено ожидание НАСТОЯЩЕГО
+ * события: CPUCTL уходит в 0x00000000 либо в BADF-лок. Бюджет этого
+ * ожидания - 1 с, то есть ровно прежняя полная стоимость.
+ *
+ * СВОЙСТВО, КОТОРОЕ ДЕЛАЕТ ЭТОТ ШАГ БЕЗОПАСНЫМ: худший случай равен v322.
+ * Если движок не уйдёт в ноль за секунду, будет потрачено ровно то же, что
+ * тратилось в заведомо рабочем прогоне. То есть хуже рабочего состояния
+ * уйти НЕЛЬЗЯ - даже если моя версия механизма ошибочна. Если верна, выход
+ * происходит по событию и время падает.
+ *
+ * САМОПРОВЕРКА. Считаются: сколько раз событие наступило (rqFast), сколько
+ * раз бюджет исчерпан (rqSlow), суммарное и максимальное время, последний
+ * прочитанный CPUCTL. Если rqSlow заметно ненулевой, значит механизм не в
+ * том, и это будет видно сразу, а не по обрыву масок.
  * ===================================================================== */
 
-static void
-falcon_wait_reset_ready(const CHAR16 *tag, UINT32 hwcfg2Reg)
+/* Один шаг ожидания покоя CPUCTL. Возвращает TRUE, когда движок ушёл.
+ *
+ * Условие покоя - CPUCTL читается как 0x00000000 либо как BADF-лок.
+ * 0x00000000 означает, что CPU не выполняет ничего; 0x00000010 означает
+ * HALTED, то есть CPU отработал и держит состояние - по измерению
+ * прогона v3.23 именно это состояние ломает загрузку FWSEC.
+ * BADF-лок тоже считаем покоем: там управление не наше, ждать бессмысленно,
+ * и именно это проверяется условием (cc & 0xBADF0000) == 0xBADF0000 в трёх
+ * местах кода. */
+static BOOLEAN
+fx_engine_quiesced(UINT32 cc)
 {
-    UINT64 t0 = fx_now_us();
+    if (cc == 0) return TRUE;
+    if ((cc & 0xBADF0000) == 0xBADF0000) return TRUE;
+    return FALSE;
+}
+
+/* Ожидание покоя движка перед его сбросом. Это ТО, что делала секунда,
+ * только по событию, а не по константе. */
+static void
+falcon_wait_engine_quiesced(const CHAR16 *tag, UINT32 cpuctlReg)
+{
+    UINT64 t0 = fx_now_us(), dl;
+    UINT32 cc;
+    if (!t0) return;                    /* часы не откалиброваны */
+    fx_rqCalls++;
+    dl = t0 + FX_RQ_BUDGET_US;
+    for (;;) {
+        cc = mmio_read32(cpuctlReg);
+        if (fx_engine_quiesced(cc)) {
+            fx_rqFast++;
+            goto out;
+        }
+        if (fx_now_us() >= dl) {        /* бюджет: худший случай = v322 */
+            fx_rqSlow++;
+            cc = mmio_read32(cpuctlReg);   /* финальное чтение для лога */
+            goto out;
+        }
+        uefi_call_wrapper(BS->Stall, 1, FX_RQ_POLL_US);
+    }
+out:
+    {
+        UINT64 d = fx_now_us() - t0;
+        fx_rqUs += d;
+        if (d > fx_rqUsMax) fx_rqUsMax = d;
+        fx_rqLastCpu = cc;
+        /* Метка ставится по ТОЙ ЖЕ схеме, что и раньше, но теперь видно и
+         * время ожидания события, и сколько раз бюджет исчерпан. */
+        fx_mk_acc(t0, tag);
+    }
+}
+
+static void
+falcon_wait_reset_ready(const CHAR16 *tag, UINT32 hwcfg2Reg, UINT32 cpuctlReg)
+{
+    UINT64 t0;
+
+    /* ШАГ 1: ждать НАСТОЯЩЕЕ событие - уход CPUCTL в ноль. */
+    falcon_wait_engine_quiesced(tag, cpuctlReg);
+
+    /* ШАГ 2: прежний слепой цикл по HWCFG2[31]. На этой карте условие не
+     * выставляется ни разу (0 из 37 в v3.22), то есть цикл бесполезен и
+     * остаётся только ради другого кремния. Бюджет возвращён к 10 000,
+     * то есть к прежней полной стоимости: срезать его можно будет по
+     * результату этапа 10, а не по аналогии. */
+    t0 = fx_now_us();
     UINTN i;
     fx_rrCalls++;
     for (i = 0; i < FX_RR_ITERS; i++) {
@@ -3151,7 +3295,7 @@ fwsec_preloaded_gsp(void)
 
     /* 1. kflcnReset(GSP) — код из VBIOS переживает ресет */
     Print(L"pre: kflcnReset(GSP)...\n");
-    falcon_wait_reset_ready(L"rr: pre kflcnReset GSP", GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: pre kflcnReset GSP", GSP_HWCFG2, GSP_CPUCTL);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -3376,7 +3520,7 @@ fbp_gsp_prepare(void)
 {
     UINTN i;
 
-    falcon_wait_reset_ready(L"rr: gsp misc reset", GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: gsp misc reset", GSP_HWCFG2, GSP_CPUCTL);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -4728,7 +4872,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
 
     /* 1. kflcnReset(GSP): ENGINE reset → BCR=FALCON → RM=PMC_BOOT_0 */
     Print(L"fwsec: kflcnReset(GSP)...\n");
-    falcon_wait_reset_ready(L"rr: fwsec kflcnReset GSP", GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: fwsec kflcnReset GSP", GSP_HWCFG2, GSP_CPUCTL);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -5708,7 +5852,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     Print(L"booter: SEC2 HWCFG2=0x%08x (RESET_READY=bit31)\n", data);
 
     Print(L"booter: SEC2 reset (ENGINE 0x8403C0)...\n");
-    falcon_wait_reset_ready(L"rr: booter SEC2 reset", SEC2_HWCFG2);
+    falcon_wait_reset_ready(L"rr: booter SEC2 reset", SEC2_HWCFG2, SEC2_CPUCTL);
     mmio_write32(SEC2_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(SEC2_ENGINE);
     mmio_write32(SEC2_ENGINE, 0x0);
@@ -6130,7 +6274,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     Print(L"[E1] GSP BL ucodeId=1 (IMEM 0x4000/DMEM 0x2400)...\n");
     fx_ph = fx_now_us();
     mmio_write32(0x110080, 0x0);          /* из трейса (IRQMSET=0) */
-    falcon_wait_reset_ready(L"rr: [E1] BL reset-ready", GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: [E1] BL reset-ready", GSP_HWCFG2, GSP_CPUCTL);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -6191,7 +6335,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
      * Раньше пропускали Wait → GSP оставался ЗАЛОЧЕННЫМ (BADF5620 на пробе
      * E4), а на живой карте SNAP-B даёт gsp cpuctl=0x10 на входе ботера! */
     Print(L"[E3] ResetIntoRiscv(GSP) + libos args...\n");
-    falcon_wait_reset_ready(L"rr: [E3] ResetIntoRiscv ready", GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: [E3] ResetIntoRiscv ready", GSP_HWCFG2, GSP_CPUCTL);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -6349,7 +6493,7 @@ driver_replay_v246(UINT64 booterPhys, UINT64 fwsecPhys, UINT64 ucodePhys,
     /* ---------- Стадия 1: GSP booter load (ucodeId=1) ---------- */
     Print(L"[1/3] GSP booter load ucodeId=1 (из трейса 538.881)\n");
     mmio_write32(0x110080, 0x0);          /* из трейса (IRQMSET=0) */
-    falcon_wait_reset_ready(L"rr: [1/3] booter load ready", GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: [1/3] booter load ready", GSP_HWCFG2, GSP_CPUCTL);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -6809,7 +6953,7 @@ driver_replay_v251(UINT64 fwsecPhys, UINT64 ucodePhys, UINT64 wprMetaPhys)
     }
 
     /* GSP ENGINE reset (убить GFW, предзагруженный FWSEC переживает reset) */
-    falcon_wait_reset_ready(L"rr: gsp engine reset GFW kill", GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: gsp engine reset GFW kill", GSP_HWCFG2, GSP_CPUCTL);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -6896,7 +7040,7 @@ driver_replay_v251(UINT64 fwsecPhys, UINT64 ucodePhys, UINT64 wprMetaPhys)
     mmio_write32(REG_PFB_MMU_WPR2_HI, TARGET_WPR2_HI);
     uefi_call_wrapper(BS->Stall, 1, 10000);
 
-    falcon_wait_reset_ready(L"rr: post-WPR2 sec2 ready", SEC2_HWCFG2);
+    falcon_wait_reset_ready(L"rr: post-WPR2 sec2 ready", SEC2_HWCFG2, SEC2_CPUCTL);
     mmio_write32(SEC2_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(SEC2_ENGINE);
     mmio_write32(SEC2_ENGINE, 0x0);
@@ -7114,7 +7258,7 @@ sec2_ucode_mapper_cmd(UINT64 wprMetaPhys)
     Print(L"\n=== v2.57: SEC2 ucode mapper init_cmd (FRTS/SB) ===\n");
 
     /* ---------- подготовка SEC2 (reset + unlock, как стадия 4) ---------- */
-    falcon_wait_reset_ready(L"rr: sec2 ucode mapper ready", SEC2_HWCFG2);
+    falcon_wait_reset_ready(L"rr: sec2 ucode mapper ready", SEC2_HWCFG2, SEC2_CPUCTL);
     mmio_write32(SEC2_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(SEC2_ENGINE);
     mmio_write32(SEC2_ENGINE, 0x0);

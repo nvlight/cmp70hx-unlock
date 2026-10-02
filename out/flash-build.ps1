@@ -314,16 +314,19 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. 'TIME  RESETREADY calls=N early=M budgetout=K total=T us' <- READ FIRST" -ForegroundColor Yellow
-    Write-Host "       early>0 means the 50 ms budget was TOO SHORT and must go back" -ForegroundColor Yellow
-    Write-Host "       to 1 s. early=0 budgetout=N is the expected result." -ForegroundColor Yellow
-    Write-Host "    8. 'TIME  MK  rr: ...' - must now total ~2 s, NOT 41.5 s" -ForegroundColor Yellow
-    Write-Host "  Baseline: out\usb-log-v322.txt (stage 7, 56.1 s counter, 8 of 8)" -ForegroundColor Yellow
-    Write-Host "  Expected: ~16.6 s. Stage 8 cut falcon_wait_reset_ready from 10,000" -ForegroundColor Yellow
-    Write-Host "  iterations (1.000 s) to 500 (50 ms). Measured on v3.22: 37 calls," -ForegroundColor Yellow
-    Write-Host "  early=0, 41.5 s of a 56.1 s run - 74% of everything." -ForegroundColor Yellow
-    Write-Host "  41.5 s -> 2.1 s expected. This is an EXPECTATION, not a promise." -ForegroundColor Yellow
-    Write-Host "  A pass here means the cut is safe; it does NOT mean the number" -ForegroundColor Yellow
-    Write-Host "  will be exactly 16.6. Report what the counter says." -ForegroundColor Yellow
+    Write-Host "    7. 'TIME  QUIESCE calls=N fast=F slow=S max=M us'  <- READ FIRST" -ForegroundColor Yellow
+    Write-Host "       slow>0 means the engine did NOT reach CPUCTL=0 within the" -ForegroundColor Yellow
+    Write-Host "       1 s budget: my explanation is then incomplete and nothing may" -ForegroundColor Yellow
+    Write-Host "       be shortened." -ForegroundColor Yellow
+    Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
+    Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
+    Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
+    Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
+    Write-Host "  Stage 8 passed the BUILD check 52/52 and still broke render 0 of 8," -ForegroundColor Yellow
+    Write-Host "  because the build check never asked. Verify the log, not the build." -ForegroundColor Yellow
+    Write-Host "  Baseline: out\usb-log-v322.txt (stage 7, 56.1 s, 8 of 8, VERIFIED)" -ForegroundColor Cyan
+    Write-Host "  Expected: <= 56.1 s with 8 of 8. Stage 9 added an event wait before" -ForegroundColor Cyan
+    Write-Host "  the old blind one, whose budget is 1 s again, so the worst case" -ForegroundColor Cyan
+    Write-Host "  EQUALS the working v322. Faster only if the event wait exits early." -ForegroundColor Cyan
 }
 exit 0
