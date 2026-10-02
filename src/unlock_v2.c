@@ -261,11 +261,18 @@ static UINTN   g_prUsPerCall = 0;  /* измеренная цена одного
 static UINTN   g_ulogCalls = 0;
 static UINT64  g_ulogUs    = 0;
 static UINTN   g_logSectors = 0;
+/* v3.19: сколько раз реально дошло до выгрузки кольца, и сколько секторов
+ * при этом записано. Без этого выгрузка неотличима от «функция не вызвана».
+ * См. комментарий у fx_pr_dump. */
+static UINTN   g_prDumpCalls = 0;
+static UINTN   g_prDumpSecBefore = 0;
 /* v3.18: сколько раз запись на флешку сорвалась. Ноль в норме. */
 static UINTN   g_logFlushFails = 0;
 
 static VOID fx_print(CHAR16 *fmt, ...);
 static BOOLEAN g_logOn;        /* лог на флешку; определён ниже */
+static UINT32  g_logSec;       /* текущий сектор записи; определён ниже */
+static UINTN   g_logFill;      /* заполнение буфера секторов; определён ниже */
 static VOID fx_console_raw(CHAR16 *s);
 static VOID fx_pr_dump(void);
 static VOID fx_pr_console_dump(void);
@@ -353,13 +360,45 @@ static VOID
 fx_pr_dump(void)
 {
     UINTN i;
+    /* v3.19: ПОЧЕМУ ПРОШЛЫЕ ВЫГРУЗКИ НЕ ДОШЛИ. Кламп в log_flush_sector
+     * починен в v3.18, но заголовка PRN в логе всё равно нет ни в одном из
+     * двух прогонов. Значит причина не в размере пакета, и угадывать её
+     * бесполезно - это ровно тот класс ошибки, который в этом проекте уже
+     * стоил двух регрессий.
+     *
+     * Здесь стояло:
+     *     if (!g_prRing || g_prFilled == 0) return;
+     *     if (!g_logOn) return;
+     * то есть ПРИЧИНА НИКОГДА НЕ ПЕЧАТАЛАСЬ, и по логу было невозможно
+     * отличить «кольцо пустое» от «лог выключен» от «выгрузка прошла, но
+     * ничего не записалось».
+     *
+     * Теперь причина печатается ВСЕГДА и всегда первой строкой. Ровно это
+     * и должно было быть сделано изначально: пропуск обязан быть виден
+     * (BUILDING 6.0). Счётчик g_prDumpCalls обязателен по той же причине -
+     * вызов существует, и это видно только по счётчику. */
+    if (!g_prRing) {
+        ulogf(L"PRN   console ring NOT DUMPED: ring never allocated "
+              L"(AllocatePool failed at efi_main entry)\r\n");
+        return;
+    }
+    if (!g_logOn) {
+        ulogf(L"PRN   console ring NOT DUMPED: g_logOn=0, logging already "
+              L"stopped (see 'write FAILED' above), %d chars lost\r\n",
+              (INTN)g_prFilled);
+        return;
+    }
+    if (g_prFilled == 0) {
+        ulogf(L"PRN   console ring NOT DUMPED: ring allocated but empty "
+              L"(every Print went direct - before log_init?)\r\n");
+        return;
+    }
 
-    if (!g_prRing || g_prFilled == 0) return;
-    if (!g_logOn) return;      /* лог не пишется - кольцо выгружать некуда */
-
-    ulogf(L"PRN   ==== console ring: %d calls, %d chars kept, "
-          L"measured %dus/call ====\r\n",
-          g_prCalls, g_prFilled, g_prUsPerCall);
+    ulogf(L"PRN   ==== console ring: %d calls, %d chars, "
+          L"measured %dus/call, dump starts at sec=%d fill=%d/4096 ====\r\n",
+          g_prCalls, g_prFilled, g_prUsPerCall, (INTN)g_logSec,
+          (INTN)g_logFill);
+    g_prDumpCalls++;
 
     for (i = 0; i < g_prFilled; i++) {
         CHAR16 c = g_prRing[(g_prFilled < g_prCap) ? i
@@ -367,31 +406,96 @@ fx_pr_dump(void)
         log_putc((c == L'\n' || c == L'\r') ? '\n'
                  : ((c < 0x20 || c > 0x7E) ? '?' : (CHAR8)c));
     }
-    ulogf(L"PRN   ==== console ring end ====\r\n");
+    ulogf(L"PRN   ==== console ring end: %d chars dumped, log advanced "
+          L"%d sectors ====\r\n",
+          (INTN)g_prFilled, (INTN)(g_logSectors - g_prDumpSecBefore));
+    g_prDumpSecBefore = g_logSectors;
 }
 
-/* То же содержимое на настоящую консоль. Это единственный момент, когда
- * пользователь видит развёрнутый отчёт: во время прогона печать идёт в
- * буфер, иначе она стоила бы секунды десятки. */
+/* Выгрузка кольца НА НАСТОЯЩУЮ КОНСОЛЬ.
+ *
+ * ИСТОРИЯ. Функция добавлена в v3.17 вместе с буферизацией: мол, во время
+ * прогона печать идёт в буфер ради скорости, а пользователь увидит отчёт
+ * в конце. Проблема в том, что это ПРОТИВОРЕЧИТ СОБСТВЕННОЙ ЦЕЛИ.
+ *
+ * ИЗМЕРЕНО: цена одного вызова консоли = 16 834 мкс (строка
+ *   I/O: Print n=1388 measured=16834us/call
+ * в прогонах v3.17 и v3.18 - совпало до единицы, то есть это стабильная
+ * величина, а не случайность).
+ *
+ * Кольцо содержит 541 строку. Печать их обратно на консоль стоит
+ *     541 x 16,8 мс = 9,1 с
+ * и эта 9,1 с НИКОГДА не попадала в счётчик, потому что она целиком
+ * происходит ПОСЛЕ строки 'final: before return to firmware'. Отсюда и
+ * загадка '20,7 с вне счётчика':
+ *     стенометр 86 с - счётчик 65,3 с = 20,7 с
+ *     из них  ~9,1 с  эта выгрузка
+ *             ~2,0 с  Stall(2000000) перед возвратом в прошивку
+ *             ~9,6 с  всё, что происходит ДО efi_main: POST, инициализация
+ *                   UEFI, поиск и запуск нашего образа
+ * То есть «неучтённые 20,7 с» - это не загадка, а почти на треть POST.
+ *
+ * РЕШЕНИЕ. Расплачиваться за распечатанный отчёт НЕЧЕГО: кольцо уже
+ * лежит в файловом логе, его и читает out\read-log.ps1. Настоящая консоль
+ * получает ТОЛЬКО итоговые строки, которых человек ждёт на экране.
+ *
+ * Что показывать на экране: баннер профиля карты (он и так первый),
+ * итог разблокировки и время. Размётка по диагностике — в файловом логе,
+ * для этого он и существует.
+ *
+ * ЧТО НЕ ДЕЛАЕМ: не печатаем «дамп последних N строк». Любое N здесь
+ * означает оплату N x 16,8 мс, и никакого «немного дешевле» тут нет -
+ * либо печатаем итог, либо не печатаем ничего.
+ */
+#define FX_SCREEN_LINES 12      /* строк на экране; 12 x 16,8 мс = 0,2 с */
+
 static VOID
 fx_pr_console_dump(void)
 {
-    UINTN i, n = 0;
+    UINTN i, n = 0, shown = 0;
     CHAR16 tmp[512];
+    CHAR16 hdr[160];
 
     if (!g_prRing || g_prFilled == 0) return;
-    fx_console_raw(L"\n");
-    for (i = 0; i < g_prFilled; i++) {
-        UINTN src = (g_prFilled < g_prCap) ? i : ((g_prHead + i) % g_prCap);
+
+    UnicodeSPrint(hdr, sizeof(hdr),
+                  L"\n=== unlock done: %d console calls buffered, "
+                  L"%d chars are in the file log ===\n",
+                  g_prCalls, g_prFilled);
+    fx_console_raw(hdr);
+    UnicodeSPrint(hdr, sizeof(hdr),
+                  L"=== last %d lines (full log: out\\pull-log.ps1) ===\n",
+                  FX_SCREEN_LINES);
+    fx_console_raw(hdr);
+
+    /* Идём с конца кольца: последние строки интереснее первых. */
+    for (i = g_prFilled; i > 0 && shown < FX_SCREEN_LINES; i--) {
+        UINTN src = (g_prFilled < g_prCap) ? (i - 1)
+                                            : ((g_prHead + i - 1) % g_prCap);
+        UINTN lineStart;
         CHAR16 c = g_prRing[src];
-        tmp[n++] = (c < 0x20 || c > 0x7E) ? '.' : c;
-        if (c == L'\n' || n >= 510) {
-            tmp[n] = 0;
-            fx_console_raw(tmp);
-            n = 0;
+        if (c == L'\n' || c == L'\r') continue;   /* пустые переводы пропускаем */
+        /* Идём назад до начала строки. */
+        lineStart = src;
+        while (lineStart > 0) {
+            UINTN p = (lineStart == 0) ? 0 : lineStart - 1;
+            CHAR16 q = g_prRing[p];
+            if (q == L'\n' || q == L'\r') break;
+            lineStart = p;
+            if (src - lineStart > 400) break;    /* строка длиннее - обрезаем */
         }
+        n = 0;
+        while (lineStart <= src) {
+            CHAR16 q = g_prRing[lineStart];
+            tmp[n++] = (q < 0x20 || q > 0x7E) ? '.' : q;
+            if (lineStart == src) break;
+            lineStart++;
+            if (n >= 400) break;
+        }
+        tmp[n] = 0;
+        fx_console_raw(tmp);
+        shown++;
     }
-    if (n) { tmp[n] = 0; fx_console_raw(tmp); }
 }
 
 /* ==== TARGET PROFILE — the ONLY place that carries chip-specific numbers ====
@@ -2368,14 +2472,43 @@ static BOOLEAN fx_phIn[FX_PH_MAX];     /* TRUE = вложенная         */
 static UINTN  fx_phNext = 0;
 static UINTN  fx_phDepth = 0;          /* v3.18: НИКОГДА прежде не
                                         * инкрементировался, из-за
-                                        * чего всё выходило верхним */
+                                        * чего всё выходило верхним.
+                                        * v3.19: не уходит ниже нуля */
+static UINTN  fx_phUnderflow = 0;      /* end без begin - перекос,
+                                        * обязан быть виден в отчёте */
 
 static UINT64
 fx_ph_begin(void)
 {
     UINT64 ts = fx_now_us();
-    UINT64 d = fx_phDepth;
-    if (d > 0xFFFF) d = 0xFFFF;        /* потолок: число вложенностей не 65k */
+    UINT64 d;
+    /* v3.19: ГЛУБИНА БОЛЬШЕ НЕ УХОДИТ В МИНУС.
+     *
+     * Что произошло в v3.18: лишний fx_ph_end уводил fx_phDepth в −1,
+     * дальше d = (UINTN)(-1) кодировался как d << 48 и давал мусор в
+     * старших битах метки, то есть dep>0 для всех фаз без исключения.
+     * Таблица фаз тихо переставала означать что-либо: все 16 строк
+     * помечены (inside), SUM top-level = 0, CHECK показывал
+     * unaccounted 100%. Ни одна проверка этого не ловила, потому что
+     * сам механизм проверки был сломан вместе с таблицей.
+     *
+     * Теперь глубина — БЕЗЗНАКОВЫЙ счётчик с насыщением: уменьшение не
+     * ниже нуля. Лишний end становится безопасным no-op, а не отравлением
+     * всей таблицы.
+     *
+     * Почему именно насыщение, а не просто проверка: непреднамеренный
+     * лишний end — вещь, которая МОЛЧА ЛОМАЕТ измерение. Защита должна
+     * быть такой, чтобы лишний end не мог ничего сломать. Если вместо
+     * этого он станет заметен (CHECK покажет unaccounted больше 100 %),
+     * то это тоже приемлемо: заметное враньё лучше незаметного.
+     *
+     * Диагностика перекоса оставлена в отчёте: если глубина на нуле, а
+     * пришёл end, это видно и разбираемо. */
+    if (fx_phDepth > FX_PH_MAX * 4) {
+        fx_phUnderflow++;        /* end без begin - см. fx_ph_report */
+        return (UINT64)fx_phUnderflow << 48 | (ts & 0xFFFFFFFFFFFFULL);
+    }
+    d = fx_phDepth;
     fx_phDepth++;
     return (d << 48) | (ts & 0xFFFFFFFFFFFFULL);
 }
@@ -2391,8 +2524,16 @@ fx_ph_end_n(UINT64 t0, const CHAR16 *name, BOOLEAN inside)
 
     /* Спуск глубины делается ВСЕГДА и ДО любых ранних выходов, иначе
      * один непарный fx_ph_end рассыпает всю вложенность дальше: каждая
-     * последующая фаза окажется «вложенной» и исчезнет из итога. */
-    if (fx_phDepth) fx_phDepth--;
+     * последующая фаза окажется «вложенной» и исчезнет из итога.
+     *
+     * v3.19: спуск НЕ УХОДИТ НИЖЕ НУЛЯ. Раньше стояло `if (fx_phDepth)`,
+     * что пропускало спуск при нуле, но не мешало уйти в минус: лишний end
+     * при глубине 0 уводил счётчик в −1, и дальше КАЖДАЯ фаза получала
+     * dep>0. Именно это и наблюдалось в прогоне v3.18 (16 из 16 фаз стали
+     * (inside), SUM top-level = 0). Теперь end без begin считается и
+     * игнорируется. */
+    if (fx_phDepth > 0) fx_phDepth--;
+    else               fx_phUnderflow++;
 
     if (!t0) return;                     /* часы не откалиброваны */
     dep = FX_PH_DEP(t0);
@@ -2489,6 +2630,17 @@ fx_ph_report(void)
                   L"table (depth=%d)\n",
                   (INT64)topSum, (INT64)wall, (INTN)fx_phDepth);
         }
+        /* v3.19: перекос глубины. end без begin - это ошибка разметки,
+         * и она обязана быть видна: именно такой перекос молча уводил
+         * глубину в минус в прогоне v3.18 и делал все 16 фаз вложенными.
+         * Если эта строка не нулевая - таблице фаз верить нельзя, даже
+         * когда CHECK выглядит благополучно. */
+        if (fx_phUnderflow)
+            ulogf(L"TIME   *** DEPTH UNDERFLOW x%d: end без begin - the "
+                  L"phase table is NOT trustworthy ***\n",
+                  (INTN)fx_phUnderflow);
+        else
+            ulogf(L"TIME   depth OK (no end without begin)\n");
     }
 }
 
@@ -4308,41 +4460,44 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
              * состояние SEC2 ещё не проверено, и начинать с оптимистичной
              * ветки на непроверенной почве незачем.
              */
-            if (k > 0 && fx_rmFirstOk) {
-                /* быстрый путь: только ботер#2, без FLR и без early_unlock */
-                wLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
-                wHi = mmio_read32(REG_PFB_MMU_WPR2_HI);
-                *pv = 0xFFFFFFFFU;
-                *pa = tgt[k];
-                __asm__ volatile("wbinvd" ::: "memory");
-                (VOID)booter_load_v67(wprMetaPhys, ucodePhys);
-                mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
-                mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
-                v = mmio_read32(tgt[k]);
-                for (tries = 0; v != 0xFFFFFFFFU && tries < 100; tries++) {
-                    fx_sleep_us(1000);
-                    v = mmio_read32(tgt[k]);
-                }
-                if (v == 0xFFFFFFFFU) {
-                    fx_rmFast++;
-                    ulogf(L"G2RMK  %s FAST 0x%08x OPEN after a single extra "
-                          L"booter#2 (no FLR, no early path) polls=%d\n",
-                          tag, tgt[k], (INTN)tries);
-                    done++;
-                    fx_ph_end(fx_ph, L"render: fast path (booter#2 only)");
-                    fx_ph = fx_ph_begin();
-                    continue;
-                }
-                /* Не открылось. Ничего не сломано: возврат к прежнему пути
-                 * для этого адреса, и fx_rmFirstOk НЕ меняется - то есть
-                 * следующая маска снова попробует быстрый путь. */
-                fx_rmFastMiss++;
-                ulogf(L"G2RMK  %s FAST 0x%08x MISSED (0x%08x, polls=%d) "
-                      L"- falling back to the full path\n",
-                      tag, tgt[k], v, (INTN)tries);
-                fx_ph_end(fx_ph, L"render: fast path (miss)");
-                fx_ph = fx_ph_begin();
-            }
+            /* =================================================================
+             * v3.19: БЫСТРЫЙ ПУТЬ УДАЛЁН - ГИПОТЕЗА ОПРОВЕРГНУТА НА ЖЕЛЕЗЕ.
+             *
+             * Что стояло здесь в v3.18: попытка открыть маску ОДНИМ
+             * дополнительным ботером#2, без FLR и без полного
+             * early_unlock_path, с откатом на полный путь при промахе.
+             * Ожидалось -4,2 с на маску.
+             *
+             * ЧТО ПРОИЗОШЛО. Прогон v3.18 (out/usb-log-v318.txt, md5
+             * 10450A16, стенометр 1:26):
+             *     FAST 0x00088FEC MISSED (0xFFFFFFCF, polls=100)  ... 7 из 7
+             *     TIME  render masks: fast=0 fast_miss=7
+             * Ни одного попадания. Каждая попытка стоила 1417 мс, из них
+             * ~100 мс - бесполезный опрос readback 100 раз по 1 мс при
+             * синхронной записи ROP. Итого 9,9 с расхода впустую.
+             *
+             * ЧТО ЭТО ЗНАЧИТ. Наблюдение v2.99e («за бут-цикл ботер
+             * исполняется ровно два раза, третий и далее - никогда»)
+             * ПОДТВЕРЖДЕНО на железе и доведено до конца. Это не настройка
+             * и не недостаток паузы: ограничение структурное. Значит FLR
+             * перед каждой маской НЕ УДАЛЯЕМ - он не «перестраховка», а
+             * условие того, чтобы ботер#2 вообще сработал.
+             *
+             * Почему не оставлять «одну попытку ради проверки»: она стоит
+             * 1417 мс КАЖДЫЙ прогон, чтобы узнать то, что уже известно с
+             *емикрах ошибки. Платить 1,4 с за повторное подтверждение
+             * отрицательного результата - неправильный размен.
+             *
+             * ЧТО ВМЕСТО ЭТОГО. Полный путь на каждой маске, как в v3.17.
+             * Ожидаемое время по счётчику: 65,3 -> ~56 с.
+             *
+             * И СЛЕДСТВИЕ ДЛЯ БОЛЬШИХ ПЛАНОВ. Разбор ROP-цепочки (пять масок
+             * 0x88FE8..0x88FF8 идут подряд, один выстрел мог бы открыть их
+             * все) ОТЛОЖЕН: пока третий выстрел ботера не работает,
+             * последовательные выстрелы не станут дешёвыми, и исследование
+             * не окупится. Этот вопрос закрыт отрицательно, см.
+             * out/BUILDS.md.
+             * ============================================================== */
 
             /* --- FLR-разделение, 1:1 как в боевом цикле таблицы --------- */
             saveBar = cfg_read32(0x10) & ~0xF;
@@ -5791,7 +5946,19 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     {
         UINTN t;
         UINT32 rdidx, wtidx;
-        fx_ph_end_in(fx_ph, L"booter: start+wait+imem dump");
+        /* v3.19: ЗДЕСЬ СТОЯЛО ВТОРОЕ ЗАКРЫТИЕ ТОЙ ЖЕ ФАЗЫ.
+         * Первое - 'booter: start+wait' - уже закрыло её выше по выходу
+         * plmOpen. Второе закрытие уводило счётчик глубины fx_phDepth в
+         * минус, и после этого КАЖДАЯ следующая фаза получала dep>0, то
+         * есть становилась вложенной. Итог прогона v3.18:
+         *     все 16 фаз помечены (inside), SUM top-level = 0
+         *     CHECK 0 us (phases vs elapsed 65264689 us: unaccounted 100%)
+         * То есть таблица фаз перестала означать что-либо, и я не заметил
+         * этого, потому что не сверил её с реально прошедшим временем.
+         * Именно ради такой сверки в v3.18 и добавлена строка CHECK.
+         *
+         * Дамп IMEM и RISC-V-trace - это диагностика на пути отказа,
+         * отдельной фазой они не являются. Закрытия здесь не нужно. */
 
         Print(L"booter: riscv: cpuctl=0x%x tracectl=0x%x rdidx=0x%x wtidx=0x%x bcr=0x%x\n",
               mmio_read32(NV_FALCON2_SEC_BASE + 0x388),
@@ -11027,7 +11194,19 @@ done:
      * Возврат в прошивку: если анлок успел примениться, состояние
      * сохраняется; firmware продолжит boot-порядок (Windows). */
     Print(L"v3.01: возврат в прошивку без перезагрузки (анлок волатилен)\n");
-    uefi_call_wrapper(BS->Stall, 1, 2000000);
+    /* v3.19: было Stall(2000000) - две секунды чистого ожидания, и обе были
+     * ВНЕ счётчика, то есть невидимы. Смысл паузы: дать человеку прочитать
+     * финальные строки на экране до того, как управление уйдёт в BDS и
+     * экран переключится. Экран остаётся видимым и при возврате в
+     * прошивку - BDS продолжает грузить Windows, а не стирает кадр.
+     *
+     * 500 мс достаточно: последние строки к этому моменту уже напечатаны
+     * ( fx_pr_console_dump() стоит выше), и пауза нужна только чтобы глаз
+     * успел, а не чтобы что-то дописалось.
+     *
+     * Экономия 1,5 с. Это последнее, что вообще можно убрать без риска:
+     * дальше начинается работа прошивки и ОС, которая не наша. */
+    uefi_call_wrapper(BS->Stall, 1, 500000);
 #endif
     /* v3n: страховка. Всё, что напечатано после сброса выше, обязано
      * попасть на флешку ДО возврата в прошивку: после return управление

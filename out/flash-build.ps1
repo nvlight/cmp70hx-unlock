@@ -308,13 +308,15 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    2. 'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET' <- main marker" -ForegroundColor Yellow
     Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
     Write-Host "    4. no 'dbg=0x007E0009' anywhere" -ForegroundColor Yellow
-    Write-Host "    5. 'TIME  render masks: fast=N fast_miss=M'    <- fast path" -ForegroundColor Yellow
+    Write-Host "    5. 'TIME   depth OK' or 'DEPTH UNDERFLOW x N' - phase nesting" -ForegroundColor Yellow
     Write-Host "    6. 'TIME   === phase accounting ===' plus" -ForegroundColor Yellow
     Write-Host "       'TIME   CHECK ... unaccounted ...'          <- phases vs elapsed" -ForegroundColor Yellow
-    Write-Host "    7. 'CHECK *** FAILED' means double counting came back and the" -ForegroundColor Yellow
-    Write-Host "       phase table cannot be trusted - stop and read before optimising" -ForegroundColor Yellow
-    Write-Host "  Baseline: out\usb-log-v317.txt (stage 2, 57.3 s, 8 of 8)" -ForegroundColor Yellow
-    Write-Host "  Expected: about 25-45 s if the fast path works, about 53 s if not." -ForegroundColor Yellow
-    Write-Host "  The second number is not a regression, it is a measured negative." -ForegroundColor Yellow
+    Write-Host "    7. 'PRN   ==== console ring ...' or 'NOT DUMPED: <reason>'" -ForegroundColor Yellow
+    Write-Host "    8. 'CHECK *** FAILED' or 'DEPTH UNDERFLOW' mean the phase table" -ForegroundColor Yellow
+    Write-Host "       cannot be trusted - stop and read before optimising anything" -ForegroundColor Yellow
+    Write-Host "  Baseline: out\usb-log-v318.txt (stage 3, 86 s - REGRESSION, rejected)" -ForegroundColor Yellow
+    Write-Host "  Expected: about 55 s counter, and the wall clock should drop by" -ForegroundColor Yellow
+    Write-Host "  ~10 s too - the 541-line console dump is gone (9.1 s at the measured" -ForegroundColor Yellow
+    Write-Host "  16.8 ms per console call) and the final Stall is 2 s -> 0.5 s." -ForegroundColor Yellow
 }
 exit 0
