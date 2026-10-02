@@ -314,15 +314,19 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. 'QSLOW  <место> cpuctl=0x... waited=...us'  <- READ FIRST" -ForegroundColor Yellow
-    Write-Host "       One line per call site where the engine did NOT quiesce within" -ForegroundColor Yellow
-    Write-Host "       the 1 s budget. These are the 10.4 s - 40% of the whole run." -ForegroundColor Yellow
-    Write-Host "       This stage only NAMES them. No behaviour changed, so the time" -ForegroundColor Yellow
-    Write-Host "       should be ~25.6 s again. If it moves, something else changed." -ForegroundColor Yellow
+    Write-Host "    7. STAGE 12 IS A BISECTION, NOT A CHANGE FOR THE BETTER BY DESIGN" -ForegroundColor Yellow
+    Write-Host "       The quiesce budget was cut 1000 -> 500 ms. Measured ends of the" -ForegroundColor Yellow
+    Write-Host "       interval:  50 ms = FAIL (render broken, v3.23)" -ForegroundColor Yellow
+    Write-Host "                  1000 ms = PASS (v3.24/25/26)" -ForegroundColor Yellow
+    Write-Host "       So 500 ms is a PROBE. It is EXPECTED to land ~30.7 s IF it passes." -ForegroundColor Yellow
+    Write-Host "       A FAIL here is EXPECTED INFORMATION, not a regression: it halves" -ForegroundColor Yellow
+    Write-Host "       the interval. Revert to the last working value and try the next." -ForegroundColor Yellow
+    Write-Host "       What must NOT change: 8 of 8 masks. If masks open and GFX_SPEED_SELECT" -ForegroundColor Yellow
+    Write-Host "       is set, 500 ms is fine and becomes the new baseline." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v325.txt (stage 10, 25.6 s, 8 of 8, RECORD)" -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v326.txt (25.6 s, 8 of 8). Known good budget: 1000 ms." -ForegroundColor Cyan
 }
 exit 0
