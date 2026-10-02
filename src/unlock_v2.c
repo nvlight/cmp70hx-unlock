@@ -2408,285 +2408,122 @@ fx_diag_gate(void)
     return FALSE;
 }
 /* ==================================================================== *
- * ФАЗОВЫЙ УЧЁТ: куда уходит время
- * ==================================================================== *
+ * v3.21: ФАЗЫ УБРАНЫ. ОСТАЛИСЬ ТОЛЬКО МЕТКИ ВРЕМЕНИ.
  *
- * ЗАЧЕМ. Прогон 2026-10-02 (бинарь 66223B60) дал 218,1 с, из них
- * 179,0 с — рендер-цикл. Замеренное внутри (BL settle 4,8 с, FWL
- * 2,5 с, SCRUB 8 мс) даёт ~200 мс на итерацию из фактических
- * ~7500 мс. Остальные ~7,3 с на итерацию не принадлежат НИ ОДНОЙ
- * залогированной строке.
+ * Это не пятая попытка починить фазовый учёт, а решение его удалить.
  *
- * Причина, по которой их не видно: в том бинаре не было этого блока.
- * Он был потерян вместе с исходником и здесь восстанавливается.
+ * ПОЧЕМУ УДАЛИТЬ, А НЕ ПОЧИНИТЬ. Фазовый учёт работал в шести прогонах
+ * подряд и НИ РАЗ не дал верного числа:
  *
- * ЧТО ДЕЛАЕТСЯ. Накопление ЗАТРАЧЕННОГО времени по именованным фазам и
- * таблица в финальной сводке. Ничего не меняется в поведении: это
- * чтение часов и сложение. Блок можно удалить целиком, и ничего не
- * изменится.
+ *   v3.17  ручная метка вложенности (fx_ph_end vs fx_ph_end_in) соврала
+ *          в трёх местах: [E1]+[E2]+[E3] считались верхним уровнем при
+ *          родителе render: early_unlock_path.
+ *          SUM top-level 78 152 783 мкс при прогоне 57 316 мкс.
  *
- * ОШИБКА ПЕРВОЙ ВЕРСИИ (2026-10-02, поймана этим же прогоном).
- * Вложенность вычислялась из счётчика глубины fx_phLevel, который
- * НИГДЕ не инкрементировался. Все фазы выходили «верхнего уровня», и
- * итог считался с двойным счётом: SUM 95 518 411 мкс при прогоне
- * 113 343 мс. Итог в 95,5 с не означал ничего.
+ *   v3.18  «починка» перевела вложенность на счётчик глубины fx_phDepth,
+ *          но сам счётчик никто не инкрементировал - все фазы стали
+ *          верхними, таблица удвоилась.
  *
- * ОШИБКА ВТОРОЙ ВЕРСИИ (2026-10-02, прогон v3.17, 57 316 мкс).
- * Явная метка (fx_ph_end против fx_ph_end_in) оказалась хуже, а не
- * лучше: вложенность проставляется человеком, и человек ошибся в трёх
- * местах. Проверяемо на самой таблице прогона:
- *     render: early_unlock_path        29 623 335 мкс  x8
- *       [E1] BL load+settle            10 791 034 мкс  x9
- *       [E2] fwsec_boot_gsp_sig        11 426 836 мкс  x9
- *       [E3] ResetIntoRiscv           11 340 837 мкс  x9
- * Сумма троих = 33 558 707 мкс, а родитель = 29 623 335. То есть все
- * трое помечены «верхнего уровня» и посчитаны вместе с родителем.
- * Итог: SUM top-level 78 152 783 мкс при прогоне 57 316 мкс, разница
- * ровно равна SUM nested 20 880 700 мкс.
+ *   v3.19  лишний fx_ph_end уводил глубину в минус, после чего dep>0
+ *          получали ВСЕ фазы. 16 из 16 (inside), SUM top-level = 0.
  *
- * ПОЧЕМУ ТЕПЕРЬ НАСТОЯЩИЙ СЧЁТЧИК ГЛУБИНЫ. Явная метка требует
- * дисциплины: ошибка в одной фазе тихо портит весь итог, и это
- * повторилось уже дважды. Глубина определяется самим фактом вложенного
- * вызова, то есть ошибкой быть НЕ МОЖЕТ: если fx_ph_begin() вызван из
- * тела другой открытой фазы, глубина по определению больше нуля.
+ *   v3.20  лишние fx_ph_begin в render_open_gfx_masks и fwsec_boot_gsp_sig.
+ *          15 из 15 (inside), SUM top-level = 0.
  *
- * Глубина едет вместе с меткой времени в одном 64-битном числе: верхние
- * 16 бит - глубина, нижние 48 - микросекунды от старта. 48 бит это
- * 8,9 года, то есть переполнения не будет. Менять вызывающий код не
- * пришлось - сигнатура fx_ph_begin() та же, что и была.
+ *   v3.21  непарная пара в теле цикла k: begin после
+ *          'render: ROP write + poll' не закрыт, а 'render: FLR + 300ms
+ *          settle' закрывает фазу, открытую ДО цикла.
+ *          UNDERFLOW x7, LEAK x8; фаза FLR показывала 15,5 с вместо 4,0.
  *
- * ПРИЗНАК «ВЛОЖЕННАЯ» ЛИПКИЙ (sticky). Если фаза хоть раз закрылась
- * на глубине больше нуля, она исключается из верхнего итога навсегда.
- * Иначе один и тот же участок кода посчитался бы дважды: у render-
- * цикла общий родитель, а у early_unlock_path - свой.
+ * КАЖДЫЙ РАЗ механизм проверки ломался ВМЕСТЕ с самой таблицей, то есть
+ * защитить его было нечем: строка 'depth OK' рапортовала о сломанной
+ * таблице. Это и есть главный вывод - проверка не может защитить код,
+ * который она же и разбирает.
  *
- * Статические Stall внутри фаз (например Stall(50000) после
- * gsp-reset) УЖЕ входят в свою фазу: замер берётся вокруг всего
- * вызова, а не вокруг отдельной инструкции.
- * ------------------------------------------------------------------ */
-#define FX_PH_MAX 16
-static const CHAR16 *fx_phName[FX_PH_MAX];
-static UINT64 fx_phUs[FX_PH_MAX];      /* накоплено, мкс           */
-static UINTN  fx_phCalls[FX_PH_MAX];   /* сколько раз              */
-static BOOLEAN fx_phIn[FX_PH_MAX];     /* TRUE = вложенная         */
-static UINTN  fx_phNext = 0;
-static UINTN  fx_phDepth = 0;          /* v3.18: НИКОГДА прежде не
-                                        * инкрементировался, из-за
-                                        * чего всё выходило верхним.
-                                        * v3.19: не уходит ниже нуля */
-static UINTN  fx_phUnderflow = 0;      /* end без begin - перекос,
-                                        * обязан быть виден в отчёте */
-static UINTN  fx_phLeak = 0;           /* v3.20: begin без end - второй
-                                        * тип перекоса. В v3.19 была
-                                        * защита только от первого, и
-                                        * именно второй ломал таблицу */
+ * КОРЕНЬ ПРОБЛЕМЫ ОДИН И НЕ МЕНЯЛСЯ ШЕСТЬ ПРОГОНОВ: фазы спаривались
+ * вручную, через отдельную переменную fx_ph и две функции end/end_in.
+ * Спаривание нигде не проверялось на уровне структуры, поэтому любой
+ * забытый вызов тихо ломал всю таблицу. Убрать ручное спаривание -
+ * значит убрать и весь класс ошибок, а не очередной его симптом.
+ *
+ * ЧТО ОСТАЁТСЯ ВМЕСТО. Метки времени. Они не требуют синхронизации
+ * ничего: fx_mk_acc печатает текущее время и имя участка, а разница
+ * между соседними метками и есть длительность участка. За шесть прогонов
+ * они дали разброс +-7 мс на итерацию (5477 мс в v317 и v317 мс в v320,
+ * т.е. 5477 и 5477) и ни разу не соврали.
+ *
+ * ЦЕНА ОТКАЗА, СКАЗАННАЯ ЧЕСТНО. Метки не умеют складываться в иерархию:
+ * нельзя спросить «сколько всего на верхнем уровне». Этого и не
+ * требовалось - все решения принимались по разности соседних меток. Что
+ * действительно теряется: автоматическая проверка «всё ли время учтено».
+ * Её заменяет другое свойство - забытый вызов fx_mk_acc виден СРАЗУ, как
+ * неправдоподобно большой скачок между двумя соседними метками t=.
+ *
+ * ЧТО ТЕПЕРЬ ВИДНО. Прежде early_unlock_path была чёрным ящиком на 3,7 с.
+ * Теперь внутри неё стоят метки [E1], [E2], [E3] и четыре части ботера, то
+ * есть время прогона разложено по именам без единого счётчика глубины.
+ *
+ * ЗАТРАТЫ НА САМ ЗАМЕР. ~115 дополнительных строк лога по 26 мкс = 3 мс на
+ * прогон из 55 900. Замерено, не прикинуто: цена вызова ulogf после
+ * пакетной записи измерена как 26 мкс в прогонах v3.17 и v3.19.
+ * ==================================================================== */
+#define FX_MK_MAX 48
+static const CHAR16 *fx_mkName[FX_MK_MAX];
+static UINT64 fx_mkUs[FX_MK_MAX];      /* накоплено, мкс */
+static UINTN  fx_mkCalls[FX_MK_MAX];
+static UINTN  fx_mkNext = 0;
 
-static UINT64
-fx_ph_begin(void)
-{
-    UINT64 ts = fx_now_us();
-    UINT64 d;
-    /* v3.19: ГЛУБИНА БОЛЬШЕ НЕ УХОДИТ В МИНУС.
-     *
-     * Что произошло в v3.18: лишний fx_ph_end уводил fx_phDepth в −1,
-     * дальше d = (UINTN)(-1) кодировался как d << 48 и давал мусор в
-     * старших битах метки, то есть dep>0 для всех фаз без исключения.
-     * Таблица фаз тихо переставала означать что-либо: все 16 строк
-     * помечены (inside), SUM top-level = 0, CHECK показывал
-     * unaccounted 100%. Ни одна проверка этого не ловила, потому что
-     * сам механизм проверки был сломан вместе с таблицей.
-     *
-     * Теперь глубина — БЕЗЗНАКОВЫЙ счётчик с насыщением: уменьшение не
-     * ниже нуля. Лишний end становится безопасным no-op, а не отравлением
-     * всей таблицы.
-     *
-     * Почему именно насыщение, а не просто проверка: непреднамеренный
-     * лишний end — вещь, которая МОЛЧА ЛОМАЕТ измерение. Защита должна
-     * быть такой, чтобы лишний end не мог ничего сломать. Если вместо
-     * этого он станет заметен (CHECK покажет unaccounted больше 100 %),
-     * то это тоже приемлемо: заметное враньё лучше незаметного.
-     *
-     * Диагностика перекоса оставлена в отчёте: если глубина на нуле, а
-     * пришёл end, это видно и разбираемо. */
-    if (fx_phDepth > FX_PH_MAX * 4) {
-        fx_phUnderflow++;        /* end без begin - см. fx_ph_report */
-        return (UINT64)fx_phUnderflow << 48 | (ts & 0xFFFFFFFFFFFFULL);
-    }
-    d = fx_phDepth;
-    fx_phDepth++;
-    return (d << 48) | (ts & 0xFFFFFFFFFFFFULL);
-}
-#define FX_PH_TS(h)   ((h) & 0xFFFFFFFFFFFFULL)   /* метка времени, мкс */
-#define FX_PH_DEP(h)  ((UINTN)((h) >> 48))         /* глубина на момент begin */
-
+/* Закрыть участок: напечатать метку времени и накопить её в сводку.
+ *
+ * Заменяет fx_ph_end и fx_ph_end_in одновременно. Различия между ними
+ * больше нет и не нужно: вложенность была единственной причиной
+ * расхождений, а вместе с ней исчез и повод их различать.
+ *
+ * ВАЖНО, ЧТО ЗАБЫТЫЙ ВЫЗОВ ТЕПЕРЬ НЕВИДИМ НЕ БУДЕТ. Забытая метка даёт
+ * не «сломанную таблицу», а неправдоподобно большую дельту между двумя
+ * соседними строками t= в логе. Это видно глазом сразу, тогда как
+ * сломанная таблица фаз четыре прогона подряд выглядела правдоподобно. */
 static VOID
-fx_ph_end_n(UINT64 t0, const CHAR16 *name, BOOLEAN inside)
+fx_mk_acc(UINT64 t0, const CHAR16 *name)
 {
     UINT64 now = fx_now_us();
-    UINTN i, dep;
-    BOOLEAN was_inside;
-    UINT64 tv = FX_PH_TS(t0);
-    UINT64 td = FX_PH_DEP(t0);
-
-    /* Спуск глубины делается ВСЕГДА и ДО любых ранних выходов, иначе
-     * один непарный fx_ph_end рассыпает всю вложенность дальше: каждая
-     * последующая фаза окажется «вложенной» и исчезнет из итога.
-     *
-     * v3.19: спуск НЕ УХОДИТ НИЖЕ НУЛЯ. Раньше стояло `if (fx_phDepth)`,
-     * что пропускало спуск при нуле, но не мешало уйти в минус: лишний end
-     * при глубине 0 уводил счётчик в −1, и дальше КАЖДАЯ фаза получала
-     * dep>0. Именно это и наблюдалось в прогоне v3.18 (16 из 16 фаз стали
-     * (inside), SUM top-level = 0). Теперь end без begin считается и
-     * игнорируется. */
-    if (fx_phDepth > 0) fx_phDepth--;
-    else               fx_phUnderflow++;
-
-    if (!t0) return;                     /* часы не откалиброваны */
-    dep = FX_PH_DEP(t0);
-    was_inside = inside || (dep > 0);
-
-    /* v3.20: ВТОРОЙ ТИП ПЕРЕКОСА - begin БЕЗ end.
-     *
-     * В v3.19 я защитил счётчик только от лишнего end и счёл работу на
-     * этом законченной. Она не была законченной: главная поломка прогона
-     * v3.19 - лишний begin, а не лишний end. Глубина накапливалась, все
-     * фазы становились вложенными, верхний итог был нулём.
-     *
-     * Признак однозначен: глубина на момент ЗАКРЫТИЯ фазы не должна
-     * превышать её глубину на момент ОТКРЫТИЯ. Если begin был без
-     * соответствующего end, разница положительна - значит где-то в
-     * промежутке открыли фазу и не закрыли.
-     *
-     * Ловится здесь, а не в fx_ph_begin(), потому что begin не знает,
-     * закроют ли его. Именно эта асимметрия и делала ошибку тихой: end без
-     * begin ловился, begin без end - нет.
-     *
-     * Проверка: глубина СРАВНИВАЕТСЯ с той, что была при открытии этой
-     * фазы. begin кодирует текущую глубину и увеличивает её на 1;
-     * сбалансированный end уменьшает её обратно, то есть после декремента
-     * она обязана РАВНЯТЬСЯ закодированной. Если она БОЛЬШЕ - значит
-     * внутри промежутка открыли фазу и не закрыли.
-     *
-     * Диагностика обязана быть в отчёте: см. fx_ph_report. Молчаливый
-     * перекос - это ровно то, что трижды ломало таблицу фаз в этом проекте. */
-    if (fx_phDepth > td) {
-        fx_phLeak += fx_phDepth - td;
-        fx_phDepth = td;      /* восстанавливаем, чтобы не копить дальше */
-    }
-
-    for (i = 0; i < fx_phNext; i++)
-        if (fx_phName[i] == name) break;
-    if (i == fx_phNext) {
-        if (fx_phNext >= FX_PH_MAX) return;   /* лимит: тихо, но не ломаем */
-        fx_phName[fx_phNext] = name;
-        fx_phUs[fx_phNext] = 0;
-        fx_phCalls[fx_phNext] = 0;
-        fx_phIn[fx_phNext] = FALSE;           /* установится ниже */
-        fx_phNext++;
-    }
-    /* Липкость: фаза, хоть раз закрытая на глубине > 0, из верхнего
-     * итога исключается навсегда. Иначе общий родитель и его собственная
-     * внутренняя фаза посчитались бы дважды. */
-    if (was_inside) fx_phIn[i] = TRUE;
-    if (now > FX_PH_TS(t0)) fx_phUs[i] += now - FX_PH_TS(t0);
-    fx_phCalls[i]++;
-}
-
-/* v3.18: имя второго аргумента fx_ph_end_in больше не решает ничего -
- * глубина берётся из счётчика. Оставлено как тонкая обёртка, чтобы
- * не трогать существующие вызовы. */
-static VOID
-fx_ph_end(UINT64 t0, const CHAR16 *name)
-{
-    fx_ph_end_n(t0, name, FALSE);
-}
-
-/* фаза ВНУТРИ другой, уже посчитанной, — в верхний итог НЕ входит */
-static VOID
-fx_ph_end_in(UINT64 t0, const CHAR16 *name)
-{
-    fx_ph_end_n(t0, name, TRUE);
-}
-
-static VOID
-fx_ph_report(void)
-{
-    UINT64 tot = 0, topSum = 0, childSum = 0;
     UINTN i;
-    ulogf(L"TIME   === phase accounting (only top level is summed) ===\n");
-    for (i = 0; i < fx_phNext; i++)
-        if (fx_phCalls[i] && !fx_phIn[i]) tot += fx_phUs[i];
-    for (i = 0; i < fx_phNext; i++) {
-        if (!fx_phCalls[i]) continue;
-        if (!fx_phIn[i]) {
-            topSum += fx_phUs[i];
-            ulogf(L"TIME   %-24s %9lld us  x%-4d %3lld%%\n",
-                  fx_phName[i], (INT64)fx_phUs[i], (INTN)fx_phCalls[i],
-                  (INT64)((tot ? fx_phUs[i] * 100 / tot : 0)));
-        } else {
-            childSum += fx_phUs[i];
-            ulogf(L"TIME     (inside) %-17s %7lld us  x%-4d\n",
-                  fx_phName[i], (INT64)fx_phUs[i], (INTN)fx_phCalls[i]);
-        }
+    log_ms(name);                      /* метка в лог - главный результат */
+    if (!t0) return;                   /* часы не откалиброваны */
+    for (i = 0; i < fx_mkNext; i++)
+        if (fx_mkName[i] == name) break;
+    if (i == fx_mkNext) {
+        if (fx_mkNext >= FX_MK_MAX) return;
+        fx_mkName[i] = name;
+        fx_mkUs[i] = 0;
+        fx_mkCalls[i] = 0;
+        fx_mkNext++;
     }
-    ulogf(L"TIME   %-24s %9lld us   (top level; nested phases above are "
-          L"NOT added again)\n", L"SUM top-level", (INT64)topSum);
-    ulogf(L"TIME   %-24s %9lld us   (inside those phases, for reference)\n",
-          L"SUM nested", (INT64)childSum);
-    ulogf(L"TIME   %-24s %9lld us\n", L"TOTAL measured",
-          (INT64)(topSum + childSum));
+    if (now > t0) fx_mkUs[i] += now - t0;
+    fx_mkCalls[i]++;
+}
 
-    /* v3.18: СВЕРКА С РЕАЛЬНЫМ ПРОШЕДШИМ ВРЕМЕНОМ.
-     *
-     * Главный признак того, что фазовый учёт врёт, - это сумма фаз
-     * БОЛЬШЕ времени прогона. Так было дважды:
-     *     SUM 95 518 411 мкс при прогоне 113 343 мкс  (2026-10-02)
-     *     SUM top-level 78 152 783 мкс при 57 316 мкс  (v3.17)
-     * Обе цифры не означали ничего, и обе были замечены только потому,
-     * что кто-то догадался сравнить их с секундомером.
-     *
-     * Теперь это сравнение делает сам код, и не остаётся места, где
-     * враньё можно не заметить. «unaccounted» - это время, которое НЕ
-     * принадлежит ни одной фазе: именно его и надо размечать дальше.
-     */
-    {
-        UINT64 wall = fx_now_us();
-        if (wall > 0 && topSum <= wall) {
-            ulogf(L"TIME   %-24s %9lld us   (phases vs elapsed %lld us: "
-                  L"unaccounted %lld us = %lld%%)\n",
-                  L"CHECK", (INT64)topSum, (INT64)wall,
-                  (INT64)(wall - topSum),
-                  (INT64)((wall - topSum) * 100 / wall));
-        } else {
-            /* Итог больше прогона - значит двойной счёт, и таблицей
-             * пользоваться нельзя. Печатается ЯВНО, а не молча. */
-            ulogf(L"TIME   CHECK *** FAILED: SUM top-level %lld us > "
-                  L"elapsed %lld us - double counting, DO NOT trust this "
-                  L"table (depth=%d)\n",
-                  (INT64)topSum, (INT64)wall, (INTN)fx_phDepth);
-        }
-        /* v3.19/v3.20: ОБА типа перекоса глубины.
-         *
-         * underflow = end без begin; leak = begin без end. Проверять надо
-         * оба: в v3.19 был защищён только первый, и второй ушёл незамеченным,
-         * а именно он держал в прогоне v3.19 все 15 фаз в состоянии
-         * (inside) при SUM top-level = 0.
-         *
-         * Любой ненулевой перекос означает: таблице фаз верить нельзя, даже
-         * если CHECK выглядит благополучно. Поэтому печатается ЯВНО и
-         * печатается ОБЯЗАТЕЛЬНО. */
-        if (fx_phUnderflow)
-            ulogf(L"TIME   *** DEPTH UNDERFLOW x%d: end без begin - the "
-                  L"phase table is NOT trustworthy ***\n",
-                  (INTN)fx_phUnderflow);
-        if (fx_phLeak)
-            ulogf(L"TIME   *** DEPTH LEAK x%d: begin без end - the "
-                  L"phase table is NOT trustworthy ***\n",
-                  (INTN)fx_phLeak);
-        if (!fx_phUnderflow && !fx_phLeak)
-            ulogf(L"TIME   depth OK (balanced begin/end, underflow=0 "
-                  L"leak=0)\n");
+/* Сводка по накопленным меткам. Печатается всегда, даже если участок
+ * встретился один раз: неизвестный участок должен быть виден, а не
+ * молча слит с соседним. */
+static VOID
+fx_mk_report(void)
+{
+    UINTN i;
+    UINT64 tot = 0;
+    for (i = 0; i < fx_mkNext; i++) tot += fx_mkUs[i];
+    ulogf(L"TIME   === accumulated marks (order: see 'TIME t=' lines) ===\n");
+    for (i = 0; i < fx_mkNext; i++) {
+        if (!fx_mkCalls[i]) continue;
+        ulogf(L"TIME   MK  %-32s %9lld us  x%-4d %3lld%%\n",
+              fx_mkName[i], (INT64)fx_mkUs[i], (INTN)fx_mkCalls[i],
+              (INT64)(tot ? fx_mkUs[i] * 100 / tot : 0));
     }
+    ulogf(L"TIME   MK  %-32s %9lld us\n", L"SUM of marks (not a total)",
+          (INT64)tot);
+    ulogf(L"TIME   NOTE: SUM is NOT a phase total and may EXCEED elapsed, "
+          L"because marks are nested. For ONE duration use the difference "
+          L"of two adjacent 'TIME t=' lines.\n");
 }
 
 
@@ -4564,6 +4401,25 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
              * ============================================================== */
 
             /* --- FLR-разделение, 1:1 как в боевом цикле таблицы --------- */
+            /* v3.21: ЗДЕСЬ БЫЛ ПРОПУЩЕННЫЙ ШТАМП, И ИМЕННО ОН ДАВАЛ
+             * 'FLR + 300ms settle 15,5 с' в прогоне v3.20.
+             *
+             * Что происходило: в v3.20 я снёс fx_ph_begin(), стоявший в
+             * теле цикла pass, потому что он не закрывался. Снял правильно,
+             * но не заметил, что единственный оставшийся 'begin' для фазы
+             * FLR был ДО цикла k. То есть fx_ph к моменту FLR относился к
+             * прошлой итерации, и в замер попадала вся разница: хвост
+             * предыдущего ROP write + poll плюс промах мимо уже открытых
+             * масок на следующей итерации.
+             *
+             * Отсюда и счётчик: UNDERFLOW x7 - семь раз, когда итерация
+             * начиналась с уже открытой маски (continue минует FLR), так
+             * что к моменту next FLR глубина уходила не туда.
+             *
+             * Теперь метка ставится ЗДЕСЬ, на первом же полезном действии
+             * итерации. Это структурно верно: участок FLR начинается с
+             * чтения BAR0, а не в конце предыдущей итерации. */
+            fx_ph = fx_now_us();
             saveBar = cfg_read32(0x10) & ~0xF;
             do_flr();
             /* v3.18: слепая пауза 300 мс. ИЗМЕРЕНО: вся фаза стоит 499 мс,
@@ -4579,8 +4435,8 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
             cfg_write32(0x10, saveBar);
             enable_mem_decode();
             gBar0Base = saveBar;
-            fx_ph_end(fx_ph, L"render: FLR + 300ms settle");
-            fx_ph = fx_ph_begin();
+            fx_mk_acc(fx_ph, L"render: FLR + 300ms settle");
+            fx_ph = fx_now_us();
 
             /* --- ботер#1: КАЖДЫЙ РАЗ, без гарда ---------------------------
              * Гард стоял здесь и в историческом свипе (стр. 8542). Замер
@@ -4604,8 +4460,8 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
              * раза подряд). Убрана: в логе это читалось как две разные
              * стадии, а на деле стадия одна. */
             log_ms(L"render masks: booter#1 done (early path)");
-            fx_ph_end(fx_ph, L"render: early_unlock_path");
-            fx_ph = fx_ph_begin();
+            fx_mk_acc(fx_ph, L"render: early_unlock_path");
+            fx_ph = fx_now_us();
             ulogf(L"G2RMK  %s pass%d booter#1: PLM=0x%08x\n", tag, (INTN)pass + 1,
                   mmio_read32(0x00823804U));
 
@@ -4620,8 +4476,8 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                   mmio_read32(tgt[k]));
             (VOID)booter_load_v67(wprMetaPhys, ucodePhys);
             log_ms(L"render masks: booter#2 done (ROP write)");
-            fx_ph_end(fx_ph, L"render: booter_load_v67 #2");
-            fx_ph = fx_ph_begin();
+            fx_mk_acc(fx_ph, L"render: booter_load_v67 #2");
+            fx_ph = fx_now_us();
             /* 42.10: ботер портит WPR2. Восстанавливаем и ПИШЕМ РЕЗУЛЬТАТ,
              * потому что восстановление может не удержаться. */
             mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
@@ -4636,7 +4492,7 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                 uefi_call_wrapper(BS->Stall, 1, 1000);
                 v = mmio_read32(tgt[k]);
             }
-            fx_ph_end(fx_ph, L"render: ROP write + poll");
+            fx_mk_acc(fx_ph, L"render: ROP write + poll");
             ulogf(L"G2RMK  %s pass%d 0x%08x became 0x%08x %s (polls=%d)\n",
                   tag, (INTN)pass + 1, tgt[k], v,
                   (v == 0xFFFFFFFFU) ? L"OPEN" : L"remained locked",
@@ -4710,7 +4566,14 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
      * Начинать внешнюю фазу здесь не нужно: имя функции уже известно
      * вызывающему коду, который и меряет 'render: early_unlock_path'
      * вокруг всего вызова. Двойной счёт тут был бы тем же, что и в v3.17,
-     * когда ручная метка соврала именно на внешней фазе. */
+     * когда ручная метка соврала именно на внешней фазе.
+     *
+     * v3.21: ВМЕСТО УДАЛЕНИЯ ЗДЕСЬ СТАВИТСЯ ШТАМП, И ЭТО ИСПРАВЛЕНИЕ БАГА,
+     * КОТОРЫЙ Я ВНЁС В ЭТАПЕ 5. Удалив begin, я оставил fx_ph
+     * неинициализированным, и первая внутренняя фаза функции считалась от
+     * мусора на стеке. Плохо выглядящего числа не было - было неправильное,
+     * а это хуже. Штамп ставится до первого действия функции. */
+    fx_ph = fx_now_us();
 
     Print(L"\n--- v2.28: FWSEC HS-boot на GSP (0x110000) ---\n");
 
@@ -5104,9 +4967,26 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
              * регистров (PLM!). Для каждой: патч init_cmd + re-DMA + STARTCPU
              * + 200мс poll → сравниваем PLM/privmask/WPR2 до/после. */
             /* v3.16: конец фазы reset+STARTCPU, дальше идут диагностические
-             * эксперименты (помечены как вложенные — в верхний итог не входят). */
-            fx_ph_end_in(fx_ph, L"fwsec: reset+STARTCPU");
-            fx_ph = fx_ph_begin();
+             * эксперименты (помечены как вложенные — в верхний итог не входят).
+             *
+             * v3.21: ЗДЕСЬ БЫЛ МОЙ БАГ, ВНЕСЁННЫЙ В ЭТАПЕ 5.
+             *
+             * В v3.20 я снёс fx_ph_begin() в начале fwsec_boot_gsp_sig,
+             * потому что он не закрывался и копил перекос. Снёс правильно по
+             * сути, но НЕ поставил замену: fx_ph здесь не инициализирован
+             * никогда - ни в декларации, ни выше по функции. То есть в
+             * 'fwsec: reset+STARTCPU' попадало значение из мусора на стеке.
+             *
+             * Чем это опасно именно здесь, а не где угодно: функция зовётся
+             * 9 раз, и при мусорной метке фаза могла получить правдоподобное
+             * число. То есть плохо выглядящего значения не было - было
+             * неправильное. Заметить это по логу было нечем.
+             *
+             * Ставлю явный штамп в начале функции. Он честный: отсчёт
+             * ведётся от входа в fwsec_boot_gsp_sig, то есть ровно то, что
+             * интересует. */
+            fx_mk_acc(fx_ph, L"fwsec: reset+STARTCPU");
+            fx_ph = fx_now_us();
 /* ==== v2.43 + v2.45: ДИАГНОСТИЧЕСКИЕ ЭКСПЕРИМЕНТЫ =================
              *
              * Что здесь стоит. Оба блока — чистая диагностика, и оба
@@ -5143,7 +5023,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
              * Вернуть прежнее поведение (полный эксперимент на каждом
              * вызове): FX_DIAG_EVERY = 1.
              */
-            fx_ph = fx_ph_begin();   /* v2.43 + v2.45, обе под воротами */
+            fx_ph = fx_now_us();   /* v2.43 + v2.45, обе под воротами */
             if (fx_diag_gate())
             {
             {   /* блок v2.43 в собственной области */
@@ -5302,7 +5182,7 @@ for (p = 0; p < 2000; p++) {
                   mmio_read32(REG_PFB_MMU_WPR2_LO),
                   mmio_read32(REG_PFB_MMU_WPR2_HI),
                   TARGET_WPR2_LO);
-            fx_ph_end_in(fx_ph, L"fwsec: v2.43+v2.45 diagnostics");
+            fx_mk_acc(fx_ph, L"fwsec: v2.43+v2.45 diagnostics");
             }   /* конец if (fx_diag_gate()) — блоки v2.43 + v2.45 */
             }
             /* v3n: здесь функция возвращает TRUE («успех»), НЕ проверяя, что
@@ -5656,7 +5536,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     UINTN i;
 
     sec2_health(L"7-booter-entry");
-    fx_ph = fx_ph_begin();
+    fx_ph = fx_now_us();
 
     /* v2.63: WPR meta копируется НИЖЕ 4ГБ — ботер читает mailbox0 как
      * 32-битный адрес; meta на >4ГБ даёт ему мусор (exit 0x91). Контент
@@ -5710,7 +5590,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
              * после такого места была бы помечена вложенной и исчезла бы
              * из верхнего итога. Здесь это сделано явно, потому что
              * автоматика в C для этого не существует. */
-            fx_ph_end_in(fx_ph, L"booter: reset+scrub (early exit)");
+            fx_mk_acc(fx_ph, L"booter: reset+scrub (early exit)");
             return EFI_DEVICE_ERROR;
         }
     }
@@ -5741,16 +5621,16 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
      * fx_ph_end_in здесь стоял как раз потому, что вызов вложен - и это
      * работало, пока ручная метка не соврала в трёх других местах.
      */
-    fx_ph_end_in(fx_ph, L"booter: reset+scrub");
-    fx_ph = fx_ph_begin();
+    fx_mk_acc(fx_ph, L"booter: reset+scrub");
+    fx_ph = fx_now_us();
 
     Print(L"booter: WPR2 до записи: lo=0x%08x hi=0x%08x\n",
           mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI));
     mmio_write32(REG_PFB_MMU_WPR2_LO, TARGET_WPR2_LO);
     mmio_write32(REG_PFB_MMU_WPR2_HI, TARGET_WPR2_HI);
     uefi_call_wrapper(BS->Stall, 1, 10000);
-    fx_ph_end_in(fx_ph, L"booter: wpr2+setup");
-    fx_ph = fx_ph_begin();
+    fx_mk_acc(fx_ph, L"booter: wpr2+setup");
+    fx_ph = fx_now_us();
     Print(L"booter: WPR2 после записи: lo=0x%08x hi=0x%08x (расчёт 0x%08X/0x%08X; не изменились = заблокировано)\n",
           mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
           TARGET_WPR2_LO, TARGET_WPR2_HI);
@@ -5801,8 +5681,8 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     Print(L"booter: DMEM[0x10]=0x%08x (ожидаю sig SIG_PROD[0] 0x%08x)\n",
           mmio_read32(SEC2_DMEMD0),
           *(UINT32*)((UINTN)ucodePhys + 0x8A10));
-    fx_ph_end_in(fx_ph, L"booter: dma image");
-    fx_ph = fx_ph_begin();
+    fx_mk_acc(fx_ph, L"booter: dma image");
+    fx_ph = fx_now_us();
 
     /* PKC (RSA3K) параметры */
     mmio_write32(SEC2_BROM_PARAADDR0, BOOTER_HS_SIG_DMEM_ADDR);
@@ -5990,7 +5870,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
                   mmio_read32(SEC2_MAILBOX0));
             /* v3.18: закрытие фазы перед выходом - см. объяснение в
              * раннем выходе выше. */
-            fx_ph_end_in(fx_ph, L"booter: start+wait");
+            fx_mk_acc(fx_ph, L"booter: start+wait");
             if (hist) uefi_call_wrapper(BS->FreePool, 1, hist);
             return EFI_SUCCESS;
         }
@@ -6099,7 +5979,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     /* --- [E1] BL (ucodeId=1) на GSP — открывает secure-путь (урок v2.62b).
      *        Дословная копия стадии [1/3] v2.46 (эмпирически рабочая). --- */
     Print(L"[E1] GSP BL ucodeId=1 (IMEM 0x4000/DMEM 0x2400)...\n");
-    fx_ph = fx_ph_begin();
+    fx_ph = fx_now_us();
     mmio_write32(0x110080, 0x0);          /* из трейса (IRQMSET=0) */
     falcon_wait_reset_ready(GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
@@ -6138,8 +6018,8 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
           mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
           mmio_read32(GSP_MAILBOX0), mmio_read32(GSP_BCR));
     wpr2_probe(L"E1-after-BL");
-    fx_ph_end(fx_ph, L"[E1] BL load+settle");
-    fx_ph = fx_ph_begin();
+    fx_mk_acc(fx_ph, L"[E1] BL load+settle");
+    fx_ph = fx_now_us();
 
     /* --- [E2] FWSEC на GSP → WPR2 (fwsec_boot_gsp сам ресетит GSP) --- */
     Print(L"[E2] FWSEC на GSP (WPR2)...\n");
@@ -6152,8 +6032,8 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     }
     wpr2_probe(L"E2-post-fwsec");
     sec2_window_dump(L"E2-post-fwsec");
-    fx_ph_end(fx_ph, L"[E2] fwsec_boot_gsp_sig");
-    fx_ph = fx_ph_begin();
+    fx_mk_acc(fx_ph, L"[E2] fwsec_boot_gsp_sig");
+    fx_ph = fx_now_us();
 
     /* --- [E3] ResetIntoRiscv + LibosBootArgs.
      * v2.80: ТОЧНАЯ реплика kflcnResetIntoRiscv_GA102: PreResetWait →
@@ -6181,7 +6061,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     mmio_write32(GSP_MAILBOX0, (UINT32)cmp90_meta_low(wprMetaPhys));
     mmio_write32(GSP_MAILBOX1, (UINT32)(cmp90_meta_low(wprMetaPhys) >> 32));
     wpr2_probe(L"E3-after-ResetIntoRiscv");
-    fx_ph_end(fx_ph, L"[E3] ResetIntoRiscv");
+    fx_mk_acc(fx_ph, L"[E3] ResetIntoRiscv");
 
     sec2_health(L"E4-pre-booter");
 
@@ -9504,7 +9384,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (!g_gen2Fire)   /* v2.99b: fire-итерациям не нужен гигантский свип */
 #endif
         {
-        UINT64 ph0 = fx_ph_begin();
+        UINT64 ph0 = fx_now_us();
         /* v3.17: свип регистровых блоков убран из релизной сборки.
          *
          * ИЗМЕРЕНО: этот один вызов стоил 11,86 с из 3 мин 40 с
@@ -10068,7 +9948,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * было нечего. Внутри mapper есть два Stall(500000) - это секунда,
      * и до сих пор она была гипотезой, а не измерением. */
     {
-        UINT64 mrk = fx_ph_begin();
+        UINT64 mrk = fx_now_us();
         log_ms(L"before gsp_engine_reset (kill GFW)");
         gsp_engine_reset();
         /* v3.18: слепая пауза 200 мс заменена ожиданием СОБЫТИЯ.
@@ -10095,7 +9975,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * столько же, сколько раньше. Быстрее - только когда событие уже
          * наступило, то есть когда ждать нечего. */
         (VOID)falcon_wait_scrub_done(GSP_DMACTL, GSP_HWCFG2, L"gsp-post-reset");
-        fx_ph_end(mrk, L"gsp_engine_reset + scrub wait");
+        fx_mk_acc(mrk, L"gsp_engine_reset + scrub wait");
     }
 
     /* --- v2.12: проверка разлочки SEC2 после смерти GFW --- */
@@ -10141,14 +10021,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * FRTS→WPR2, SB→privmask. На свежем POST secure-зона цела. */
     sec2_health(L"1-post-unlock");
     if (!cmp90_skipMapper) {
-        UINT64 mrk = fx_ph_begin();
+        UINT64 mrk = fx_now_us();
         if (sec2_ucode_mapper_cmd(wprMetaPhys)) {
             Print(L"v2.57: *** SEC2 ucode команда сработала (WPR2/SB) ***\n");
         }
         /* v3.17: mapper-стадия в окне 10,64 с шла без единой метки. Здесь
          * появляется её фактическая стоимость - два Stall(500000) внутри
          * видны отдельной строкой фазового учёта. */
-        fx_ph_end(mrk, L"sec2 ucode mapper cmd");
+        fx_mk_acc(mrk, L"sec2 ucode mapper cmd");
     } else {
         Print(L"v2.79: mapper-стадия пропущена (приближение к флоу драйвера)\n");
     }
@@ -11210,7 +11090,7 @@ done:
           (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo);
     log_ms(L"final: before return to firmware");
     log_ms(L"final: before return to firmware");
-    fx_ph_report();
+    fx_mk_report();
     /* v3.17: ИТОГ ПО ВЫВОДУ - то, ради чего всё затевалось.
      *
      * Печатается ДО выгрузки кольца и ДО маркеров END: если прогон
@@ -11279,9 +11159,9 @@ done:
          * строки PRN в логе по-прежнему нет - вывод теряется ПОСЛЕ
          * записи, и виноват log_flush_sector. */
         {
-            UINT64 pm = fx_ph_begin();
+            UINT64 pm = fx_now_us();
             fx_pr_dump();
-            fx_ph_end_in(pm, L"console ring dump to log");
+            fx_mk_acc(pm, L"console ring dump to log");
         }
         log_flush_sector(TRUE);
     }

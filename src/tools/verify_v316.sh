@@ -136,22 +136,48 @@ else
     # перекосе обязаны быть в бинаре, чтобы в логе могла появиться ЛЮБАЯ
     # из них. Пока в коде был только underflow, а ломал таблицу leak
     # (begin без end), и молчание выглядело как 'depth OK'.
-    # Добавлен маркер 'console ring dump to log': фазовый замер вызова
+    # Добавлен маркер 'console ring dump to log': замер вызова
     # выгрузки кольца, который наконец отличает 'функцию не звали' от
     # 'звали, но вывод потерялся'.
+    #
+    # v3.21: ФАЗОВЫЙ УЧЁТ УДАЛЁН ЦЕЛИКОМ, и вместе с ним ушли из приёмки
+    # 'depth OK', 'DEPTH LEAK', 'DEPTH UNDERFLOW' и 'CHECK'. Это не
+    # ослабление проверки, а смена измеряемого: счётчик глубины, его
+    # подстройка и её собственная диагностика ломались ВМЕСТЕ с таблицей
+    # четыре прогона подряд, то есть проверяли сломанный код и рапортовали
+    # 'depth OK' о сломанной таблице.
+    #
+    # Взамен добавлены маркеры НОВЫХ обязательных точек, без которых время
+    # не разложить: 'render: booter_load_v67 #2', 'booter: start+wait',
+    # 'fwsec: reset+STARTCPU', 'gsp_engine_reset + scrub wait',
+    # 'accumulated marks', 'SUM of marks'. Именно эти шесть участков
+    # составляли неразложенный остаток: до v3.21 у нас не было ни одного
+    # замера ВНУТРИ early_unlock_path и ВНУТРИ booter_load_v67.
+    #
+    # Удаление 'CHECK' - единственная реально потерянная способность:
+    # больше никто не сверит сумму с прошедшим временем. Взамен появилась
+    # проверка, которая не может сломаться вместе с объектом проверки:
+    # забытый fx_mk_acc виден по неправдоподобно большой дельте между
+    # соседними 'TIME t='.
     for m in \
         'BL settle' \
         'DMAQ2' \
         'FWL' \
         'SCRUB' \
-        'phase accounting' \
         'v2.43 cmd scan' \
         'render: FLR' \
         'render: early_unlock_path' \
+        'render: booter_load_v67 #2' \
         'render: ROP write' \
         'booter: reset+scrub' \
         'booter: wpr2+setup' \
         'booter: dma image' \
+        'booter: start+wait' \
+        'fwsec: reset+STARTCPU' \
+        'gsp_engine_reset + scrub wait' \
+        'console ring dump to log' \
+        'accumulated marks' \
+        'SUM of marks' \
         'sweep_all(POST) SKIPPED' \
         'render masks: booter#1 done' \
         'render masks: sweep finished' \
@@ -160,11 +186,6 @@ else
         'XVE window open' \
         'FBP    SKIPPED' \
         'render masks: fast=' \
-        'depth OK' \
-        'DEPTH LEAK' \
-        'DEPTH UNDERFLOW' \
-        'console ring dump to log' \
-        'CHECK' \
         'PRN   ==== console ring' \
         'console ring NOT DUMPED' \
         '=== unlock done' \
@@ -225,12 +246,14 @@ cat <<EOF
       WPR2 ESTABLISHED, нигде dbg=0x007E0009
       END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF
       TIME  I/O: Print n=... measured=...us/call  <- цена вывода
-      TIME  render masks: fast=... fast_miss=...   <- сработал ли быстрый путь
-      TIME   === phase accounting ===
-      TIME   CHECK ... unaccounted ...             <- остаток вне фаз
+      TIME  === accumulated marks ===
+      TIME  MK  ...                                <- накопить по участкам
 
-  'CHECK *** FAILED' в логе означает, что сумма фаз больше прошедшего
-  времени, то есть вернулся двойной счёт, и таблице верить нельзя.
+  Забытый вызов fx_mk_acc виден НЕ как сломанная таблица, а как
+  неправдоподобно большая дельта между двумя соседними строками 'TIME t='.
+  Считать 'SUM of marks' как итог нельзя: метки вложены, сумма превышает
+  прошедшее время. Для длительности одного участка брать разность соседних
+  меток t=.
 
   Без этого лога сборка не проверена, а md5 записывать в build.sh рано.
 

@@ -308,14 +308,15 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    2. 'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET' <- main marker" -ForegroundColor Yellow
     Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
     Write-Host "    4. no 'dbg=0x007E0009' anywhere" -ForegroundColor Yellow
-    Write-Host "    5. 'TIME   depth OK (balanced...)' - or DEPTH LEAK / UNDERFLOW" -ForegroundColor Yellow
-    Write-Host "    6. 'TIME   === phase accounting ===' with a NON-ZERO SUM top-level" -ForegroundColor Yellow
-    Write-Host "    7. 'TIME   CHECK ... unaccounted ...%'  - must be well under 100%" -ForegroundColor Yellow
-    Write-Host "    8. 'console ring dump to log' in the phase table + 'PRN ...' in log" -ForegroundColor Yellow
-    Write-Host "    9. 'CHECK *** FAILED', 'DEPTH LEAK' or 'DEPTH UNDERFLOW' mean the" -ForegroundColor Yellow
-    Write-Host "       phase table cannot be trusted - stop and read, do not optimise" -ForegroundColor Yellow
-    Write-Host "  Baseline: out\usb-log-v319.txt (stage 4, 57 s wall / 55.9 s counter, 8 of 8)" -ForegroundColor Yellow
-    Write-Host "  Expected: about the same time - this stage only repairs measurement, it" -ForegroundColor Yellow
-    Write-Host "  does not change behaviour. If the runtime MOVES, something else changed." -ForegroundColor Yellow
+    Write-Host "    5. 'TIME  === accumulated marks ===' + 'TIME  MK ...' per section" -ForegroundColor Yellow
+    Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
+    Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
+    Write-Host "       do not read it as a total." -ForegroundColor Yellow
+    Write-Host "    7. 'render: FLR + 300ms settle' must be ~500 ms x8, NOT 15 s - a" -ForegroundColor Yellow
+    Write-Host "       bigger number means a mark was lost (the delta swallowed the" -ForegroundColor Yellow
+    Write-Host "       next section). This is the failure the old CHECK used to hide." -ForegroundColor Yellow
+    Write-Host "  Baseline: out\usb-log-v320.txt (stage 5, 55.9 s counter, 8 of 8)" -ForegroundColor Yellow
+    Write-Host "  Expected: ~56 s. This stage changed measurement only, so if the" -ForegroundColor Yellow
+    Write-Host "  runtime MOVES, something else changed - read the diff before trusting it." -ForegroundColor Yellow
 }
 exit 0
