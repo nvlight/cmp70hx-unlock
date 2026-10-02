@@ -1894,24 +1894,167 @@ set_gpu_time(void)
 /* ==== Falcon DMA engine primitives (SEC2) ====
  * 256-byte block transfers through DMATRF registers; wait helpers poll
  * the FULL/IDLE bits of DMATRFCMD. */
-static void
-falcon_dma_wait_not_full(void)
+/* ==================================================================== *
+ * v3.16 — ЧАСЫ И ПРИМИТИВ ОПРОСА С ПОТОЛКОМ ПО ВРЕМЕНИ
+ * ==================================================================== *
+ *
+ * ЧАСЫ. RDTSC не требует отображения BAR0 и на x86-64 гарантирован
+ * (IA32_TSC), поэтому отсчёт идёт с самой загрузки. NV_PTIMER
+ * (cmp90_ptimer64) для этого не годится: это MMIO, он читается только
+ * после enable_mem_decode(). Из-за этого старый log_t0() стоял позже, и
+ * первые строки efi_main шли без хронометража.
+ *
+ * Блок живёт здесь, а не рядом с log_t0, потому что им пользуются функции
+ * ожидания DMA ниже по файлу — C требует объявления до использования.
+ *
+ * ПРИМИТИВ fx_poll32. Ждёт, пока (reg & mask) == want, и выходит по
+ * трём условиям:
+ *   1) условие наступило          — обычный выход, ничего не меняется;
+ *   2) регистр не менялся stuckAt чтений подряд — «замер»;
+ *   3) прошло maxUs микросекунд   — потолок по ВРЕМЕНИ.
+ *
+ * ПОЧЕМУ ИМЕННО ТАК. Старый код считал ИТЕРАЦИИ, а не время:
+ *     for (i = 0; i < 20000; i++) чтение DMATRFCMD;
+ * Счётчик итераций — не ограничение по времени. Измеренная цена одного
+ * чтения BAR0 на этой плате — 773 нс, так что 20 000 итераций это 15 мс;
+ * на другой машине то же число итераций стоило бы иначе. Счётчик
+ * итераций — машинно-зависимый бюджет, и это дефект сам по себе,
+ * независимо от его величины.
+ *
+ * Условие 2 применимо ТОЛЬКО там, где регистр описывает состояние
+ * «дела идут / дела нет», а не «работа идёт». Для DMA-очереди это так:
+ * по логу cmd=0x00000615 на ВСЕХ таймаутах, значение не двигается
+ * вообще. Там, где регистр описывает ВЫПОЛНЯЕМУЮ работу (скраб IMEM,
+ * RESET_READY), тишина означает «работа идёт», и ранний выход бросает
+ * следующий шаг раньше времени — см. FX_NEVER_STUCK и комментарий у
+ * falcon_wait_scrub_done.
+ *
+ * ------------------------------------------------------------------ */
+static UINT64
+fx_rdtsc(void)
+{
+    UINT32 lo, hi;
+    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((UINT64)hi << 32) | lo;
+}
+
+static UINT64 fx_tscPerUs = 0;   /* тиков TSC в микросекунде */
+static UINT64 fx_mark = 0;       /* TSC, от которого считает fx_now_us */
+
+static UINT64
+fx_now_us(void)
+{
+    if (fx_tscPerUs == 0) return 0;
+    return (fx_rdtsc() - fx_mark) / fx_tscPerUs;
+}
+
+/* Пауза. Крупные — через BS->Stall (отдаёт процессор, не жжёт циклами);
+ * мелкие — спинном по TSC, потому что Stall на сотнях микросекунд
+ * округляет и добавляет свою погрешность. */
+static VOID
+fx_sleep_us(UINT64 us)
+{
+    UINT64 dl;
+    if (us == 0) return;
+    if (us >= 3000) {
+        uefi_call_wrapper(BS->Stall, 1, (UINTN)us);
+        return;
+    }
+    dl = fx_now_us() + us;
+    while (fx_now_us() < dl)
+        __asm__ __volatile__("pause");
+}
+
+/* «Никогда не считать замершим». Ставится там, где тишина НЕ является
+ * доказательством готовности: молчаливый ранний выход там означал бы
+ * действие раньше, чем железо закончило. */
+#define FX_NEVER_STUCK     0xFFFFFFFFU
+
+typedef struct {
+    UINT32 value;       /* последнее прочитанное значение       */
+    UINTN  reads;       /* сколько чтений сделано               */
+    UINT64 us;          /* сколько микросекунд заняло           */
+    UINTN  stuck;       /* выход по «регистр не меняется»       */
+    UINTN  overtime;    /* выход по потолку времени             */
+} FX_POLL;
+
+/* Ждёт (reg & mask) == want. maxIter — старый бюджет ИТЕРАЦИЙ (оставлен
+ * как верхняя граница на случай, если часы недоступны), maxUs — новый
+ * бюджет ВРЕМЕНИ, stuckAt — выход по «замер». */
+static VOID
+fx_poll32(UINTN reg, UINT32 mask, UINT32 want, UINTN maxIter, UINTN stuckAt,
+          UINT64 maxUs, FX_POLL *out)
 {
     UINTN i;
-    for (i = 0; i < 1000000; i++) {
-        if (!(mmio_read32(SEC2_DMATRFCMD) & 0x1))  /* FULL bit 0 */
-            return;
+    UINT32 v = 0, prev = 0xFFFFFFFFU;
+    UINTN same = 0;
+    UINT64 t0 = fx_now_us();
+    BOOLEAN haveT = (t0 != 0);
+
+    out->stuck = 0;
+    out->overtime = 0;
+    for (i = 0; i < maxIter; i++) {
+        v = mmio_read32(reg);
+        if ((v & mask) == want) break;
+        if (stuckAt != FX_NEVER_STUCK && v == prev) {
+            if (++same >= stuckAt) { out->stuck = 1; break; }
+        } else {
+            prev = v;
+            same = 0;
+        }
+        if (haveT && fx_now_us() - t0 >= maxUs) { out->overtime = 1; break; }
     }
+    out->value = v;
+    out->reads = i + 1;
+    out->us = haveT ? (fx_now_us() - t0) : 0;
+}
+
+/* Потолок для DMA-очередей.
+ *
+ * Старый код ждал 20 000 итераций (gsp_*) и 1 000 000 итераций (falcon_*).
+ * На этой карте очередь не разгружается НИКОГДА: cmd=0x00000615 на всех
+ * таймаутах, 1656 штук за прогон. Значит все эти итерации — ожидание
+ * заведомо неизменимого состояния.
+ *
+ * FX_DMAQ_STUCK = 16: при 773 нс на чтение это ~12 мкс тишины. Значение
+ * одно и то же значит и ждать нечего — очередь не медленная, а замершая.
+ * Живая очередь, которая разгружается на 3-м чтении, выходит раньше и
+ * поведение её не меняется; это проверяется машинно, см.
+ * src/tools/poll_model.c.
+ *
+ * FX_DMAQ_MAX_US = 4 мс — страховка на случай, если регистр МЕДЛЕННО
+ * меняется (тогда «замер» не наступает, но и ждать бесконечно нельзя).
+ */
+#define FX_DMAQ_STUCK      16
+#define FX_DMAQ_MAX_US     4000
+
+static VOID
+falcon_dma_wait_not_full(void)
+{
+    /* v3.16: было for (i=0;i<1000000;i++) — минуты на один зависший вызов.
+     * Бюджет итераций оставлен как верхняя граница, добавлены потолок по
+     * времени и выход по «регистр замер». */
+    FX_POLL p;
+    fx_poll32(SEC2_DMATRFCMD, 0x1u, 0x0u, 1000000, FX_DMAQ_STUCK,
+              FX_DMAQ_MAX_US, &p);
+    if ((p.value & 0x1u) == 0) return;
+    ulogf(L"DMAQ2  SEC2 queue FULL, gave up after %d reads / %lldus "
+          L"(stuck=%d overtime=%d) cmd=0x%08x\n",
+          (INTN)p.reads, (INT64)p.us, (INTN)p.stuck, (INTN)p.overtime,
+          (INTN)p.value);
 }
 
 static void
 falcon_dma_wait_idle(void)
 {
-    UINTN i;
-    for (i = 0; i < 1000000; i++) {
-        if (mmio_read32(SEC2_DMATRFCMD) & 0x2)  /* IDLE bit 1 */
-            return;
-    }
+    FX_POLL p;
+    fx_poll32(SEC2_DMATRFCMD, 0x2u, 0x2u, 1000000, FX_DMAQ_STUCK,
+              FX_DMAQ_MAX_US, &p);
+    if (p.value & 0x2u) return;
+    ulogf(L"DMAQ2  SEC2 queue not IDLE, gave up after %d reads / %lldus "
+          L"(stuck=%d overtime=%d) cmd=0x%08x\n",
+          (INTN)p.reads, (INT64)p.us, (INTN)p.stuck, (INTN)p.overtime,
+          (INTN)p.value);
 }
 
 /* ==== Post-reset scrub wait (driver-equivalent, MANDATORY) ====
@@ -2070,12 +2213,19 @@ static UINTN g_dmaIdleLast = 0;
 static void
 gsp_dma_wait_not_full(void)
 {
-    UINTN i;
-    for (i = 0; i < 20000; i++) {
-        if (!(mmio_read32(GSP_DMATRFCMD) & 0x1)) return;
-    }
+    /* v3.16: было for (i=0;i<20000;i++) без потолка по времени.
+     * По логу очередь на этой карте не разгружается НИКОГДА
+     * (cmd=0x00000615 на всех 1656 таймаутах), то есть все 20 000
+     * чтений были ожиданием неизменимого состояния. Теперь тот же бюджет
+     * итераций остаётся верхней границей, но добавлены потолок по
+     * времени и выход по «регистр замер». Фактическая цена каждого
+     * ожидания печатается в лог. */
+    FX_POLL p;
+    fx_poll32(GSP_DMATRFCMD, 0x1u, 0x0u, 20000, FX_DMAQ_STUCK,
+              FX_DMAQ_MAX_US, &p);
+    if ((p.value & 0x1u) == 0) return;
     g_dmaFullTo++;
-    g_dmaFullLast = mmio_read32(GSP_DMATRFCMD);
+    g_dmaFullLast = p.value;
 #ifdef RENDER_MASKS
     /* v3.13: ПРОБЕЛ БУДИЛЬНИКА. На 17 вызовах early_unlock_path набралось
      * 1704 строки DMAQ - 80 % кольцевого лога, из-за чего начало прогона
@@ -2087,27 +2237,31 @@ gsp_dma_wait_not_full(void)
     if (g_dmaFullTo > 2 && (g_dmaFullTo % 32) != 0) return;
 #endif
     Print(L"fwsec: ВНИМАНИЕ DMA queue FULL (cmd=0x%08x)\n", g_dmaFullLast);
-    ulogf(L"DMAQ   FULL timeout #%d cmd=0x%08x (bit0=FULL set, bit1=IDLE clear)\n",
-          (INTN)g_dmaFullTo, (INTN)g_dmaFullLast);
+    ulogf(L"DMAQ   FULL timeout #%d cmd=0x%08x (bit0=FULL set, bit1=IDLE "
+          L"clear) cost=%d reads/%lldus exit=%s\n",
+          (INTN)g_dmaFullTo, (INTN)g_dmaFullLast, (INTN)p.reads, (INT64)p.us,
+          p.stuck ? L"stuck" : (p.overtime ? L"overtime" : L"iterations"));
 }
 
 static void
 gsp_dma_wait_idle(void)
 {
-    UINTN i;
-    for (i = 0; i < 20000; i++) {
-        if (mmio_read32(GSP_DMATRFCMD) & 0x2) return;
-    }
+    FX_POLL p;
+    fx_poll32(GSP_DMATRFCMD, 0x2u, 0x2u, 20000, FX_DMAQ_STUCK,
+              FX_DMAQ_MAX_US, &p);
+    if (p.value & 0x2u) return;
     g_dmaIdleTo++;
-    g_dmaIdleLast = mmio_read32(GSP_DMATRFCMD);
+    g_dmaIdleLast = p.value;
 #ifdef RENDER_MASKS
     /* см. комментарий в gsp_dma_wait_not_full: тот же пробел будильника
      * и то же обязательное ограждение RENDER_MASKS */
     if (g_dmaIdleTo > 2 && (g_dmaIdleTo % 32) != 0) return;
 #endif
     Print(L"fwsec: ВНИМАНИЕ DMA не IDLE (cmd=0x%08x)\n", g_dmaIdleLast);
-    ulogf(L"DMAQ   IDLE timeout #%d cmd=0x%08x (bit1=IDLE set, bit0=FULL clear)\n",
-          (INTN)g_dmaIdleTo, (INTN)g_dmaIdleLast);
+    ulogf(L"DMAQ   IDLE timeout #%d cmd=0x%08x (bit1=IDLE set, bit0=FULL "
+          L"clear) cost=%d reads/%lldus exit=%s\n",
+          (INTN)g_dmaIdleTo, (INTN)g_dmaIdleLast, (INTN)p.reads, (INT64)p.us,
+          p.stuck ? L"stuck" : (p.overtime ? L"overtime" : L"iterations"));
 }
 
 static void
@@ -4285,24 +4439,6 @@ static BOOLEAN g_t0set = FALSE;
  * гарантирован (IA32_TSC). Калибровка против BS->Stall(1000) занимает
  * 1 мс — на фоне 120 с это несущественно.
  */
-static UINT64
-fx_rdtsc(void)
-{
-    UINT32 lo, hi;
-    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
-    return ((UINT64)hi << 32) | lo;
-}
-
-static UINT64 fx_tscPerUs = 0;   /* тиков TSC в микросекунде */
-static UINT64 fx_mark = 0;       /* TSC, от которого считает fx_now_us */
-
-static UINT64
-fx_now_us(void)
-{
-    if (fx_tscPerUs == 0) return 0;
-    return (fx_rdtsc() - fx_mark) / fx_tscPerUs;
-}
-
 /* Включить часы и начать отсчёт. Вызывается ПЕРВЫМ делом в efi_main. */
 static void
 log_clock_start(void)
@@ -9675,6 +9811,12 @@ done:
          * в прошивку, то есть ровно то, что доживает до Windows. Именно
          * его и надо сравнивать между прогонами с флешкой и без. */
         sec2_window_dump(L"END-final");
+    /* v3.16: сводка по ожиданиям DMA-очередей. Печатается всегда, даже
+     * если таймаутов не было — иначе отсутствие строки нельзя отличить
+     * от «сводка не дошла». Стоимость самих ожиданий видна в строках
+     * DMAQ/DMAQ2 (cost=N reads/...us). */
+    ulogf(L"TIME   DMA queue: full timeouts=%d idle timeouts=%d\n",
+          (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo);
         ulogf(L"END   ss0=0x%08x ss1=0x%08x PLM=0x%08x WPR2=0x%08x/0x%08x "
              "dbg=0x%08x cpuctl=0x%08x scratch0e=0x%08x\n",
              g_snapSs0, g_snapSs1, g_snapPlm, g_snapWLo, g_snapWHi,
