@@ -281,7 +281,7 @@ git-тег `rollback-2026-10-01`, то есть откат равен перес
 Проект опирается на годы публичных исследований. Особые благодарности:
 
 - **[WildFlash1st](https://github.com/WildFlash1st)** —
-  cmp90hx-unlock-for-windows, на его основе строился текущий анлог
+  cmp90hx-unlock-for-windows, на его основе строился текущий анлок
 - **[bendy2](https://github.com/bendy2/cmp90hx)** — V67-эксплойт и direct-compute патч для драйвера `580.159.03` — *ключ, открывший PLM*
 - **Jon Pry (Zenodo)** — *"A Canary in the Crypto Mine: Defeating Stack Protection in a GPU Secure Coprocessor"* ([DOI: 10.5281/zenodo.20916112](https://zenodo.org/records/20916112)) — раскрытие переполнения в debug-ботере
 - **[cmpunlocker](https://github.com/jdowning100/cmpunlocker)** — метод rejoin16 (PLM/маски рендера) и исследования Gen2, портированные в этом проекте

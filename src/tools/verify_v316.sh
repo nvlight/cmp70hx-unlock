@@ -159,6 +159,16 @@ else
     # проверка, которая не может сломаться вместе с объектом проверки:
     # забытый fx_mk_acc виден по неправдоподобно большой дельте между
     # соседними 'TIME t='.
+    #
+    # v3.21, этап 7 (PLAN-SPEED.md §8): добавлены обязательные точки замера
+    # вокруг falcon_wait_reset_ready - по одной на КАЖДЫЙ из 10 вызовов, с
+    # разными именами. Имена разные не для красоты: fx_mk_acc копит по
+    # указателю на строку, и одинаковые метки слились бы в одну строку,
+    # а тогда неизвестно, кто именно стоит секунду. Пять проверяемых точек
+    # покрывают путь раннего анлока плюс всю преамбулу пролога и рендера.
+    #
+    # Добавлена сводная строка 'RESETREADY calls= early= total= avg=' - она
+    # и есть ответ на вопрос §7.2 плана, то есть читается ПЕРВОЙ при разборе.
     for m in \
         'BL settle' \
         'DMAQ2' \
@@ -178,6 +188,19 @@ else
         'console ring dump to log' \
         'accumulated marks' \
         'SUM of marks' \
+        'RESETREADY calls=' \
+        'rr: [E1] BL reset-ready' \
+        'rr: [E3] ResetIntoRiscv ready' \
+        'rr: booter SEC2 reset' \
+        'rr: fwsec kflcnReset GSP' \
+        'rr: [1/3] booter load ready' \
+        'pro: early-path to render entry' \
+        'render: preamble BEFORE reads' \
+        'pro: radtab CopyMem 81MB' \
+        'pro: radtab SetMem' \
+        'pro: radtab buf_check' \
+        'pro: alloc+selftest v67' \
+        'pro: alloc+copy+selftest fwsec' \
         'sweep_all(POST) SKIPPED' \
         'render masks: booter#1 done' \
         'render masks: sweep finished' \
@@ -247,7 +270,14 @@ cat <<EOF
       END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF
       TIME  I/O: Print n=... measured=...us/call  <- цена вывода
       TIME  === accumulated marks ===
+      TIME  RESETREADY calls=N early=M total=T us   <- ПЕРВОЕ, что читать
       TIME  MK  ...                                <- накопить по участкам
+
+  Строка RESETREADY отвечает на вопрос плана §7.2: если early=0 и
+  total ~= calls*1000000, то falcon_wait_reset_ready выжигает весь свой
+  секундный бюджет и следующий этап сокращает его. Если early>0 -
+  гипотеза опровергнута и сокращать нечего.
+
 
   Забытый вызов fx_mk_acc виден НЕ как сломанная таблица, а как
   неправдоподобно большая дельта между двумя соседними строками 'TIME t='.

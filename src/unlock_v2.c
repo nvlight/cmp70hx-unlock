@@ -2467,6 +2467,45 @@ fx_diag_gate(void)
  * прогон из 55 900. Замерено, не прикинуто: цена вызова ulogf после
  * пакетной записи измерена как 26 мкс в прогонах v3.17 и v3.19.
  * ==================================================================== */
+/* --- счётчики falcon_wait_reset_ready -----------------------------------
+ *
+ * v3.21, этап 7 плана (PLAN-SPEED.md §8). Функция устроена так:
+ *
+ *     for (i = 0; i < 10000; i++) {
+ *         if (mmio_read32(hwcfg2Reg) & (1u << 31)) return;
+ *         Stall(100);
+ *     }
+ *
+ * То есть бюджет РОВНО 1,000 с, и вернуться раньше можно только если
+ * выставится HWCFG2[31]. В прогоне v321 в логе 29 строк SCRUB, и во всех
+ * hwcfg2=0x000067F7 - бит 31 не выставлен ни разу.
+ *
+ * При этом содержимое блоков по ~1,2 с измерено как ~90 мс: scrub 103 мкс,
+ * Stall(50000) 50 мс, falcon settle 22,8 мс, Print 17 мс. Остальные ~1,1 с
+ * на блок ничем не объяснены, и этот бюджет - единственная гипотеза,
+ * которая объясняет.
+ *
+ * ЧТО ЗДЕСЬ ВАЖНО: это счётчики ПРОВЕРКИ ГИПОТЕЗЫ, а не оптимизация.
+ * Поведение функции не меняется ни на одну строку - добавлены только
+ * замеры. Итоговая строка печатается в fx_mk_report и читается напрямую:
+ *     calls=N early=M total=T us
+ * Если early=0 и total ≈ 1000000*N, гипотеза подтверждена и следующим
+ * этапом сокращается бюджет. Если early>0 - гипотеза опровергнута, и
+ * сокращать нечего. */
+static UINTN  fx_rrCalls = 0;      /* вызовов за прогон */
+static UINTN  fx_rrEarly = 0;      /* вышли пораньше, по HWCFG2[31] */
+static UINT64 fx_rrUs    = 0;      /* суммарно мкс */
+
+/* v3.21 (этап 7): разрыв между 'early path finished' и входом в рендер.
+ *
+ * Из прогона v321: 3530 мс между двумя метками, из них 499 мс - сама фаза
+ * FLR, то есть 3031 мс в коде, печатающем несколько строк и ни одной
+ * метки. Разрыв перекрывает область, слишком широкую для локальной
+ * переменной (она от efi_main до render_open_gfx_masks), поэтому метка
+ * ставится в двух местах. efi_main выполняется один раз, так что статик
+ * здесь безопасен. */
+static UINT64 fx_gapT0 = 0;
+
 #define FX_MK_MAX 48
 static const CHAR16 *fx_mkName[FX_MK_MAX];
 static UINT64 fx_mkUs[FX_MK_MAX];      /* накоплено, мкс */
@@ -2521,6 +2560,25 @@ fx_mk_report(void)
     }
     ulogf(L"TIME   MK  %-32s %9lld us\n", L"SUM of marks (not a total)",
           (INT64)tot);
+    /* v3.21, этап 7: ИТОГ ПО falcon_wait_reset_ready.
+     *
+     * Это ответ на один вопрос, поставленный прогоном v321 (PLAN-SPEED.md
+     * §7.2), поэтому строка печатается ВСЕГДА, даже если вызовов не было:
+     * нулевое значение должно читаться как «проверено, вызовов нет», а не
+     * как «забыли напечатать».
+     *
+     * ЧТО ОЗНАЧАЮТ ЧИСЛА:
+     *   early > 0  - функция возвращается по HWCFG2[31], бюджет не
+     *                выжигается, и сокращать нечего. Гипотеза опровергнута.
+     *   early = 0 и total ≈ calls*1000000
+     *              - бюджет выжигается целиком, это и есть та секунда,
+     *                которую искали. Следующий этап сокращает бюджет.
+     *
+     * Печатается ДО строки NOTE, чтобы её не потерять при беглом чтении. */
+    ulogf(L"TIME   RESETREADY calls=%d early=%d total=%lldus "
+          L"avg=%lldus  (1000 calls of budget = 1000000 us each)\n",
+          (INTN)fx_rrCalls, (INTN)fx_rrEarly, (INT64)fx_rrUs,
+          (INT64)(fx_rrCalls ? fx_rrUs / fx_rrCalls : 0));
     ulogf(L"TIME   NOTE: SUM is NOT a phase total and may EXCEED elapsed, "
           L"because marks are nested. For ONE duration use the difference "
           L"of two adjacent 'TIME t=' lines.\n");
@@ -2770,7 +2828,7 @@ falcon_wait_scrub_done(UINT32 dmactlReg, UINT32 hwcfg2Reg, const CHAR16 *tag)
     }
     Print(L"%s: scrub-wait ТАЙМАУТ dmactl=0x%08x hwcfg2=0x%08x\n", tag, dct, hcfg);
 done:
-    ulogf(L"SCRUB  %s: %lldus (%d итераций) dmactl=0x%08x hwcfg2=0x%08x %s\n",
+    ulogf(L"SCRUB  %s: %lldus (%d polls) dmactl=0x%08x hwcfg2=0x%08x %s\n",
           tag, (INT64)(fx_now_us() - t0), (INTN)i, (INTN)dct, (INTN)hcfg,
           ((dct & 0x6) == 0 && !(hcfg & (1 << 12))) ? L"done" : L"NOT done");
     return ((dct & 0x6) == 0 && !(hcfg & (1 << 12)));
@@ -2778,14 +2836,27 @@ done:
 
 /* ждать RESET_READY (HWCFG2[31]) ДО сброса — как kflcnPreResetWait_GA102 */
 static void
-falcon_wait_reset_ready(UINT32 hwcfg2Reg)
+falcon_wait_reset_ready(const CHAR16 *tag, UINT32 hwcfg2Reg)
 {
+    UINT64 t0 = fx_now_us();
     UINTN i;
+    fx_rrCalls++;
     for (i = 0; i < 10000; i++) {
-        if (mmio_read32(hwcfg2Reg) & (1u << 31))
+        if (mmio_read32(hwcfg2Reg) & (1u << 31)) {
+            /* v3.21: выход пораньше СОБЫТИЕ. Значит секунда не выжигается
+             * и бюджет не является проблемой. Считаем и печатаем. */
+            fx_rrEarly++;
+            fx_rrUs += fx_now_us() - t0;
+            fx_mk_acc(t0, tag);
             return;
+        }
         uefi_call_wrapper(BS->Stall, 1, 100);
     }
+    /* v3.21: ЦИКЛ ИСЧЕРПАН, БЮДЖЕТ ИЗРАСХОДОВАН ЦЕЛИКОМ. Ровно этот путь
+     * и есть предмет гипотезы §7.2 плана. Ничего не меняем - только
+     * считаем, чтобы прогон дал число вместо догадки. */
+    fx_rrUs += fx_now_us() - t0;
+    fx_mk_acc(t0, tag);
 }
 
 static void
@@ -3016,7 +3087,7 @@ fwsec_preloaded_gsp(void)
 
     /* 1. kflcnReset(GSP) — код из VBIOS переживает ресет */
     Print(L"pre: kflcnReset(GSP)...\n");
-    falcon_wait_reset_ready(GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: pre kflcnReset GSP", GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -3241,7 +3312,7 @@ fbp_gsp_prepare(void)
 {
     UINTN i;
 
-    falcon_wait_reset_ready(GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: gsp misc reset", GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -4289,12 +4360,26 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     INTN pass, k, tries, done;
     UINT32 v, saveBar, wLo, wHi;
 
+    /* v3.21 (этап 7): преамбула рендера была немаркированной дырой в 3031 мс.
+     *
+     * Что известно из прогона v321: между меткой 'early path finished' и
+     * первой меткой 'render: FLR' проходит 3530 мс, из которых сама фаза
+     * FLR стоит 499 мс. То есть 3031 мс уходит в код, который печатает
+     * всего несколько строк и ни одной метки времени.
+     *
+     * Метка ниже закрывает ровно эту преамбулу: заголовок плюс восемь
+     * чтений BEFORE. Если она окажется пустой, значит время в вызывающем
+     * коде до входа в функцию, и следующий замер ставится там. */
+    {
+        UINT64 tq = fx_now_us();
     ulogf(L"G2RMK  %s === opening XVE window (GFX_SPEED_SELECT door): "
-          L"one extra booter#2 first, full FLR path only if that misses ===\n",
+          L"full FLR path per mask (fast path was removed in v3.19) ===\n",
           tag);
     for (k = 0; k < NTGT; k++)
         ulogf(L"G2RMK  %s BEFORE  0x%08x = 0x%08x\n", tag, tgt[k],
               mmio_read32(tgt[k]));
+        fx_mk_acc(tq, L"render: preamble BEFORE reads");
+    }
 
     /* v3.17: ОДИН проход по 8 целям. Прежде здесь стоял один проход по 25,
      * из которых 17 — это 0x8E1B0..0x8E1F0, открывавшие запись в 0x8e1xx
@@ -4579,7 +4664,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
 
     /* 1. kflcnReset(GSP): ENGINE reset → BCR=FALCON → RM=PMC_BOOT_0 */
     Print(L"fwsec: kflcnReset(GSP)...\n");
-    falcon_wait_reset_ready(GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: fwsec kflcnReset GSP", GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -5559,7 +5644,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     Print(L"booter: SEC2 HWCFG2=0x%08x (RESET_READY=bit31)\n", data);
 
     Print(L"booter: SEC2 reset (ENGINE 0x8403C0)...\n");
-    falcon_wait_reset_ready(SEC2_HWCFG2);
+    falcon_wait_reset_ready(L"rr: booter SEC2 reset", SEC2_HWCFG2);
     mmio_write32(SEC2_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(SEC2_ENGINE);
     mmio_write32(SEC2_ENGINE, 0x0);
@@ -5981,7 +6066,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     Print(L"[E1] GSP BL ucodeId=1 (IMEM 0x4000/DMEM 0x2400)...\n");
     fx_ph = fx_now_us();
     mmio_write32(0x110080, 0x0);          /* из трейса (IRQMSET=0) */
-    falcon_wait_reset_ready(GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: [E1] BL reset-ready", GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -6042,7 +6127,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
      * Раньше пропускали Wait → GSP оставался ЗАЛОЧЕННЫМ (BADF5620 на пробе
      * E4), а на живой карте SNAP-B даёт gsp cpuctl=0x10 на входе ботера! */
     Print(L"[E3] ResetIntoRiscv(GSP) + libos args...\n");
-    falcon_wait_reset_ready(GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: [E3] ResetIntoRiscv ready", GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -6200,7 +6285,7 @@ driver_replay_v246(UINT64 booterPhys, UINT64 fwsecPhys, UINT64 ucodePhys,
     /* ---------- Стадия 1: GSP booter load (ucodeId=1) ---------- */
     Print(L"[1/3] GSP booter load ucodeId=1 (из трейса 538.881)\n");
     mmio_write32(0x110080, 0x0);          /* из трейса (IRQMSET=0) */
-    falcon_wait_reset_ready(GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: [1/3] booter load ready", GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -6660,7 +6745,7 @@ driver_replay_v251(UINT64 fwsecPhys, UINT64 ucodePhys, UINT64 wprMetaPhys)
     }
 
     /* GSP ENGINE reset (убить GFW, предзагруженный FWSEC переживает reset) */
-    falcon_wait_reset_ready(GSP_HWCFG2);
+    falcon_wait_reset_ready(L"rr: gsp engine reset GFW kill", GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(GSP_ENGINE);
     mmio_write32(GSP_ENGINE, 0x0);
@@ -6747,7 +6832,7 @@ driver_replay_v251(UINT64 fwsecPhys, UINT64 ucodePhys, UINT64 wprMetaPhys)
     mmio_write32(REG_PFB_MMU_WPR2_HI, TARGET_WPR2_HI);
     uefi_call_wrapper(BS->Stall, 1, 10000);
 
-    falcon_wait_reset_ready(SEC2_HWCFG2);
+    falcon_wait_reset_ready(L"rr: post-WPR2 sec2 ready", SEC2_HWCFG2);
     mmio_write32(SEC2_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(SEC2_ENGINE);
     mmio_write32(SEC2_ENGINE, 0x0);
@@ -6965,7 +7050,7 @@ sec2_ucode_mapper_cmd(UINT64 wprMetaPhys)
     Print(L"\n=== v2.57: SEC2 ucode mapper init_cmd (FRTS/SB) ===\n");
 
     /* ---------- подготовка SEC2 (reset + unlock, как стадия 4) ---------- */
-    falcon_wait_reset_ready(SEC2_HWCFG2);
+    falcon_wait_reset_ready(L"rr: sec2 ucode mapper ready", SEC2_HWCFG2);
     mmio_write32(SEC2_ENGINE, 0x1);
     for (i = 0; i < 16; i++) mmio_read32(SEC2_ENGINE);
     mmio_write32(SEC2_ENGINE, 0x0);
@@ -9590,7 +9675,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     Status = alloc_fwsec_buffer((V67_SIZE + 0xFFF) >> 12, &v67Phys);
     if (EFI_ERROR(Status)) { Print(L"alloc v67: %r\n", Status); goto done; }
     Print(L"alloc v67  @0x%lx\n", v67Phys);
-    log_mem_selftest(L"v67", v67_payload_bin, v67Phys, V67_SIZE);
+    { UINT64 tq = fx_now_us(); log_mem_selftest(L"v67", v67_payload_bin, v67Phys, V67_SIZE); fx_mk_acc(tq, L"pro: alloc+selftest v67"); }
 #ifdef PCIE_GEN2_REJOIN
     /* v2.99c: ЗДЕСЬ НЕ ПАТЧИМ! Тёплый ресет закрывает PLM (доказано
      * итерацией 3: XVE-запись при закрытом PLM = mbox 0x15, регистр
@@ -9606,13 +9691,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     Status = alloc_fwsec_buffer((BOOTER_UCODE_SIZE + 0xFFF) >> 12, &ucodePhys);
     if (EFI_ERROR(Status)) { Print(L"alloc ucode: %r\n", Status); goto done; }
     Print(L"alloc ucode @0x%lx\n", ucodePhys);
-    log_mem_selftest(L"ucode", booter_ucode_prod, ucodePhys, BOOTER_UCODE_SIZE);
+    { UINT64 tq = fx_now_us(); log_mem_selftest(L"ucode", booter_ucode_prod, ucodePhys, BOOTER_UCODE_SIZE); fx_mk_acc(tq, L"pro: alloc+selftest ucode"); }
 
     /* --- BL (GspRmBoot): сигнатура V67 верифицируется при загрузке BL --- */
     Status = alloc_fwsec_buffer((GSP_RM_BOOT_SIZE + 0xFFF) >> 12, &blPhys);
     if (EFI_ERROR(Status)) { Print(L"alloc bl: %r\n", Status); goto done; }
     Print(L"alloc bl    @0x%lx\n", blPhys);
-    log_mem_selftest(L"gsp_rm_boot", gsp_rm_boot_dbg, blPhys, GSP_RM_BOOT_SIZE);
+    { UINT64 tq = fx_now_us(); log_mem_selftest(L"gsp_rm_boot", gsp_rm_boot_dbg, blPhys, GSP_RM_BOOT_SIZE); fx_mk_acc(tq, L"pro: alloc+selftest gsp_rm_boot"); }
 
     /* --- v2.28: FWSEC ucode (из VBIOS) — для FRTS/WPR2 на GSP ---
      *
@@ -9633,7 +9718,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     Print(L"alloc fwsec @0x%lx (0x%lx bytes) %s\n", fwsecPhys, FWSEC_SIZE,
           fwsecPhys < 0x100000000ULL ? L"ниже 4ГБ, VA==PA" : L"ВЫШЕ 4ГБ (VA!=PA!)");
     CopyMem((VOID*)(UINTN)fwsecPhys, fwsec_ga104_bin, FWSEC_SIZE);
-    log_mem_selftest(L"fwsec", fwsec_ga104_bin, fwsecPhys, FWSEC_SIZE);
+    { UINT64 tq = fx_now_us(); log_mem_selftest(L"fwsec", fwsec_ga104_bin, fwsecPhys, FWSEC_SIZE); fx_mk_acc(tq, L"pro: alloc+copy+selftest fwsec"); }
     g_fwsecPhys = fwsecPhys;
 
     /* --- ЭКСПЕРИМЕНТ v2.4: БЕЗ чтения gsp_ga10x.bin ---
@@ -9743,11 +9828,18 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         if (!EFI_ERROR(Status)) {
             UINT8 *rb = (UINT8 *)(UINTN)radTabPhys;
             UINT64 i;
-            SetMem(rb, ptSize, 0);
-            CopyMem(rb + dataOff, (VOID *)(UINTN)radixPhys, fwimageSizeUsed);
+            /* v3.21 (этап 7): три независимых замера вместо одного участка на 3,2 с.
+             * Подозрение - CopyMem на 81 МБ из апертуры radixPhys: если
+             * источник в MMIO, копирование идёт по PCIe побайтно. Проверяется
+             * замером, а не догадкой: если CopyMem окажется 3 с, вердикт
+             * изменится, и если окажется 10 мс - значит время в другом. */
+            { UINT64 tq = fx_now_us(); SetMem(rb, ptSize, 0); fx_mk_acc(tq, L"pro: radtab SetMem"); }
+            { UINT64 tq = fx_now_us(); CopyMem(rb + dataOff, (VOID *)(UINTN)radixPhys, fwimageSizeUsed); fx_mk_acc(tq, L"pro: radtab CopyMem 81MB"); }
             /* та же проверка VA/PA: таблица страниц адресуется DMA-устройством */
-            log_buf_check(L"radtab", (const UINT8 *)(UINTN)radixPhys,
+            { UINT64 tq = fx_now_us();
+              log_buf_check(L"radtab", (const UINT8 *)(UINTN)radixPhys,
                           radTabPhys + dataOff, fwimageSizeUsed);
+              fx_mk_acc(tq, L"pro: radtab buf_check"); }
             for (i = 0; i < nData; i++)
                 *(UINT64 *)(rb + 0x2000 + i * 8) =
                     radTabPhys + dataOff + (i << 12);
@@ -10055,6 +10147,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         }
     }
     log_ms(L"early path finished");
+    fx_gapT0 = fx_now_us();      /* v3.21: старт замера разрыва, см. fx_gapT0 */
 
     if (!earlyOk) {
     /* --- v2.28/32: FWSEC на GSP (FRTS/WPR2) + kflcnResetIntoRiscv + LibosBootArgs
@@ -10649,6 +10742,11 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * селекторы продолжат выполняться, и не трогаем обычный хвост с
      * фиксом Code 43. Гоняем только если анлок сам прошёл. */
     if (Status == EFI_SUCCESS || directOk || earlyOk) {
+        /* v3.21: замыкание замера разрыва. 3031 мс из прогона v321 приходятся
+         * на участок между этой точкой и 'early path finished'; если метка
+         * покажет ~3031 мс, виновник найден, если сильно меньше - время
+         * в render_open_gfx_masks, и там уже стоит 'render: preamble'. */
+        fx_mk_acc(fx_gapT0, L"pro: early-path to render entry");
         render_open_gfx_masks(L"render-masks",
                               wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
     } else {
