@@ -2081,6 +2081,115 @@ fx_diag_gate(void)
     }
     return FALSE;
 }
+/* ==================================================================== *
+ * ФАЗОВЫЙ УЧЁТ: куда уходит время
+ * ==================================================================== *
+ *
+ * ЗАЧЕМ. Прогон 2026-10-02 (бинарь 66223B60) дал 218,1 с, из них
+ * 179,0 с — рендер-цикл. Замеренное внутри (BL settle 4,8 с, FWL
+ * 2,5 с, SCRUB 8 мс) даёт ~200 мс на итерацию из фактических
+ * ~7500 мс. Остальные ~7,3 с на итерацию не принадлежат НИ ОДНОЙ
+ * залогированной строке.
+ *
+ * Причина, по которой их не видно: в том бинаре не было этого блока.
+ * Он был потерян вместе с исходником и здесь восстанавливается.
+ *
+ * ЧТО ДЕЛАЕТСЯ. Накопление ЗАТРАЧЕННОГО времени по именованным фазам и
+ * таблица в финальной сводке. Ничего не меняется в поведении: это
+ * чтение часов и сложение. Блок можно удалить целиком, и ничего не
+ * изменится.
+ *
+ * ОШИБКА ПЕРВОЙ ВЕРСИИ (2026-10-02, поймана этим же прогоном).
+ * Вложенность вычислялась из счётчика глубины fx_phLevel, который
+ * НИГДЕ не инкрементировался. Все фазы выходили «верхнего уровня», и
+ * итог считался с двойным счётом: SUM 95 518 411 мкс при прогоне
+ * 113 343 мс. Итог в 95,5 с не означал ничего.
+ *
+ * ПОЧЕМУ СЕЙЧАС ЯВНАЯ МЕТКА, А НЕ ГЛУБИНА. Вложенность проставляется
+ * вызовом (fx_ph_end против fx_ph_end_in). Ошибиться можно только в
+ * одной конкретной фазе, и это видно в таблице, а не портит весь итог
+ * молча. Счётчик глубины дал бы ошибку сразу во всём.
+ *
+ * Статические Stall внутри фаз (например Stall(50000) после
+ * gsp-reset) УЖЕ входят в свою фазу: замер берётся вокруг всего
+ * вызова, а не вокруг отдельной инструкции.
+ * ------------------------------------------------------------------ */
+#define FX_PH_MAX 12
+static const CHAR16 *fx_phName[FX_PH_MAX];
+static UINT64 fx_phUs[FX_PH_MAX];      /* накоплено, мкс           */
+static UINTN  fx_phCalls[FX_PH_MAX];   /* сколько раз              */
+static BOOLEAN fx_phIn[FX_PH_MAX];     /* TRUE = внутри другой фаз��*/
+static UINTN  fx_phNext = 0;
+
+static UINT64
+fx_ph_begin(void)
+{
+    return fx_now_us();
+}
+
+static VOID
+fx_ph_end_n(UINT64 t0, const CHAR16 *name, BOOLEAN inside)
+{
+    UINT64 now = fx_now_us();
+    UINTN i;
+    if (!t0) return;                     /* часы не откалиброваны */
+    for (i = 0; i < fx_phNext; i++)
+        if (fx_phName[i] == name) break;
+    if (i == fx_phNext) {
+        if (fx_phNext >= FX_PH_MAX) return;   /* лимит: тихо, но не ломаем */
+        fx_phName[fx_phNext] = name;
+        fx_phUs[fx_phNext] = 0;
+        fx_phCalls[fx_phNext] = 0;
+        fx_phIn[fx_phNext] = inside;
+        fx_phNext++;
+    }
+    if (now > t0) fx_phUs[i] += now - t0;
+    fx_phCalls[i]++;
+}
+
+/* фаза верхнего уровня — попадает в верхний итог */
+static VOID
+fx_ph_end(UINT64 t0, const CHAR16 *name)
+{
+    fx_ph_end_n(t0, name, FALSE);
+}
+
+/* фаза ВНУТРИ другой, уже посчитанной, — в верхний итог НЕ входит */
+static VOID
+fx_ph_end_in(UINT64 t0, const CHAR16 *name)
+{
+    fx_ph_end_n(t0, name, TRUE);
+}
+
+static VOID
+fx_ph_report(void)
+{
+    UINT64 tot = 0, topSum = 0, childSum = 0;
+    UINTN i;
+    ulogf(L"TIME   === phase accounting (only top level is summed) ===\n");
+    for (i = 0; i < fx_phNext; i++)
+        if (fx_phCalls[i] && !fx_phIn[i]) tot += fx_phUs[i];
+    for (i = 0; i < fx_phNext; i++) {
+        if (!fx_phCalls[i]) continue;
+        if (!fx_phIn[i]) {
+            topSum += fx_phUs[i];
+            ulogf(L"TIME   %-24s %9lld us  x%-4d %3lld%%\n",
+                  fx_phName[i], (INT64)fx_phUs[i], (INTN)fx_phCalls[i],
+                  (INT64)((tot ? fx_phUs[i] * 100 / tot : 0)));
+        } else {
+            childSum += fx_phUs[i];
+            ulogf(L"TIME     (inside) %-17s %7lld us  x%-4d\n",
+                  fx_phName[i], (INT64)fx_phUs[i], (INTN)fx_phCalls[i]);
+        }
+    }
+    ulogf(L"TIME   %-24s %9lld us   (top level; nested phases above are "
+          L"NOT added again)\n", L"SUM top-level", (INT64)topSum);
+    ulogf(L"TIME   %-24s %9lld us   (inside those phases, for reference)\n",
+          L"SUM nested", (INT64)childSum);
+    ulogf(L"TIME   %-24s %9lld us\n", L"TOTAL measured",
+          (INT64)(topSum + childSum));
+}
+
 
 /* Потолок фазы «реагирует ли CPU». СМ. ВНИЗЕ — почему именно 100 мс.
  *
@@ -3712,6 +3821,7 @@ static void
 render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                       UINT64 fwsecPhys, UINT64 v67Phys)
 {
+    UINT64 fx_ph;   /* разложение рендер-цикла: именно здесь живут 179 с */
     /* ОКНО XVE — «дверь» GFX_SPEED_SELECT. Это написано в нашем же коде
      * (unlock_v2.c:1760): «окно XVE (0x88xxx, «дверь» GFX_SPEED_SELECT)».
      * Независимо то же называют референс (docs/REGISTERS.md: 0x88FE8 =
@@ -3794,6 +3904,7 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
      * зависание гостя на ~30. Восемь уже открытых масок отработают за
      * polls=0 и цикла не стоят, так что реально циклов будет ~17. */
     for (pass = 0; pass < 1; pass++) {
+            fx_ph = fx_ph_begin();
         done = 0;
         for (k = 0; k < NTGT; k++) {
             if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) { done++; continue; }
@@ -3805,6 +3916,8 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
             cfg_write32(0x10, saveBar);
             enable_mem_decode();
             gBar0Base = saveBar;
+            fx_ph_end(fx_ph, L"render: FLR + 300ms settle");
+            fx_ph = fx_ph_begin();
 
             /* --- ботер#1: КАЖДЫЙ РАЗ, без гарда ---------------------------
              * Гард стоял здесь и в историческом свипе (стр. 8542). Замер
@@ -3825,6 +3938,9 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
              * полное время, потому что финальной метки не было. Чисто
              * измерение, на поведение не влияет. */
             log_ms(L"render masks: booter#1 done (early path)");
+            log_ms(L"render masks: booter#1 done (early path)");
+            fx_ph_end(fx_ph, L"render: early_unlock_path");
+            fx_ph = fx_ph_begin();
             ulogf(L"G2RMK  %s pass%d booter#1: PLM=0x%08x\n", tag, (INTN)pass + 1,
                   mmio_read32(0x00823804U));
 
@@ -3839,6 +3955,8 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                   mmio_read32(tgt[k]));
             (VOID)booter_load_v67(wprMetaPhys, ucodePhys);
             log_ms(L"render masks: booter#2 done (ROP write)");
+            fx_ph_end(fx_ph, L"render: booter_load_v67 #2");
+            fx_ph = fx_ph_begin();
             /* 42.10: ботер портит WPR2. Восстанавливаем и ПИШЕМ РЕЗУЛЬТАТ,
              * потому что восстановление может не удержаться. */
             mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
@@ -3853,6 +3971,7 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                 uefi_call_wrapper(BS->Stall, 1, 1000);
                 v = mmio_read32(tgt[k]);
             }
+            fx_ph_end(fx_ph, L"render: ROP write + poll");
             ulogf(L"G2RMK  %s pass%d 0x%08x became 0x%08x %s (polls=%d)\n",
                   tag, (INTN)pass + 1, tgt[k], v,
                   (v == 0xFFFFFFFFU) ? L"OPEN" : L"remained locked",
@@ -3895,10 +4014,12 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
 static BOOLEAN
 fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
 {
+    UINT64 fx_ph;   /* метка времени для учёта по фазам */
     UINTN i;
     UINT32 data;
     UINTN fwsecImemSec = g_fwsecImemSec;
     UINT8 *dmem = (UINT8*)(UINTN)(fwsecPhys + FWSEC_DATA_OFF);
+    fx_ph = fx_ph_begin();
 
     Print(L"\n--- v2.28: FWSEC HS-boot на GSP (0x110000) ---\n");
 
@@ -4291,6 +4412,10 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
             /* v2.43: ПЕРЕБОР команд FWSEC (0x10..0x1F) — ищем команду записи
              * регистров (PLM!). Для каждой: патч init_cmd + re-DMA + STARTCPU
              * + 200мс poll → сравниваем PLM/privmask/WPR2 до/после. */
+            /* v3.16: конец фазы reset+STARTCPU, дальше идут диагностические
+             * эксперименты (помечены как вложенные — в верхний итог не входят). */
+            fx_ph_end_in(fx_ph, L"fwsec: reset+STARTCPU");
+            fx_ph = fx_ph_begin();
 /* ==== v2.43 + v2.45: ДИАГНОСТИЧЕСКИЕ ЭКСПЕРИМЕНТЫ =================
              *
              * Что здесь стоит. Оба блока — чистая диагностика, и оба
@@ -4327,6 +4452,7 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
              * Вернуть прежнее поведение (полный эксперимент на каждом
              * вызове): FX_DIAG_EVERY = 1.
              */
+            fx_ph = fx_ph_begin();   /* v2.43 + v2.45, обе под воротами */
             if (fx_diag_gate())
             {
             {   /* блок v2.43 в собственной области */
@@ -4485,6 +4611,7 @@ for (p = 0; p < 2000; p++) {
                   mmio_read32(REG_PFB_MMU_WPR2_LO),
                   mmio_read32(REG_PFB_MMU_WPR2_HI),
                   TARGET_WPR2_LO);
+            fx_ph_end_in(fx_ph, L"fwsec: v2.43+v2.45 diagnostics");
             }   /* конец if (fx_diag_gate()) — блоки v2.43 + v2.45 */
             }
             /* v3n: здесь функция возвращает TRUE («успех»), НЕ проверяя, что
@@ -4826,10 +4953,12 @@ static void sec2_health(const CHAR16 *tag)
 static EFI_STATUS
 booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
 {
+    UINT64 fx_ph;
     UINT32 data;
     UINTN i;
 
     sec2_health(L"7-booter-entry");
+    fx_ph = fx_ph_begin();
 
     /* v2.63: WPR meta копируется НИЖЕ 4ГБ — ботер читает mailbox0 как
      * 32-битный адрес; meta на >4ГБ даёт ему мусор (exit 0x91). Контент
@@ -4890,6 +5019,8 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     }
     Print(L"booter: reset ok (dmactl=0x%x)\n", mmio_read32(SEC2_DMACTL));
     sec2_health(L"8-booter-post-reset");
+    fx_ph_end(fx_ph, L"booter_load_v67: load+reset");
+    fx_ph = fx_ph_begin();
 
     /* v2.16: WPR2 = frtsOffset (эффект FWSEC/FRTS). В рабочем флоу перед
      * booter load драйвер имеет WPR2 = [frtsOffset, frtsOffset+0xE00] —
@@ -5196,6 +5327,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
         }
     }
     return EFI_TIMEOUT;
+    fx_ph_end(fx_ph, L"booter_load_v67: run+trace");
 }
 
 /* ==== EARLY PATH — run the booter FIRST, on a fresh SEC2 (MAIN PATH) ====
@@ -5213,6 +5345,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
 static EFI_STATUS
 early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
 {
+    UINT64 fx_ph;   /* метка времени для учёта по фазам */
     UINTN i;
 
     Print(L"\n=== v2.70: ранний путь — ботер ПЕРВЫЙ на свежем SEC2 ===\n");
@@ -5220,6 +5353,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     /* --- [E1] BL (ucodeId=1) на GSP — открывает secure-путь (урок v2.62b).
      *        Дословная копия стадии [1/3] v2.46 (эмпирически рабочая). --- */
     Print(L"[E1] GSP BL ucodeId=1 (IMEM 0x4000/DMEM 0x2400)...\n");
+    fx_ph = fx_ph_begin();
     mmio_write32(0x110080, 0x0);          /* из трейса (IRQMSET=0) */
     falcon_wait_reset_ready(GSP_HWCFG2);
     mmio_write32(GSP_ENGINE, 0x1);
@@ -5258,6 +5392,8 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
           mmio_read32(GSP_CPUCTL), mmio_read32(GSP_BASE + 0x94),
           mmio_read32(GSP_MAILBOX0), mmio_read32(GSP_BCR));
     wpr2_probe(L"E1-after-BL");
+    fx_ph_end(fx_ph, L"[E1] BL load+settle");
+    fx_ph = fx_ph_begin();
 
     /* --- [E2] FWSEC на GSP → WPR2 (fwsec_boot_gsp сам ресетит GSP) --- */
     Print(L"[E2] FWSEC на GSP (WPR2)...\n");
@@ -5270,6 +5406,8 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     }
     wpr2_probe(L"E2-post-fwsec");
     sec2_window_dump(L"E2-post-fwsec");
+    fx_ph_end(fx_ph, L"[E2] fwsec_boot_gsp_sig");
+    fx_ph = fx_ph_begin();
 
     /* --- [E3] ResetIntoRiscv + LibosBootArgs.
      * v2.80: ТОЧНАЯ реплика kflcnResetIntoRiscv_GA102: PreResetWait →
@@ -5297,6 +5435,7 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
     mmio_write32(GSP_MAILBOX0, (UINT32)cmp90_meta_low(wprMetaPhys));
     mmio_write32(GSP_MAILBOX1, (UINT32)(cmp90_meta_low(wprMetaPhys) >> 32));
     wpr2_probe(L"E3-after-ResetIntoRiscv");
+    fx_ph_end(fx_ph, L"[E3] ResetIntoRiscv");
 
     sec2_health(L"E4-pre-booter");
 
@@ -8536,6 +8675,11 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (!g_gen2Fire)   /* v2.99b: fire-итерациям не нужен гигантский свип */
 #endif
         sweep_all(L"POST");
+    {
+        UINT64 ph0 = fx_ph_begin();
+        sweep_all(L"POST");
+        ulogf(L"TIME   sweep_all(POST) took %lldus\\n", (INT64)(fx_now_us()-ph0));
+    }
     log_ms(L"after sweep_all(POST)");
 
     /* v2.10: ДИАГНОСТИКА (SEC2 + GSP, только чтения, с паузами) + АНЛОК */
@@ -10138,6 +10282,8 @@ done:
     ulogf(L"TIME   DMA queue: full timeouts=%d idle timeouts=%d\n",
           (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo);
     log_ms(L"final: before return to firmware");
+    log_ms(L"final: before return to firmware");
+    fx_ph_report();
     /* Пропуск диагностических экспериментов обязан быть виден, иначе
      * «оптимизация» выглядит бы как «эксперимента перестал существовать».
      * Печатаются и число выполненных, и число пропущенных прогонов. */

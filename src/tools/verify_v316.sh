@@ -92,18 +92,31 @@ if [ ! -f "$EFITEXT" ]; then
     bad "нет $EFITEXT"
 else
     # Лог пишется широкими строками, читать надо и как UTF-16LE.
+    #
+    # ВНИМАНИЕ: список соответствует ТОМУ, ЧТО РЕАЛЬНО ЕСТЬ в сборке.
+    # Маркеры ещё не восстановленных возможностей сюда НЕ входят, иначе
+    # приёмка всегда красная и перестаёт что-либо значить:
+    #   'CLOCK tsc=' ... BAR0 read=   — замер цены MMIO (шаг «цена чтения»)
+    #   'timing summary'               — сводка TIME
+    #   'repeat gate'                  — разрежение повторов
+    #   'full dump throttled'          — разрежение повторов sec2_window_dump
+    #   'PROBE  throttled'             — разрежение повторов wpr2_probe
+    # Они добавляются вместе с самой возможностью.
     for m in \
-        'CLOCK tsc=' \
-        'timing summary' \
-        'repeat gate' \
         'BL settle' \
         'DMAQ2' \
         'FWL' \
         'SCRUB' \
         'phase accounting' \
-        'fwsec: v2.43 cmd scan' \
-        'full dump throttled' \
-        'PROBE  throttled' \
+        'v2.43 cmd scan' \
+        'render: FLR' \
+        'render: early_unlock_path' \
+        'render: ROP write' \
+        'booter_load_v67: load+reset' \
+        'sweep_all(POST) took' \
+        'render masks: booter#1 done' \
+        'render masks: sweep finished' \
+        'final: before return' \
         'BOOTER iters=' \
         'XVE window open' \
         'end of log'
