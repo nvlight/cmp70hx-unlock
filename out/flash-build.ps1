@@ -74,7 +74,14 @@ $GSP_MD5       = 'EB9BEB5D062CCBF3295391C926A2D7AD'
 # looks healthy while running games at zero. That is what these catch.
 $REQUIRED = @(
     @{ name = 'profile70'; text = 'CMP 70HX (GA104)'  },
-    @{ name = 'probeG';    text = 'FBP-G  readback'   },
+    # v3.18: было 'FBP-G  readback' - строка внутри fb_access_probe, которая
+    # ушла за флаг FX_DIAG_FBPROBE (=0): она стоила ИЗМЕРЕННЫЕ 4,40 с из
+    # 57,3 с, то есть 7,7 % прогона, и печатала собственный отрицательный
+    # результат (frts-NOT-reachable-via-dma). Теперь обязана присутствовать
+    # строка ОТКАЗА, а не отчёт о выполнении: пропуск обязан быть виден в
+    # логе (BUILDING 6.0). Проверка не ослаблена - она перенаправлена на
+    # строку, которая теперь обязана быть в бинаре.
+    @{ name = 'fbpskip';   text = 'FBP    SKIPPED'    },
     @{ name = 'loghdr';    text = 'CMPUNLOG v1 '      },
     @{ name = 'gfx';       text = 'GFX_SPEED_SELECT' },
     @{ name = 'rmask';     text = 'G2RMS'            }
@@ -295,17 +302,19 @@ Write-Host "  The change is NOT tested until that log comes back and shows" -For
 Write-Host "  'G2GFX ... GFX_SPEED_SELECT=0x00000004 ***ВСТАЛ***'." -ForegroundColor Yellow
 if ($outMd5 -ne $REF_MD5) {
     Write-Host ""
-    Write-Host "  This build differs from the reference md5. If it is the v3.16 speed" -ForegroundColor Yellow
-    Write-Host "  refactor (docs\SPEED-REFACTOR.md), check these lines in the log:" -ForegroundColor Yellow
-    Write-Host "    1. 'G2RMS ... TOTAL: XVE window open 24 of 25'  <- unlocks alive" -ForegroundColor Yellow
-    Write-Host "    2. 'WPR2 ESTABLISHED' must appear 24x; no 'dbg=0x007E0009'" -ForegroundColor Yellow
+    Write-Host "  This build differs from the reference md5. Check these lines in the log" -ForegroundColor Yellow
+    Write-Host "  (PLAN-SPEED.md has the budget and why each step exists):" -ForegroundColor Yellow
+    Write-Host "    1. 'G2RMS ... TOTAL: XVE window open 8 of 8'   <- unlocks alive" -ForegroundColor Yellow
+    Write-Host "    2. 'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET' <- main marker" -ForegroundColor Yellow
     Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
-    Write-Host "    4. 'SCRUB  ...'  <- what the scrub wait actually costs" -ForegroundColor Yellow
-    Write-Host "    5. 'CLOCK tsc=... BAR0 read=...ns'  <- must have a price on" -ForegroundColor Yellow
-    Write-Host "       the SECOND call, or the measurement is broken again" -ForegroundColor Yellow
-    Write-Host "    6. 'TIME   === phase accounting ==='  <- where the rest of the time goes" -ForegroundColor Yellow
-    Write-Host "    7. 'TIME   DMA queue: ...'          <- what waits cost" -ForegroundColor Yellow
-    Write-Host "  Baseline: out\usb-log-2026-10-01-single-build.txt (24 of 25)" -ForegroundColor Yellow
-    Write-Host "  Expected runtime about 1:50 (measured 2026-10-02: was 5:30)." -ForegroundColor Yellow
+    Write-Host "    4. no 'dbg=0x007E0009' anywhere" -ForegroundColor Yellow
+    Write-Host "    5. 'TIME  render masks: fast=N fast_miss=M'    <- fast path" -ForegroundColor Yellow
+    Write-Host "    6. 'TIME   === phase accounting ===' plus" -ForegroundColor Yellow
+    Write-Host "       'TIME   CHECK ... unaccounted ...'          <- phases vs elapsed" -ForegroundColor Yellow
+    Write-Host "    7. 'CHECK *** FAILED' means double counting came back and the" -ForegroundColor Yellow
+    Write-Host "       phase table cannot be trusted - stop and read before optimising" -ForegroundColor Yellow
+    Write-Host "  Baseline: out\usb-log-v317.txt (stage 2, 57.3 s, 8 of 8)" -ForegroundColor Yellow
+    Write-Host "  Expected: about 25-45 s if the fast path works, about 53 s if not." -ForegroundColor Yellow
+    Write-Host "  The second number is not a regression, it is a measured negative." -ForegroundColor Yellow
 }
 exit 0

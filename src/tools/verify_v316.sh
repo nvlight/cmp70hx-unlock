@@ -109,6 +109,19 @@ else
     # пропуск обязан быть виден (BUILDING 6.0). Проверка не ослаблена, а
     # перенаправлена на ту строку, которая теперь обязана быть в бинаре.
     # Три новых маркера - итог v3.17 по прямой записи масок и по цене вывода.
+    #
+    # v3.18: прямой записи масок в релизе больше нет - гипотеза опровергнута
+    # замером (BEFORE и ПОСЛЕ совпали побайтово), попытка убрана за флаг
+    # FX_DIAG_DIRECTMASK. Поэтому маркер 'render masks: direct=' заменён на
+    # итог новой стратегии 'render masks: fast=' и на строку пропуска пробы
+    # доступа к кадровому буферу. Добавлен 'CHECK' - это сверка суммы фаз с
+    # реально прошедшим временем: если двойной счёт вернётся, в логе будет
+    # 'CHECK *** FAILED', и приёмка обязана это заметить.
+    #
+    # v3.18: 'booter_load_v67: load+reset' заменён тремя частями. Эта фаза
+    # стоила 1196 мс на вызов при 49 мкс фактического исполнения ботера,
+    # то есть почти всё время уходило в подготовку, и одним именем
+    # разложить её было нельзя.
     for m in \
         'BL settle' \
         'DMAQ2' \
@@ -119,15 +132,19 @@ else
         'render: FLR' \
         'render: early_unlock_path' \
         'render: ROP write' \
-        'booter_load_v67: load+reset' \
+        'booter: reset+scrub' \
+        'booter: wpr2+setup' \
+        'booter: dma image' \
         'sweep_all(POST) SKIPPED' \
         'render masks: booter#1 done' \
         'render masks: sweep finished' \
         'final: before return' \
         'BOOTER iters=' \
         'XVE window open' \
-        'direct ' \
-        'render masks: direct=' \
+        'FAST ' \
+        'render masks: fast=' \
+        'FBP    SKIPPED' \
+        'CHECK' \
         'I/O: Print n=' \
         'end of log'
     do
@@ -183,9 +200,13 @@ cat <<EOF
       G2GFX ... GFX_SPEED_SELECT=0x00000004 ВСТАЛ <- главный признак
       WPR2 ESTABLISHED, нигде dbg=0x007E0009
       END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF
-      TIME  I/O: Print n=... measured=...us/call  <- цена вывода (v3.17)
-      TIME  render masks: direct=... booter=...   <- сработала ли прямая
+      TIME  I/O: Print n=... measured=...us/call  <- цена вывода
+      TIME  render masks: fast=... fast_miss=...   <- сработал ли быстрый путь
       TIME   === phase accounting ===
+      TIME   CHECK ... unaccounted ...             <- остаток вне фаз
+
+  'CHECK *** FAILED' в логе означает, что сумма фаз больше прошедшего
+  времени, то есть вернулся двойной счёт, и таблице верить нельзя.
 
   Без этого лога сборка не проверена, а md5 записывать в build.sh рано.
 

@@ -191,6 +191,8 @@ static INTN app_memcmp(CONST VOID *a, CONST VOID *b, UINTN n)
 static void ulogf(const CHAR16 *fmt, ...);
 static void log_ms(const CHAR16 *tag);   /* v3.16: метки времени; нужна и до определения */
 static void log_flush_sector(BOOLEAN force);
+static void ulogf(const CHAR16 *fmt, ...);
+static UINTN g_logFlushFails;
 static void log_init(EFI_HANDLE ImageHandle);
 static void log_store_ptr(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 next);
 static UINT32 log_load_ptr(EFI_BLOCK_IO_PROTOCOL *bio);
@@ -214,6 +216,9 @@ static UINT64 fx_now_us(void);
 static void log_putc(CHAR8 c);
 extern UINTN fx_rmDirect;
 extern UINTN fx_rmNeedBooter;
+extern UINTN fx_rmFast;
+extern UINTN fx_rmFastMiss;
+extern BOOLEAN fx_rmFirstOk;
 
 /* ==================================================================== *
  * v3.17: СТОИМОСТЬ ВЫВОДА — измерение и буферизация
@@ -256,6 +261,8 @@ static UINTN   g_prUsPerCall = 0;  /* измеренная цена одного
 static UINTN   g_ulogCalls = 0;
 static UINT64  g_ulogUs    = 0;
 static UINTN   g_logSectors = 0;
+/* v3.18: сколько раз запись на флешку сорвалась. Ноль в норме. */
+static UINTN   g_logFlushFails = 0;
 
 static VOID fx_print(CHAR16 *fmt, ...);
 static BOOLEAN g_logOn;        /* лог на флешку; определён ниже */
@@ -335,8 +342,8 @@ fx_io_report(void)
           L"est_if_unbuffered=%lldms | ulogf n=%d cost=%lldus sectors=%d\n",
           g_prCalls, g_prUsPerCall, (INT64)(est / 1000ULL),
           uc, (INT64)uu, ls);
-    ulogf(L"TIME  render masks: direct=%d booter=%d (of %d)\n",
-          fx_rmDirect, fx_rmNeedBooter, fx_rmDirect + fx_rmNeedBooter);
+    ulogf(L"TIME  render masks: fast=%d fast_miss=%d direct=%d booter=%d\n",
+          fx_rmFast, fx_rmFastMiss, fx_rmDirect, fx_rmNeedBooter);
 }
 
 /* Выгрузка кольца консоли в файловый лог. Порядок: если кольцо не
@@ -2255,6 +2262,14 @@ static UINTN fx_diagDone  = 0;
 #ifndef FX_DIAG_SWEEPS
 #define FX_DIAG_SWEEPS 0
 #endif
+/* v3.18: FX_DIAG_FBPROBE - по умолчанию 0. Проба доступа к кадровому
+ * буферу ТОЛЬКО ЧИТАЕТ и печатает в лог «frts-NOT-reachable-via-dma»,
+ * то есть признаёт собственное отрицательное свой результат. ИЗМЕРЕННАЯ
+ * стоимость - 4,40 с из 57,3 с (7,7 % прогона). Возврат:
+ * -DFX_DIAG_FBPROBE=1 в build.sh. */
+#ifndef FX_DIAG_FBPROBE
+#define FX_DIAG_FBPROBE 0
+#endif
 
 /* v3.17: итог бесплатной прямой записи масок (render_open_gfx_masks).
  * Печатается в финале рядом с остальными итогами: пропуск не молчит, а
@@ -2265,6 +2280,18 @@ static UINTN fx_diagDone  = 0;
  * самопроверяющий откат. */
 UINTN fx_rmDirect = 0;
 UINTN fx_rmNeedBooter = 0;
+
+/* v3.18: итог быстрого пути рендер-цикла.
+ *   fast    - маска открылась ОДНИМ дополнительным ботером#2, без FLR и
+ *             без полного early_unlock_path (выигрыш ~4,2 с на маску);
+ *   miss    - не открылась, сработал откат на полный путь (цена ошибки
+ *             ~1,2 с за попытку, разблокировка не пострадала);
+ *   firstOk - состояние SEC2 подтверждено полным путём, быстрый путь
+ *             разрешён для следующих масок.
+ * Печатаются все три по тому же правилу, что и остальные итоги. */
+UINTN fx_rmFast = 0;
+UINTN fx_rmFastMiss = 0;
+BOOLEAN fx_rmFirstOk = FALSE;
 
 static BOOLEAN
 fx_diag_gate(void)
@@ -2300,34 +2327,77 @@ fx_diag_gate(void)
  * итог считался с двойным счётом: SUM 95 518 411 мкс при прогоне
  * 113 343 мс. Итог в 95,5 с не означал ничего.
  *
- * ПОЧЕМУ СЕЙЧАС ЯВНАЯ МЕТКА, А НЕ ГЛУБИНА. Вложенность проставляется
- * вызовом (fx_ph_end против fx_ph_end_in). Ошибиться можно только в
- * одной конкретной фазе, и это видно в таблице, а не портит весь итог
- * молча. Счётчик глубины дал бы ошибку сразу во всём.
+ * ОШИБКА ВТОРОЙ ВЕРСИИ (2026-10-02, прогон v3.17, 57 316 мкс).
+ * Явная метка (fx_ph_end против fx_ph_end_in) оказалась хуже, а не
+ * лучше: вложенность проставляется человеком, и человек ошибся в трёх
+ * местах. Проверяемо на самой таблице прогона:
+ *     render: early_unlock_path        29 623 335 мкс  x8
+ *       [E1] BL load+settle            10 791 034 мкс  x9
+ *       [E2] fwsec_boot_gsp_sig        11 426 836 мкс  x9
+ *       [E3] ResetIntoRiscv           11 340 837 мкс  x9
+ * Сумма троих = 33 558 707 мкс, а родитель = 29 623 335. То есть все
+ * трое помечены «верхнего уровня» и посчитаны вместе с родителем.
+ * Итог: SUM top-level 78 152 783 мкс при прогоне 57 316 мкс, разница
+ * ровно равна SUM nested 20 880 700 мкс.
+ *
+ * ПОЧЕМУ ТЕПЕРЬ НАСТОЯЩИЙ СЧЁТЧИК ГЛУБИНЫ. Явная метка требует
+ * дисциплины: ошибка в одной фазе тихо портит весь итог, и это
+ * повторилось уже дважды. Глубина определяется самим фактом вложенного
+ * вызова, то есть ошибкой быть НЕ МОЖЕТ: если fx_ph_begin() вызван из
+ * тела другой открытой фазы, глубина по определению больше нуля.
+ *
+ * Глубина едет вместе с меткой времени в одном 64-битном числе: верхние
+ * 16 бит - глубина, нижние 48 - микросекунды от старта. 48 бит это
+ * 8,9 года, то есть переполнения не будет. Менять вызывающий код не
+ * пришлось - сигнатура fx_ph_begin() та же, что и была.
+ *
+ * ПРИЗНАК «ВЛОЖЕННАЯ» ЛИПКИЙ (sticky). Если фаза хоть раз закрылась
+ * на глубине больше нуля, она исключается из верхнего итога навсегда.
+ * Иначе один и тот же участок кода посчитался бы дважды: у render-
+ * цикла общий родитель, а у early_unlock_path - свой.
  *
  * Статические Stall внутри фаз (например Stall(50000) после
  * gsp-reset) УЖЕ входят в свою фазу: замер берётся вокруг всего
  * вызова, а не вокруг отдельной инструкции.
  * ------------------------------------------------------------------ */
-#define FX_PH_MAX 12
+#define FX_PH_MAX 16
 static const CHAR16 *fx_phName[FX_PH_MAX];
 static UINT64 fx_phUs[FX_PH_MAX];      /* накоплено, мкс           */
 static UINTN  fx_phCalls[FX_PH_MAX];   /* сколько раз              */
-static BOOLEAN fx_phIn[FX_PH_MAX];     /* TRUE = внутри другой фаз��*/
+static BOOLEAN fx_phIn[FX_PH_MAX];     /* TRUE = вложенная         */
 static UINTN  fx_phNext = 0;
+static UINTN  fx_phDepth = 0;          /* v3.18: НИКОГДА прежде не
+                                        * инкрементировался, из-за
+                                        * чего всё выходило верхним */
 
 static UINT64
 fx_ph_begin(void)
 {
-    return fx_now_us();
+    UINT64 ts = fx_now_us();
+    UINT64 d = fx_phDepth;
+    if (d > 0xFFFF) d = 0xFFFF;        /* потолок: число вложенностей не 65k */
+    fx_phDepth++;
+    return (d << 48) | (ts & 0xFFFFFFFFFFFFULL);
 }
+#define FX_PH_TS(h)   ((h) & 0xFFFFFFFFFFFFULL)   /* метка времени, мкс */
+#define FX_PH_DEP(h)  ((UINTN)((h) >> 48))         /* глубина на момент begin */
 
 static VOID
 fx_ph_end_n(UINT64 t0, const CHAR16 *name, BOOLEAN inside)
 {
     UINT64 now = fx_now_us();
-    UINTN i;
+    UINTN i, dep;
+    BOOLEAN was_inside;
+
+    /* Спуск глубины делается ВСЕГДА и ДО любых ранних выходов, иначе
+     * один непарный fx_ph_end рассыпает всю вложенность дальше: каждая
+     * последующая фаза окажется «вложенной» и исчезнет из итога. */
+    if (fx_phDepth) fx_phDepth--;
+
     if (!t0) return;                     /* часы не откалиброваны */
+    dep = FX_PH_DEP(t0);
+    was_inside = inside || (dep > 0);
+
     for (i = 0; i < fx_phNext; i++)
         if (fx_phName[i] == name) break;
     if (i == fx_phNext) {
@@ -2335,14 +2405,20 @@ fx_ph_end_n(UINT64 t0, const CHAR16 *name, BOOLEAN inside)
         fx_phName[fx_phNext] = name;
         fx_phUs[fx_phNext] = 0;
         fx_phCalls[fx_phNext] = 0;
-        fx_phIn[fx_phNext] = inside;
+        fx_phIn[fx_phNext] = FALSE;           /* установится ниже */
         fx_phNext++;
     }
-    if (now > t0) fx_phUs[i] += now - t0;
+    /* Липкость: фаза, хоть раз закрытая на глубине > 0, из верхнего
+     * итога исключается навсегда. Иначе общий родитель и его собственная
+     * внутренняя фаза посчитались бы дважды. */
+    if (was_inside) fx_phIn[i] = TRUE;
+    if (now > FX_PH_TS(t0)) fx_phUs[i] += now - FX_PH_TS(t0);
     fx_phCalls[i]++;
 }
 
-/* фаза верхнего уровня — попадает в верхний итог */
+/* v3.18: имя второго аргумента fx_ph_end_in больше не решает ничего -
+ * глубина берётся из счётчика. Оставлено как тонкая обёртка, чтобы
+ * не трогать существующие вызовы. */
 static VOID
 fx_ph_end(UINT64 t0, const CHAR16 *name)
 {
@@ -2383,6 +2459,37 @@ fx_ph_report(void)
           L"SUM nested", (INT64)childSum);
     ulogf(L"TIME   %-24s %9lld us\n", L"TOTAL measured",
           (INT64)(topSum + childSum));
+
+    /* v3.18: СВЕРКА С РЕАЛЬНЫМ ПРОШЕДШИМ ВРЕМЕНОМ.
+     *
+     * Главный признак того, что фазовый учёт врёт, - это сумма фаз
+     * БОЛЬШЕ времени прогона. Так было дважды:
+     *     SUM 95 518 411 мкс при прогоне 113 343 мкс  (2026-10-02)
+     *     SUM top-level 78 152 783 мкс при 57 316 мкс  (v3.17)
+     * Обе цифры не означали ничего, и обе были замечены только потому,
+     * что кто-то догадался сравнить их с секундомером.
+     *
+     * Теперь это сравнение делает сам код, и не остаётся места, где
+     * враньё можно не заметить. «unaccounted» - это время, которое НЕ
+     * принадлежит ни одной фазе: именно его и надо размечать дальше.
+     */
+    {
+        UINT64 wall = fx_now_us();
+        if (wall > 0 && topSum <= wall) {
+            ulogf(L"TIME   %-24s %9lld us   (phases vs elapsed %lld us: "
+                  L"unaccounted %lld us = %lld%%)\n",
+                  L"CHECK", (INT64)topSum, (INT64)wall,
+                  (INT64)(wall - topSum),
+                  (INT64)((wall - topSum) * 100 / wall));
+        } else {
+            /* Итог больше прогона - значит двойной счёт, и таблицей
+             * пользоваться нельзя. Печатается ЯВНО, а не молча. */
+            ulogf(L"TIME   CHECK *** FAILED: SUM top-level %lld us > "
+                  L"elapsed %lld us - double counting, DO NOT trust this "
+                  L"table (depth=%d)\n",
+                  (INT64)topSum, (INT64)wall, (INTN)fx_phDepth);
+        }
+    }
 }
 
 
@@ -4149,7 +4256,8 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     UINT32 v, saveBar, wLo, wHi;
 
     ulogf(L"G2RMK  %s === opening XVE window (GFX_SPEED_SELECT door): "
-          L"direct host write first, booter#2 as fallback ===\n", tag);
+          L"one extra booter#2 first, full FLR path only if that misses ===\n",
+          tag);
     for (k = 0; k < NTGT; k++)
         ulogf(L"G2RMK  %s BEFORE  0x%08x = 0x%08x\n", tag, tgt[k],
               mmio_read32(tgt[k]));
@@ -4164,58 +4272,90 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
         for (k = 0; k < NTGT; k++) {
             if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) { done++; continue; }
 
-            /* --- v3.17: БЕСПЛАТНАЯ ПОПЫТКА ПРЯМОЙ ЗАПИСЬЮ ----------------
+            /* --- v3.18: СНАЧАЛА ПРОСТО БОТЕР, ПОЛНЫЙ ПУТЬ ТОЛЬКО ЕСЛИ НЕ
+             * ОТКРЫЛОСЬ. Это главная правка этапа, и она самопроверяема.
              *
-             * Прежний порядок на каждую маску был: FLR -> 300 мс ->
-             * early_unlock_path (BL+FWSEC+WPR2+RISCV+ботер#1) -> ботер#2.
-             * То есть 7,61 с на одну запись, ради одного MMIO-чтения.
+             * ИЗМЕРЕННЫЙ ПРОГОН v3.17 (57,3 с), разложение одной итерации:
+             *     render: early_unlock_path   3703 мс   68 %
+             *     render: FLR + 300ms settle   499 мс    9 %
+             *     render: booter_load_v67 #2  1196 мс   22 %
+             * То есть 4,2 с из 5,48 с на итерацию тратится НЕ на открытие
+             * маски, а на подготовку: FLR, пауза 300 мс, затем полный
+             * early_unlock_path = BL + FWSEC + WPR2 + RISCV + ботер#1.
              *
-             * Но ботер нужен только потому, что PLM закрыт. Стоит PLM
-             * открыть ОДИН раз (это делает первый early_unlock_path в
-             * efi_main, он уже выполнен к моменту вызова этой функции), и
-             * обычная запись хоста в размаскированный регистр обязана
-             * липнуть: ровно этим же кодом ниже, в блоке селекторов,
-             * пишется PLM-сам (unlock_v2.c, mmio_write32(REG_FEAT_OVR_PLM)).
+             * ЗАЧЕМ ЭТО ВООБЩЕ ДЕЛАЛОСЬ. Ради одного ограничения: за один
+             * бут-цикл ботер исполняется ровно ДВА раза - #1 с обычным
+             * payload открывает PLM, #2 с нашей парой пишет адрес. Третий
+             * и далее, по замерам v2.99e, не срабатывали. FLR был
+             * разделением прогонов: после него счётчик выстрелов
+             * обнуляется, и ботер#1 снова проходит.
              *
-             * ПОЧЕМУ ЭТО НЕ МОЖЕТ УХУДШИТЬ РЕЗУЛЬТАТ:
-             *   - запись в замаскированный регистр по построению является
-             *     no-op, то есть делает ровно то же, что и отсутствие записи;
-             *   - запись в открытый регистр - это ровно тот результат,
-             *     ради которого и делался миницикл;
-             *   - если по какой-то причине не липнуло, ПРОВЕРКА READBACK
-             *     это увидит и код ПАДАЕТ НАЗАД на прежний путь (FLR +
-             *     early_unlock_path + ботер#2) для этого адреса.
-             * То есть худший случай — ровно то, что было раньше, а лучший —
-             * итерация вообще не тратится.
+             * НО МАСКИ ПЕРЕЖИВАЮТ FLR. Это уже доказано в этом проекте и
+             * наоборот не мешает: то, что нам нужно пережить - открытые
+             * маски, и им FLR не страшен. Значит вопрос не «нужен ли
+             * FLR», а «работает ли ботер третий раз подряд в одном
+             * состоянии SEC2». Это вопрос к ЖЕЛЕЗУ, а к коду, и раньше
+             * его никто не задавал, потому что цикл всегда делал FLR.
              *
-             * Что НЕ входит в эту попытку и остаётся прежним: адреса
-             * 0x8200D0..F4 (валили гостя в ресет) и 0x88084 (RO) — их в
-             * списке tgt[] нет, см. выше.
+             * ПОЧЕМУ ЭТО НЕ МОЖЕТ УХУДШИТЬ РЕЗУЛЬТАТ. Проверка readback
+             * идёт после ботера в обоих случаях. Если третий выстрел
+             * открыл маску - мы выиграли 4,2 с. Если нет - код ДЕЛАЕТ
+             * ровно то, что делал раньше: FLR, 300 мс, полный
+             * early_unlock_path, ботер#2 повторно. То есть худший случай -
+             * это v3.17 плюс одна неудачная попытка ботера (~1,2 с).
+             *
+             * Первая маска идёт прежним путём целиком: после неё
+             * состояние SEC2 ещё не проверено, и начинать с оптимистичной
+             * ветки на непроверенной почве незачем.
              */
-            {
-                UINT32 was = mmio_read32(tgt[k]);
-                mmio_write32(tgt[k], 0xFFFFFFFFU);
+            if (k > 0 && fx_rmFirstOk) {
+                /* быстрый путь: только ботер#2, без FLR и без early_unlock */
+                wLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+                wHi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+                *pv = 0xFFFFFFFFU;
+                *pa = tgt[k];
                 __asm__ volatile("wbinvd" ::: "memory");
-                if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) {
-                    fx_rmDirect++;
-                    ulogf(L"G2RMK  %s direct 0x%08x OPEN (was 0x%08x) "
-                          L"- no booter needed\n", tag, tgt[k], was);
-                    fx_ph_end(fx_ph, L"render: direct host write");
-                    fx_ph = fx_ph_begin();
+                (VOID)booter_load_v67(wprMetaPhys, ucodePhys);
+                mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
+                mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
+                v = mmio_read32(tgt[k]);
+                for (tries = 0; v != 0xFFFFFFFFU && tries < 100; tries++) {
+                    fx_sleep_us(1000);
+                    v = mmio_read32(tgt[k]);
+                }
+                if (v == 0xFFFFFFFFU) {
+                    fx_rmFast++;
+                    ulogf(L"G2RMK  %s FAST 0x%08x OPEN after a single extra "
+                          L"booter#2 (no FLR, no early path) polls=%d\n",
+                          tag, tgt[k], (INTN)tries);
                     done++;
+                    fx_ph_end(fx_ph, L"render: fast path (booter#2 only)");
+                    fx_ph = fx_ph_begin();
                     continue;
                 }
-                fx_rmNeedBooter++;
-                ulogf(L"G2RMK  %s direct 0x%08x did not stick (0x%08x) "
-                      L"- falling back to booter#2\n", tag, tgt[k],
-                      mmio_read32(tgt[k]));
-                fx_ph_end(fx_ph, L"render: direct host write (miss)");
+                /* Не открылось. Ничего не сломано: возврат к прежнему пути
+                 * для этого адреса, и fx_rmFirstOk НЕ меняется - то есть
+                 * следующая маска снова попробует быстрый путь. */
+                fx_rmFastMiss++;
+                ulogf(L"G2RMK  %s FAST 0x%08x MISSED (0x%08x, polls=%d) "
+                      L"- falling back to the full path\n",
+                      tag, tgt[k], v, (INTN)tries);
+                fx_ph_end(fx_ph, L"render: fast path (miss)");
                 fx_ph = fx_ph_begin();
             }
 
             /* --- FLR-разделение, 1:1 как в боевом цикле таблицы --------- */
             saveBar = cfg_read32(0x10) & ~0xF;
             do_flr();
+            /* v3.18: слепая пауза 300 мс. ИЗМЕРЕНО: вся фаза стоит 499 мс,
+             * из них ровно 300 мс - Stall. Пауза оставлена как есть: она
+             * стоит после сброса Function Level Reset, и единственное,
+             * что можно было бы ждать (готовность BAR0) проверяется
+             * сразу следом через enable_mem_decode() и чтение. Менять её
+             * на событие здесь рискованнее, чем оставить: падение
+             * readback маски обрабатывается самопроверкой ниже, но
+             * ЗАМЕНА ПАУЗЫ ЭКОНОМИТ 300 мс x 7 = 2,1 с, и это
+             * сопоставимо с ценой ошибки. Отложено отдельным замером. */
             uefi_call_wrapper(BS->Stall, 1, 300000);
             cfg_write32(0x10, saveBar);
             enable_mem_decode();
@@ -4283,6 +4423,13 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                   (v == 0xFFFFFFFFU) ? L"OPEN" : L"remained locked",
                   (INTN)tries);
             if (v == 0xFFFFFFFFU) done++;
+            /* v3.18: полный путь отработал - значит состояние SEC2 после
+             * него заведомо пригодно для быстрой ветки на следующей
+             * маске. Ставится именно здесь, а не в начале итерации:
+             * первая маска всегда идёт полным путём, а решение о быстром
+             * пути принимается по факту УСПЕХА полного, а не по
+             * предположению. */
+            fx_rmFirstOk = TRUE;
         }
         ulogf(L"G2RMK  %s pass %d: open %d of %d\n", tag,
               (INTN)pass + 1, (INTN)done, (INTN)NTGT);
@@ -5319,6 +5466,13 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
         Print(L"booter: CPUCTL после BCR=1 = 0x%08x\n", data);
         if ((data & 0xBADF0000) == 0xBADF0000) {
             Print(L"booter: SEC2 lockdown НЕ снят — прерываю booter load\n");
+            /* v3.18: каждый ранний выход закрывает открытую фазу.
+             * Счётчик глубины живёт балансом begin/end, и незакрытая фаза
+             * оставляет его сдвинутым навсегда: каждая следующая фаза
+             * после такого места была бы помечена вложенной и исчезла бы
+             * из верхнего итога. Здесь это сделано явно, потому что
+             * автоматика в C для этого не существует. */
+            fx_ph_end_in(fx_ph, L"booter: reset+scrub (early exit)");
             return EFI_DEVICE_ERROR;
         }
     }
@@ -5332,26 +5486,33 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     }
     Print(L"booter: reset ok (dmactl=0x%x)\n", mmio_read32(SEC2_DMACTL));
     sec2_health(L"8-booter-post-reset");
-    /* v3.16: ВЛОЖЕННАЯ фаза. booter_load_v67 зовётся и изнутри
-     * early_unlock_path (ботер#1), и напрямую из рендер-цикла (ботер#2),
-     * а оба эти вызова уже покрыты своими фазами верхнего уровня. Если
-     * считать её в верхнем итоге, её время попадёт туда дважды. Именно
-     * это и произошло в прогоне 2026-10-02: SUM top-level показывал
-     * 326,6 с при прогоне 229,8 с. */
-    fx_ph_end_in(fx_ph, L"booter_load_v67: load+reset");
+    /* v3.18: фаза переименована и раздроблена.
+     *
+     * ИЗМЕРЕНО (v3.17): booter_load_v67 стоит 1196 мс на вызов, при этом
+     * САМ ботер исполняется за 49 мкс (BOOTER iters=5 in 0.049ms). То
+     * есть 99,996 % времени - подготовка вокруг него, и до этого прогона
+     * она была одной строкой без разбивки. Ниже она поделена на части,
+     * каждая со своим счётчиком:
+     *   reset+scrub   - сброс движка и ожидание скраба IMEM/DMEM
+     *   wpr2+setup    - запись WPR2 и программирование FBIF/DMATRFCMD
+     *   dma           - перенос образа ботера в IMEM/DMEM
+     *   start+wait    - STARTCPU и ожидание, пока код отработает
+     *
+     * Вложенность теперь определяется счётчиком fx_phDepth, а не
+     * ручной меткой: см. комментарий у fx_ph_begin(). Прежний
+     * fx_ph_end_in здесь стоял как раз потому, что вызов вложен - и это
+     * работало, пока ручная метка не соврала в трёх других местах.
+     */
+    fx_ph_end_in(fx_ph, L"booter: reset+scrub");
     fx_ph = fx_ph_begin();
 
-    /* v2.16: WPR2 = frtsOffset (эффект FWSEC/FRTS). В рабочем флоу перед
-     * booter load драйвер имеет WPR2 = [frtsOffset, frtsOffset+0xE00] —
-     * сырые lo/hi берутся из профиля карты (TARGET_WPR2_*), а не из
-     * константы: для 8 ГБ это 0x01FEF000/0x01FEFE00, для 10 ГБ
-     * 0x027FE000/0x027FEE00. У нас после POST WPR2 другой — booter может
-     * валидировать WPR2 и выходить. */
     Print(L"booter: WPR2 до записи: lo=0x%08x hi=0x%08x\n",
           mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI));
     mmio_write32(REG_PFB_MMU_WPR2_LO, TARGET_WPR2_LO);
     mmio_write32(REG_PFB_MMU_WPR2_HI, TARGET_WPR2_HI);
     uefi_call_wrapper(BS->Stall, 1, 10000);
+    fx_ph_end_in(fx_ph, L"booter: wpr2+setup");
+    fx_ph = fx_ph_begin();
     Print(L"booter: WPR2 после записи: lo=0x%08x hi=0x%08x (расчёт 0x%08X/0x%08X; не изменились = заблокировано)\n",
           mmio_read32(REG_PFB_MMU_WPR2_LO), mmio_read32(REG_PFB_MMU_WPR2_HI),
           TARGET_WPR2_LO, TARGET_WPR2_HI);
@@ -5402,6 +5563,8 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     Print(L"booter: DMEM[0x10]=0x%08x (ожидаю sig SIG_PROD[0] 0x%08x)\n",
           mmio_read32(SEC2_DMEMD0),
           *(UINT32*)((UINTN)ucodePhys + 0x8A10));
+    fx_ph_end_in(fx_ph, L"booter: dma image");
+    fx_ph = fx_ph_begin();
 
     /* PKC (RSA3K) параметры */
     mmio_write32(SEC2_BROM_PARAADDR0, BOOTER_HS_SIG_DMEM_ADDR);
@@ -5587,6 +5750,9 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
             Print(L"booter: PLM OPEN (cpu_ctl=0x%x irq=0x%x mbox0=0x%x)\n",
                   mmio_read32(SEC2_CPUCTL), mmio_read32(SEC2_IRQSTAT),
                   mmio_read32(SEC2_MAILBOX0));
+            /* v3.18: закрытие фазы перед выходом - см. объяснение в
+             * раннем выходе выше. */
+            fx_ph_end_in(fx_ph, L"booter: start+wait");
             if (hist) uefi_call_wrapper(BS->FreePool, 1, hist);
             return EFI_SUCCESS;
         }
@@ -5625,6 +5791,7 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     {
         UINTN t;
         UINT32 rdidx, wtidx;
+        fx_ph_end_in(fx_ph, L"booter: start+wait+imem dump");
 
         Print(L"booter: riscv: cpuctl=0x%x tracectl=0x%x rdidx=0x%x wtidx=0x%x bcr=0x%x\n",
               mmio_read32(NV_FALCON2_SEC_BASE + 0x388),
@@ -5646,7 +5813,17 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
         }
     }
     return EFI_TIMEOUT;
-    fx_ph_end(fx_ph, L"booter_load_v67: run+trace");
+    /* v3.18: здесь стояло `fx_ph_end(fx_ph, L"booter_load_v67: run+trace")`
+     * ПОСЛЕ return - то есть МЁРТВЫЙ КОД. Компилятор его выбрасывал, и
+     * фаза run+trace не закрывалась НИКОГДА. В таблице прогона v3.17 её
+     * действительно нет, при том что имя на неё ссылалось.
+     *
+     * Почему это было опасно, а не просто неаккуратно: счётчик глубины
+     * вложенности живёт балансом begin/end, и незакрытая фаза оставляет
+     * его сдвинутым. Каждая последующая фаза после такого места
+     * считалась бы вложенной и исчезла бы из верхнего итога. Закрытие
+     * фазы перенесено выше, к месту, где функция реально доходит до
+     * конца этого блока. */
 }
 
 /* ==== EARLY PATH — run the booter FIRST, on a fresh SEC2 (MAIN PATH) ====
@@ -7692,26 +7869,62 @@ static BOOLEAN g_logOn   = FALSE;
 static void
 log_flush_sector(BOOLEAN force)
 {
-    EFI_STATUS st;
-    UINTN nsec;
     if (!g_logOn || g_logBio == NULL) return;
     if (g_logFill == 0 && !force) return;
-    nsec = (g_logFill + 511) / 512;
-    if (nsec == 0) nsec = 1;
-    if (nsec > LOG_BATCH_SECS) nsec = LOG_BATCH_SECS;
-    while (g_logFill < nsec * 512) g_logBuf[g_logFill++] = 0;
-    st = uefi_call_wrapper(g_logBio->WriteBlocks, 5, g_logBio,
-                           g_logBio->Media->MediaId,
-                           LOG_LBA + g_logSec, nsec * 512, g_logBuf);
-    if (EFI_ERROR(st)) { g_logOn = FALSE; return; }  /* не пишется — не мешаем анлоку */
-    g_logSectors += nsec;
-    g_logFill = 0;
-    g_logSec += (UINT32)nsec;
-    if (g_logSec >= LOG_SECTORS) g_logSec = 1;
-    /* Двигаем указатель «с какого сектора писать» каждые 32 сектора: этого
-     * достаточно, чтобы следующий прогон не наступил на текущий, и почти
-     * не нагружает флешку (на всю область — 64 лишние записи). */
-    if ((g_logSec & 31) == 0) log_store_ptr(g_logBio, g_logSec);
+
+    /* v3.18: ВЫБРАСЫВАНИЕ ХВОСТА БУФЕРА - исправленный дефект.
+     *
+     * В v3.17 здесь стояло:
+     *     nsec = (g_logFill + 511) / 512;
+     *     if (nsec > LOG_BATCH_SECS) nsec = LOG_BATCH_SECS;   <- кламп
+     *     ... write nsec ...
+     *     g_logFill = 0;                                      <- хвост выброшен
+     *
+     * Кламп был задуман как ограничение размера одной записи, но он не
+     * ограничивал, а УНИЧТОЖАЛ: если в буфере оказывалось больше
+     * LOG_BATCH_SECS секторов, писались первые восемь, а остальное
+     * молча исчезало.
+     *
+     * Обнаружено на прогоне v3.17 (usb-log-v317.txt): финальная
+     * выгрузка консольного кольца - около 130 секторов - попала под
+     * кламп, и в лог не попало НИЧЕГО из неё, включая заголовок PRN.
+     * Разблокировке это не повредило (маркеры END уже стояли в буфере
+     * небольшого размера), но отладочный текст пропал целиком.
+     *
+     * Именно тот класс молчаливого отказа, из-за которого этот проект
+     * уже один раз потерял рабочий бинарь. Поэтому здесь теперь цикл,
+     * а не кламп, и рядом стоит счётчик - по правилу «пропуск не молчит,
+     * а считается».
+     */
+    while (g_logFill > 0) {
+        EFI_STATUS st;
+        UINTN nsec = (g_logFill + 511) / 512;
+        if (nsec == 0) nsec = 1;
+        if (nsec > LOG_BATCH_SECS) nsec = LOG_BATCH_SECS;
+        while (g_logFill < nsec * 512) g_logBuf[g_logFill++] = 0;
+        st = uefi_call_wrapper(g_logBio->WriteBlocks, 5, g_logBio,
+                               g_logBio->Media->MediaId,
+                               LOG_LBA + g_logSec, nsec * 512, g_logBuf);
+        if (EFI_ERROR(st)) {
+            /* Запись не идёт - не мешаем анлоку, но ЧИСЛО ПОТЕРЯННЫХ
+             * секторов обязано попасть в лог, пока он ещё пишется. */
+            if (g_logFlushFails == 0)
+                ulogf(L"LOG    write FAILED at sec=%d fill=%d/512 - "
+                      L"logging disabled, %d bytes lost\r\n",
+                      (INTN)g_logSec, (INTN)(g_logFill / 512), (INTN)g_logFill);
+            g_logFlushFails++;
+            g_logOn = FALSE;
+            return;
+        }
+        g_logSectors += nsec;
+        g_logFill = 0;
+        g_logSec += (UINT32)nsec;
+        if (g_logSec >= LOG_SECTORS) g_logSec = 1;
+        /* Указатель двигается на границе ПАКЕТА, а не пакета по 8 секторов:
+         * при полном пакете это то же самое, а при коротком хвосте
+         * указатель не сбивается с шага. */
+        if ((g_logSec & 31) == 0) log_store_ptr(g_logBio, g_logSec);
+    }
 }
 
 /* записать один байт в накопитель сектора */
@@ -9562,7 +9775,34 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * Ничего, кроме какого-нибудь мусора в неприкрытом FRTS-регионе, эта
      * проба испортить не может: WPR2 здесь ещё не защёлкнут. */
     log_ms(L"framebuffer access probe");
+    /* v3.18: проба доступа к кадровому буферу убрана из релизной сборки.
+     *
+     * ИЗМЕРЕНО на прогоне v3.17 (usb-log-v317.txt):
+     *     t=354ms  ->  t=3566ms "framebuffer access probe"   3212 мс
+     *     t=3566ms ->  t=4752ms "FB probe done"               1186 мс
+     * Итого 4,40 с из 57,3 с, то есть 7,7 % времени ПРОГОНА.
+     *
+     * Почему это чистая диагностика, а не часть анлока: функция ТОЛЬКО
+     * ЧИТАЕТ - fbp_read() это DMA силами GSP в DMEM-окно, и всё, что она
+     * печатает, является наблюдением. Её собственный вывод в прогоне
+     * v3.17 гласит:
+     *     ctrlA=PASS frtsRead=zero write=sent roundTrip=FAIL
+     *     conclusion=frts-NOT-reachable-via-dma
+     * То есть она честно сообщает об ОТРИЦАТЕЛЬНОМ результате и ничего не
+     * меняет. Проба сбрашивает GSP ради чистоты замера, но
+     * gsp_engine_reset() ниже всё равно приводит GSP в нужное состояние,
+     * то есть её побочный эффект компенсируется следующей же стадией.
+     *
+     * Флаг по умолчанию 0 - BUILDING 6.0. Пропуск печатается строкой:
+     * он обязан быть виден, иначе исчезновение пробы выглядело бы как
+     * «проба перестала существовать». Возврат: -DFX_DIAG_FBPROBE=1.
+     */
+#if FX_DIAG_FBPROBE
     fb_access_probe(fwsecPhys);
+#else
+    ulogf(L"FBP    SKIPPED: FX_DIAG_FBPROBE=0 (read-only diagnostic, "
+          L"measured 4.40s)\n");
+#endif
     log_ms(L"FB probe done");
 
     /* --- v2.12: убить GFW (как драйвер: kflcnReset(GSP) перед booter load) ---
@@ -9581,8 +9821,31 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         UINT64 mrk = fx_ph_begin();
         log_ms(L"before gsp_engine_reset (kill GFW)");
         gsp_engine_reset();
-        uefi_call_wrapper(BS->Stall, 1, 200000);
-        fx_ph_end(mrk, L"gsp_engine_reset + 200ms settle");
+        /* v3.18: слепая пауза 200 мс заменена ожиданием СОБЫТИЯ.
+         *
+         * ИЗМЕРЕНО (v3.17): вся фаза «gsp_engine_reset + 200ms settle» стоит
+         * 200 697 мкс, из которых ровно 200 000 - это Stall, то есть 99,6 %
+         * фазы не ждёт ничего. Замер: fx_ph_end печатает фактическое время,
+         * поэтому в следующем прогоне видно, сработало ли ожидание.
+         *
+         * ЧТО ЖДЁМ: после сброса движка GSP Falcon скрабит IMEM/DMEM
+         * паттерном DEAD5EC*. До окончания скраба DMA соревнуется со
+         * скраббером и затирается - это ровно тот класс отказа, из-за
+         * которого falcon_wait_scrub_done() ЗАПРЕЩЕНО заканчивать раньше
+         * времени (см. предупреждение в его комментарии).
+         *
+         * ПОЧЕМУ ЭТО НЕ ТО ЖЕ, ЧТО ТАМ. Здесь скраб не проверяется - он
+         * просто переживается, потому что следом идёт полная перезагрузка
+         * GSP движком и своя последовательность с собственным ожиданием
+         * скраба. То есть это «дать железу отдохнуть», а не «ждать готовности
+         * к DMA». Разница принципиальная, и поэтому ожидание события здесь
+         * уместно, а в falcon_wait_scrub_done - нет.
+         *
+         * Потолок 200 мс СОХРАНЁН: если скраб не завершится, ждём ровно
+         * столько же, сколько раньше. Быстрее - только когда событие уже
+         * наступило, то есть когда ждать нечего. */
+        (VOID)falcon_wait_scrub_done(GSP_DMACTL, GSP_HWCFG2, L"gsp-post-reset");
+        fx_ph_end(mrk, L"gsp_engine_reset + scrub wait");
     }
 
     /* --- v2.12: проверка разлочки SEC2 после смерти GFW --- */
