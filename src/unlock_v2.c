@@ -2027,6 +2027,9 @@ fx_poll32(UINTN reg, UINT32 mask, UINT32 want, UINTN maxIter, UINTN stuckAt,
  */
 #define FX_DMAQ_STUCK      16
 #define FX_DMAQ_MAX_US     4000
+/* Потолок ожидания скраба IMEM: 30 000 x Stall(100мкс) = 3 с, как и было.
+   Равен прежнему бюджету итераций, НЕ ускоряет ничего — добавлен только */
+#define FX_SCRUB_MAX_US    300000
 
 static VOID
 falcon_dma_wait_not_full(void)
@@ -2151,22 +2154,59 @@ falcon_dma_wait_idle(void)
  * Именно это давало «DEAD5EC1 везде», «SEC=1 DMA не доставляет» и halt'ы. */
 #define SEC2_HWCFG2             (NV_PSEC_BASE + 0x0F4)
 #define GSP_HWCFG2              (GSP_BASE  + 0x0F4)
+/* ЗДЕСЬ РАННИЙ ВЫХОД ПО «РЕГИСТРЫ НЕ МЕНЯЮТСЯ» НЕДОПУСТИМ.
+ *
+ * Это ожидание работы железа, а не ожидание состояния. После ENGINE-reset
+ * Falcon затирает IMEM/DMEM паттерном DEAD5EC*; DMA, отправленная во время
+ * затирания, соревнуется со скраббером и стирается. Отсюда «DEAD5EC1
+ * везде», «SEC=1 DMA не доставляет» и halt'ы.
+ *
+ * Почему «не меняется» здесь НЕ значит «готово». Пауза между итерациями
+ * 100 мкс, то есть несколько одинаковых чтений — это десятки мкс тишины.
+ * Скраб IMEM объёмом 0xE200 длится дольше, и всё это время регистры стоят
+ * одинаковыми: сначала DMACTL[2:1] выставляется, память затирается, и
+ * только потом биты снимаются. То есть ровно в том окне, где скраб ещё
+ * ИДЁТ, регистры и не меняются.
+ *
+ * В первой версии v3.16 здесь стоял выход «оба регистра 64 чтения подряд не
+ * меняются -> вернуть FALSE». Он срабатывал именно в этом окне, FALSE
+ * игнорировался вызывающим кодом, и DMA уходила в затираемую память.
+ * Симптом на прогоне 2026-10-02 ровно предсказуемый:
+ *     WPR2 ESTABLISHED  8 раз  (было 24)
+ *     dbg=0x007E0009            (было 0x00000000) — ядро стартует и гибнет
+ *     IVER empty=1 x4           — DMA не доставила
+ *     маски открылись 5 из 25   (было 24 из 25)
+ *
+ * Здесь «жди или умирай» — единственно правильное поведение. Ускорить это
+ * нельзя: это ожидание реальной работы, а не пустое вращение (в отличие от
+ * gsp_dma_wait_*, где регистр замирает намертво).
+ *
+ * Потолок по времени FX_SCRUB_MAX_US равен прежнему бюджету итераций
+ * (30 000 x 100 мкс = 3 с) и ничего не ускоряет — он только выражает
+ * ограничение в единицах, не зависящих от машины. Фактическое время
+ * печатается в лог: это те данные, которых раньше не было. */
 static BOOLEAN
 falcon_wait_scrub_done(UINT32 dmactlReg, UINT32 hwcfg2Reg, const CHAR16 *tag)
 {
     UINTN i;
     UINT32 dct = 0xFFFFFFFF, hcfg = 0xFFFFFFFF;
-    for (i = 0; i < 30000; i++) {                 /* до ~3с */
+    UINT64 t0 = fx_now_us();
+    for (i = 0; i < 30000; i++) {
         dct = mmio_read32(dmactlReg);
-        if ((dct & 0x6) == 0) {                   /* IMEM[2]+DMEM[1] скраб завершён */
+        if ((dct & 0x6) == 0) {
             hcfg = mmio_read32(hwcfg2Reg);
-            if (!(hcfg & (1 << 12)))              /* HWCFG2.MEM_SCRUBBING готов */
-                return TRUE;
+            if (!(hcfg & (1 << 12)))
+                goto done;
         }
+        if (t0 && fx_now_us() - t0 >= FX_SCRUB_MAX_US) break;
         uefi_call_wrapper(BS->Stall, 1, 100);
     }
     Print(L"%s: scrub-wait ТАЙМАУТ dmactl=0x%08x hwcfg2=0x%08x\n", tag, dct, hcfg);
-    return FALSE;
+done:
+    ulogf(L"SCRUB  %s: %lldus (%d итераций) dmactl=0x%08x hwcfg2=0x%08x %s\n",
+          tag, (INT64)(fx_now_us() - t0), (INTN)i, (INTN)dct, (INTN)hcfg,
+          ((dct & 0x6) == 0 && !(hcfg & (1 << 12))) ? L"done" : L"NOT done");
+    return ((dct & 0x6) == 0 && !(hcfg & (1 << 12)));
 }
 
 /* ждать RESET_READY (HWCFG2[31]) ДО сброса — как kflcnPreResetWait_GA102 */
@@ -4171,7 +4211,19 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
                     __asm__ volatile("wbinvd" ::: "memory");
                     mmio_write32(GSP_CPUCTL,
                                  NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE);
-                    uefi_call_wrapper(BS->Stall, 1, 200000);
+    /* v3.16: было слепое Stall(200000) на КАЖДУЮ из 16 команд, а
+     * fwsec_boot_gsp_sig зовётся 24 раза -> 16 x 200 мс x 24 = 77 с.
+     * Теперь ждём HALT с тем же потолком 200 мс.
+     *
+     * ИМЕННО ЗДЕСЬ в первой версии v3.16 всё сломалось. Примитив из
+     * шага 3 тут применим, потому что дальше ЧИТАЕТСЯ результат работы
+     * (PLM/priv/WPR2 до и после). Но порядок обязателен: сначала
+     * защёлка старта (CPUCTL == STARTCPU), потом завершение. Запись
+     * CPUCTL posted, и ожидание одного лишь «CPUCTL != STARTCPU»
+     * выходит через 0-2 мкс вместо 200 мс — это и уронило
+     * разблокировку на 2026-10-02 (WPR2 8 раз вместо 24, dbg=0x007E0009,
+     * маски 5 из 25 вместо 24). */
+    fx_wait_falcon_halt(GSP_CPUCTL, 200000, L"v2.43 cmd scan");
                     plmA = mmio_read32(REG_FEAT_OVR_PLM);
                     privA = mmio_read32(0x00118128);
                     wprA = mmio_read32(REG_PFB_MMU_WPR2_LO);
