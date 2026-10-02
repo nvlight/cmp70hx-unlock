@@ -189,6 +189,7 @@ static INTN app_memcmp(CONST VOID *a, CONST VOID *b, UINTN n)
  * BlockIo — без SimpleFileSystem (он на этой плате вешает прошивку)
  * и без NVRAM (тем более). Реализация у блока cmp90_bio_read. */
 static void ulogf(const CHAR16 *fmt, ...);
+static void log_ms(const CHAR16 *tag);   /* v3.16: метки времени; нужна и до определения */
 static void log_flush_sector(BOOLEAN force);
 static void log_init(EFI_HANDLE ImageHandle);
 static void log_store_ptr(EFI_BLOCK_IO_PROTOCOL *bio, UINT32 next);
@@ -2081,8 +2082,26 @@ fx_diag_gate(void)
     return FALSE;
 }
 
-/* ---- Ждать отработки Falcon после CPUCTL=STARTCPU --------------------
+/* Потолок фазы «реагирует ли CPU». СМ. ВНИЗЕ — почему именно 100 мс.
  *
+ * ВНИМАНИЕ, ЭТО ЧИСЛЕННЫЙ ПАРАМЕТР ИЗ ОДНОГО ПРОГОНА. Проверено на
+ * карте 2026-10-02: CPUCTL после STARTCPU ведёт себя так —
+ *   [E1] BL        : 0x00000000 всё время, НИ РАЗУ не стал STARTCPU
+ *   v2.43 cmd scan : 0x00000000 первые ~113 мс, потом 0x00000010
+ * То есть 100 мс хватает, чтобы поймать и «вообще не отреагировал», и
+ * «отреагировал с задержкой»; для v2.43 потолок срезает ожидание с
+ * 113 мс до 100 мс, что несущественно (этот блок теперь выполняется
+ * один раз за прогон, а не 24).
+ *
+ * Если на другой карте CPU отвечает медленнее 100 мс, ожидание срежется
+ * и в логе появится verdict=no-response вместе с cpuctl=0x00000000 — по
+ * этим двум полям видно, что потолок мал, и его надо поднять. Именно
+ * поэтому вердикт печатается всегда, а не только в отладочном виде.
+ */
+#define FX_WAKE_MAX_US    100000
+/* ---- Ждать отработки Falcon после CPUCTL=STARTCPU --------------------
+ * ПОТОЛКОВ ДВА, И ЭТО СУТЬ ИСПРАВЛЕНИЯ ПОСЛЕ ПРОГОНА 2026-10-02.
+ *   нечего: выходим сразу.
  * ИСПОЛЬЗУЕТСЯ ТОЛЬКО ЗДЕСЬ. Ни в одном другом ожидании этот примитив
  * неприменим: см. предупреждение в fx_wait_falcon_halt.
  *
@@ -2112,34 +2131,78 @@ static UINT64
 fx_wait_falcon_halt(UINTN cpuctlReg, UINT64 budgetUs, const CHAR16 *what)
 {
     UINT64 t0 = fx_now_us();
-    UINT64 dl = t0 + budgetUs;
+    UINT64 wakeDl;                    /* потолок фазы «проснулся ли»   */
     UINT32 cc = 0;
     BOOLEAN started = FALSE;
+    const CHAR16 *verdict;
 
     if (!t0) {                    /* часы не откалиброваны: старый режим */
         uefi_call_wrapper(BS->Stall, 1, (UINTN)budgetUs);
         return budgetUs;
     }
+
+    /* ---- ФАЗА A: реагирует ли CPU вообще ------------------------------
+     *
+     * Вопрос не «работает ли ещё Falcon», а «заметил ли CPUCTL нашу
+     * запись». Если запись не защёлкнулась, CPU не стартует, и ждать
+     * дальше бессмысленно: ждать нечего.
+     *
+     * Именно эту фазу потеряла первая версия. Там был ОДИН потолок на
+     * всё, значение 0x00000000 не считалось реакцией, и на [E1] BL
+     * цикл отрабатывал полную секунду — 48 раз за прогон:
+     *     FWL  [E1]: falcon settle 1023071us (budget 1000000us,
+     *                                          cpuctl=0x00000000, started=0)
+     *     сумма за прогон: 49,1 с
+     * Для сравнения, в сборке FC40F49F тот же участок стоил 1,1 с
+     * (48 x 22,8 мс), и результат разблокировки был ИДЕНТИЧЕН: 24 из 25.
+     * То есть пауза здесь vestigial — она не влияет на результат, и
+     * ждать секунду, доказывая, что ничего не происходит, — чистый расход.
+     */
+    wakeDl = t0 + FX_WAKE_MAX_US;
     for (;;) {
         cc = mmio_read32(cpuctlReg);
         if (cc == NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE) {
             started = TRUE;                 /* старт защёлкнулся */
-        } else if (started || (cc != 0 && cc != 0xFFFFFFFFU)) {
-            break;                          /* отработал / упал */
-        }
-        if (fx_now_us() >= dl) {
-            Print(L"%s: HALT не дождались за %lldмкс (cpuctl=0x%08x, "
-                  L"started=%d)\n", what, (INT64)budgetUs, (INTN)cc,
-                  (INTN)started);
             break;
+        }
+        if (cc != 0 && cc != 0xFFFFFFFFU) {
+            /* Ненулевое, отличное от STARTCPU: 0x00000010 HALTED или
+             * 0xBADF5620 lockdown. CPU отреагировал и уже закончил. */
+            verdict = L"finished-immediately";
+            goto report;
+        }
+        if (fx_now_us() >= wakeDl) {
+            verdict = L"no-response";
+            goto report;
         }
         fx_sleep_us(200);
     }
+
+    /* ---- ФАЗА B: ждём окончания ---------------------------------------
+     * Сюда попадаем только если действительно видели STARTCPU. */
+    {
+        UINT64 dl = t0 + budgetUs;
+        for (;;) {
+            cc = mmio_read32(cpuctlReg);
+            if (cc != NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE) break;
+            if (fx_now_us() >= dl) {
+                Print(L"%s: HALT не дождались за %lldмкс "
+                      L"(cpuctl=0x%08x)\n", what, (INT64)budgetUs, (INTN)cc);
+                verdict = L"started-timeout";
+                goto report;
+            }
+            fx_sleep_us(200);
+        }
+        verdict = L"started-then-finished";
+    }
+
+report:
     {
         UINT64 spent = fx_now_us() - t0;
-        ulogf(L"FWL    %s: falcon settle %lldus (budget %lldus, "
-              L"cpuctl=0x%08x, started=%d)\n", what, (INT64)spent,
-              (INT64)budgetUs, (INTN)cc, (INTN)started);
+        ulogf(L"FWL    %s: falcon settle %lldus (wake=%dus budget=%lldus, "
+              L"cpuctl=0x%08x, started=%d, verdict=%s)\n",
+              what, (INT64)spent, (INTN)FX_WAKE_MAX_US, (INT64)budgetUs,
+              (INTN)cc, (INTN)started, verdict);
         return spent;
     }
 }
@@ -3756,6 +3819,12 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
             CopyMem((VOID *)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
             __asm__ volatile("wbinvd" ::: "memory");
             early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
+            /* v3.16: метки времени на каждой итерации рендер-цикла.
+             * Без них 24 одинаковых миницикла выглядят в логе как одна
+             * расплывчатая стадия: в прогоне 2026-10-02 не смогли назвать
+             * полное время, потому что финальной метки не было. Чисто
+             * измерение, на поведение не влияет. */
+            log_ms(L"render masks: booter#1 done (early path)");
             ulogf(L"G2RMK  %s pass%d booter#1: PLM=0x%08x\n", tag, (INTN)pass + 1,
                   mmio_read32(0x00823804U));
 
@@ -3769,6 +3838,7 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
                   L"(now 0x%08x)\n", tag, (INTN)pass + 1, tgt[k],
                   mmio_read32(tgt[k]));
             (VOID)booter_load_v67(wprMetaPhys, ucodePhys);
+            log_ms(L"render masks: booter#2 done (ROP write)");
             /* 42.10: ботер портит WPR2. Восстанавливаем и ПИШЕМ РЕЗУЛЬТАТ,
              * потому что восстановление может не удержаться. */
             mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
@@ -3817,6 +3887,7 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
               ? L"expected" : L"*** UNEXPECTED ***",
           (done > 0) ? L"open, GFX_SPEED_SELECT can engage"
                      : L"closed, GFX_SPEED_SELECT will not engage");
+    log_ms(L"render masks: sweep finished");
 #undef NTGT
 }
 #endif /* RENDER_MASKS */
@@ -10066,6 +10137,7 @@ done:
      * DMAQ/DMAQ2 (cost=N reads/...us). */
     ulogf(L"TIME   DMA queue: full timeouts=%d idle timeouts=%d\n",
           (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo);
+    log_ms(L"final: before return to firmware");
     /* Пропуск диагностических экспериментов обязан быть виден, иначе
      * «оптимизация» выглядит бы как «эксперимента перестал существовать».
      * Печатаются и число выполненных, и число пропущенных прогонов. */
