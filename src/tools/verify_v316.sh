@@ -131,6 +131,14 @@ else
     # отсутствие - как 'depth OK'. Маркер 'depth OK' означает: строка в
     # бинаре есть, и в логе она ОБЯЗАТЕЛЬНО появится, то есть механизм
     # защиты не вырезан оптимизатором.
+    #
+    # v3.20: добавлены 'DEPTH LEAK' и 'DEPTH UNDERFLOW' - обе строки о
+    # перекосе обязаны быть в бинаре, чтобы в логе могла появиться ЛЮБАЯ
+    # из них. Пока в коде был только underflow, а ломал таблицу leak
+    # (begin без end), и молчание выглядело как 'depth OK'.
+    # Добавлен маркер 'console ring dump to log': фазовый замер вызова
+    # выгрузки кольца, который наконец отличает 'функцию не звали' от
+    # 'звали, но вывод потерялся'.
     for m in \
         'BL settle' \
         'DMAQ2' \
@@ -153,6 +161,9 @@ else
         'FBP    SKIPPED' \
         'render masks: fast=' \
         'depth OK' \
+        'DEPTH LEAK' \
+        'DEPTH UNDERFLOW' \
+        'console ring dump to log' \
         'CHECK' \
         'PRN   ==== console ring' \
         'console ring NOT DUMPED' \

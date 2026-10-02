@@ -308,15 +308,14 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    2. 'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET' <- main marker" -ForegroundColor Yellow
     Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
     Write-Host "    4. no 'dbg=0x007E0009' anywhere" -ForegroundColor Yellow
-    Write-Host "    5. 'TIME   depth OK' or 'DEPTH UNDERFLOW x N' - phase nesting" -ForegroundColor Yellow
-    Write-Host "    6. 'TIME   === phase accounting ===' plus" -ForegroundColor Yellow
-    Write-Host "       'TIME   CHECK ... unaccounted ...'          <- phases vs elapsed" -ForegroundColor Yellow
-    Write-Host "    7. 'PRN   ==== console ring ...' or 'NOT DUMPED: <reason>'" -ForegroundColor Yellow
-    Write-Host "    8. 'CHECK *** FAILED' or 'DEPTH UNDERFLOW' mean the phase table" -ForegroundColor Yellow
-    Write-Host "       cannot be trusted - stop and read before optimising anything" -ForegroundColor Yellow
-    Write-Host "  Baseline: out\usb-log-v318.txt (stage 3, 86 s - REGRESSION, rejected)" -ForegroundColor Yellow
-    Write-Host "  Expected: about 55 s counter, and the wall clock should drop by" -ForegroundColor Yellow
-    Write-Host "  ~10 s too - the 541-line console dump is gone (9.1 s at the measured" -ForegroundColor Yellow
-    Write-Host "  16.8 ms per console call) and the final Stall is 2 s -> 0.5 s." -ForegroundColor Yellow
+    Write-Host "    5. 'TIME   depth OK (balanced...)' - or DEPTH LEAK / UNDERFLOW" -ForegroundColor Yellow
+    Write-Host "    6. 'TIME   === phase accounting ===' with a NON-ZERO SUM top-level" -ForegroundColor Yellow
+    Write-Host "    7. 'TIME   CHECK ... unaccounted ...%'  - must be well under 100%" -ForegroundColor Yellow
+    Write-Host "    8. 'console ring dump to log' in the phase table + 'PRN ...' in log" -ForegroundColor Yellow
+    Write-Host "    9. 'CHECK *** FAILED', 'DEPTH LEAK' or 'DEPTH UNDERFLOW' mean the" -ForegroundColor Yellow
+    Write-Host "       phase table cannot be trusted - stop and read, do not optimise" -ForegroundColor Yellow
+    Write-Host "  Baseline: out\usb-log-v319.txt (stage 4, 57 s wall / 55.9 s counter, 8 of 8)" -ForegroundColor Yellow
+    Write-Host "  Expected: about the same time - this stage only repairs measurement, it" -ForegroundColor Yellow
+    Write-Host "  does not change behaviour. If the runtime MOVES, something else changed." -ForegroundColor Yellow
 }
 exit 0
