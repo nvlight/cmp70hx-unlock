@@ -158,6 +158,25 @@ if ($r.Success) {
     Note "нет строки RESETREADY в формате этапа 10 (skipped=) - сборка старше"
 }
 
+# --- 9b. готовность устройства после FLR ----------------------------------
+# Этап 13. Секция FLR стоит 499,3 мс при бюджете 500 мс, то есть почти
+# целиком из двух слепых пауз. Здесь заменена одна из них - та, что стоит
+# сразу после инициирования FLR - на ожидание ответа конфигурационного
+# пространства. Бюджет остался 200 мс, поэтому худший случай равен прежнему.
+$f = [regex]::Match($text, 'FLRREADY calls=(\d+) fast=(\d+) waited=(\d+) never=(\d+) total=(\d+)us max=(\d+)us last_id=0x([0-9A-Fa-f]+) last_raw=0x([0-9A-Fa-f]+)')
+if (-not $f.Success) {
+    Note "нет строки FLRREADY - сборка старше этапа 13, замер готовности после FLR в ней не было"
+} else {
+    Ok ("FLRREADY calls=" + $f.Groups[1].Value + " fast=" + $f.Groups[2].Value +
+        " waited=" + $f.Groups[3].Value + " never=" + $f.Groups[4].Value +
+        " max=" + $f.Groups[6].Value + "us  last_id=0x" + $f.Groups[7].Value)
+    if ($f.Groups[4].Value -eq '0') {
+        Note ("устройство ответило всегда; max=" + $f.Groups[6].Value + " мкс - это и есть измеренная величина для этапа 14 (пауза 300 мс)")
+    } else {
+        Note ("устройство НЕ ответило " + $f.Groups[4].Value + " раз из " + $f.Groups[1].Value + " - значит бюджет 200 мс выжигается целиком, замены нет")
+    }
+}
+
 # --- 10. время прогона -----------------------------------------------------
 $last = [regex]::Matches($text, 'TIME  t=(\d+)ms')
 if ($last.Count -gt 0) { Note ("счётчик прогона: " + $last[$last.Count-1].Groups[1].Value + " мс") }

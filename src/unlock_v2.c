@@ -875,7 +875,32 @@ is_target_gpu(UINT32 Id)
 #endif
 #define REG_FUSE_SEL_CAND     0x0082380CUL   /* кандидат: сейчас 0x00888888 */
 #define REG_FUSE_ROUTINE      0x00823810UL   /* сопровождающий, 0x002AAAAA */
-static BOOLEAN g_postFlr = FALSE;   /* после do_flr() MMIO не читать */
+static BOOLEAN g_postFlr = FALSE;
+
+/* v3.29, ЭТАП 13: замер готовности устройства после FLR.
+ *
+ * Секция 'render: FLR + 300ms settle' измеряется 499,3 мс при бюджете
+ * 500 мс, а внутри стоят ДВЕ слепые паузы подряд: Stall(200000) в do_flr()
+ * сразу после инициирования FLR, и Stall(300000) в вызывающем коде.
+ * Обход PCIe-capability около нуля. То есть 499 мс - чистое ожидание, и это
+ * 22 % прогона.
+ *
+ * Кандидат на событие: после инициирования FLR конфигурационное пространство
+ * не отвечает (читается 0xFFFFFFFF), и снова отвечает, когда устройство
+ * отошло. Это ровно то, что нужно измерять, а не угадывать.
+ *
+ * Бюджет остаётся 200 мс, то есть ХУДШИЙ СЛУЧАЙ РАВЕН СЕГОДНЯШНЕМУ: если
+ * устройство не ответит, мы потратим те же 200 мс. */
+#define FX_FLR_BUDGET_US  200000   /* раньше был слепой Stall(200000) */
+#define FX_FLR_POLL_US    1000     /* период опроса конфигурационного чтения */
+static UINTN  fx_flrCalls = 0;      /* вызовов do_flr() */
+static UINTN  fx_flrFast = 0;       /* ответил сразу, без ожидания */
+static UINTN  fx_flrWaited = 0;     /* ответил после ожидания */
+static UINTN  fx_flrNever = 0;      /* не ответил за бюджет */
+static UINT64 fx_flrUs = 0;         /* суммарно мкс */
+static UINT64 fx_flrUsMax = 0;       /* максимум по одному вызову */
+static UINT32 fx_flrLastId = 0;     /* последний прочитанный vendor/device id */
+static UINT32 fx_flrLastRaw = 0;    /* последнее сырое значение чтения */   /* после do_flr() MMIO не читать */
 
 /* ==== SEC2 Falcon microcontroller — hosts the signed "booter" ucode ====
  * This is where the exploit runs: we craft its IMEM/DMEM via DMA and let
@@ -2671,6 +2696,15 @@ fx_mk_report(void)
           (INTN)fx_rqCalls, (INTN)fx_rqFast, (INTN)fx_rqSlow,
           (INT64)fx_rqUs, (INT64)fx_rqUsMax, fx_rqLastCpu,
           (INTN)FX_RQ_BUDGET_US);
+    /* v3.29: сводка по готовности устройства после FLR. Это предмет этапа 14:
+     * max= здесь измеренная величина, по которой ставится бюджет паузы
+     * 300 мс в вызывающем коде, вместо того чтобы брать её по аналогии. */
+    ulogf(L"TIME   FLRREADY calls=%d fast=%d waited=%d never=%d "
+          L"total=%lldus max=%lldus last_id=0x%04x last_raw=0x%08x "
+          L"(budget=%dus)\n",
+          (INTN)fx_flrCalls, (INTN)fx_flrFast, (INTN)fx_flrWaited,
+          (INTN)fx_flrNever, (INT64)fx_flrUs, (INT64)fx_flrUsMax,
+          fx_flrLastId, fx_flrLastRaw, (INTN)FX_FLR_BUDGET_US);
     ulogf(L"TIME   NOTE: SUM is NOT a phase total and may EXCEED elapsed, "
           L"because marks are nested. For ONE duration use the difference "
           L"of two adjacent 'TIME t=' lines.\n");
@@ -7804,7 +7838,55 @@ do_flr(void)
             UINT16 devctl;                    /* Device Control = cap+0x08 */
             devctl = (UINT16)cfg_read32(capPtr + 0x08);
             cfg_write32(capPtr + 0x08, devctl | (1 << 15));  /* Initiate FLR */
-            uefi_call_wrapper(BS->Stall, 1, 200000);  /* 200ms */
+            /* v3.29, ЭТАП 13: БЫЛО uefi_call_wrapper(BS->Stall, 1, 200000)
+             * СЛЕПАЯ пауза 200 мс. Секция FLR стоит 499,3 мс при бюджете
+             * 500 мс, то есть почти целиком состоит из ДВУХ таких пауз.
+             * Это 22 % прогона.
+             *
+             * СТАЛО: ждём СОБЫТИЕ - конфигурационное пространство снова
+             * отвечает. Проверяем vendor/device id по адресу 0x00: во время
+             * сброса читается 0xFFFFFFFF, когда устройство отошло - осмысленное
+             * значение.
+             *
+             * ПРИМЕР ПРОВЕРКИ, А НЕ ДОПУЩЕНИЕ. Тот же приём уже сработал для
+             * CPUCTL в QUIESCE: там условие срабатывало мгновенно на 27 местах
+             * из 37 и это сэкономило 8 секунд. Здесь заранее НИЧЕГО не
+             * известно - устройство может отошть и за миллисекунды, и никогда.
+             * Поэтому бюджет остаётся теми же 200 мс и худший случай буквально
+             * равен сегодняшнему. Мы просто узнаём ответ.
+             *
+             * ЧТО ПЕЧАТАЕТСЯ. Каждый вызов даёт строку FLRW с ответом
+             * (fast/waited/never), временем и прочитанным значением. Эти числа -
+             * предмет этапа 14: они скажут, сколько реально нужно ждать перед
+             * cfg_write32(0x10, saveBar) в вызывающем коде. */
+            {
+                UINT64 t0 = fx_now_us(), dl;
+                UINT32 raw, id;
+                fx_flrCalls++;
+                raw = cfg_read32(0x00);
+                if (raw == 0xFFFFFFFFU) {
+                    dl = t0 + FX_FLR_BUDGET_US;
+                    for (;;) {
+                        uefi_call_wrapper(BS->Stall, 1, FX_FLR_POLL_US);
+                        raw = cfg_read32(0x00);
+                        if (raw != 0xFFFFFFFFU) break;
+                        if (fx_now_us() >= dl) break;
+                    }
+                }
+                id = raw & 0xFFFFU;
+                if (raw == 0xFFFFFFFFU) fx_flrNever++;
+                else if (fx_now_us() - t0 < FX_FLR_POLL_US) fx_flrFast++;
+                else fx_flrWaited++;
+                fx_flrLastRaw = raw;
+                fx_flrLastId  = id;
+                {
+                    UINT64 d = fx_now_us() - t0;
+                    fx_flrUs += d;
+                    if (d > fx_flrUsMax) fx_flrUsMax = d;
+                    ulogf(L"FLRW  post-FLR ready in %lldus (id=0x%04x "
+                          L"raw=0x%08x)\n", (INT64)d, id, raw);
+                }
+            }
             Print(L"FLR: issued (pcie cap @0x%x)\n", capPtr);
             return EFI_SUCCESS;
         }

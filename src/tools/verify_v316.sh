@@ -196,6 +196,8 @@ else
         'fast=%d slow=%d' \
         'last_cpuctl=' \
         'QSLOW' \
+        'FLRW  post-FLR ready in' \
+        'FLRREADY calls=' \
         'rr: [E1] BL reset-ready' \
         'rr: [E3] ResetIntoRiscv ready' \
         'rr: booter SEC2 reset' \

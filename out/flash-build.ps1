@@ -314,30 +314,22 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 12 STEP 2 - quiesce budget 500 -> 250 ms. Another bisection probe." -ForegroundColor Yellow
+    Write-Host "    7. 'TIME  FLRREADY calls=N fast=F waited=W never=X max=M us' <- READ FIRST" -ForegroundColor Yellow
+    Write-Host "       Stage 13 replaced ONE blind stall with an event wait: after initiating" -ForegroundColor Yellow
+    Write-Host "       FLR we now wait for config space to answer again (offset 0x00 stops" -ForegroundColor Yellow
+    Write-Host "       reading 0xFFFFFFFF). The budget stayed at 200 ms, so the WORST CASE" -ForegroundColor Yellow
+    Write-Host "       IS UNCHANGED - if the device never answers, we spend the same 200 ms." -ForegroundColor Yellow
+    Write-Host "       never=X  ->  the replacement buys nothing; the stall is genuinely needed." -ForegroundColor Yellow
+    Write-Host "       max=M    ->  the MEASURED responsiveness, which sizes the other 300 ms" -ForegroundColor Yellow
+    Write-Host "                     stall in stage 14. Do not size it by analogy." -ForegroundColor Yellow
     Write-Host "" -ForegroundColor Yellow
-    Write-Host "       MEASURED (hardware, verify-log.ps1):" -ForegroundColor Yellow
-    Write-Host "          50 ms   = FAIL, render broken, 0 of 8   (v3.23)" -ForegroundColor Yellow
-    Write-Host "         250 ms   = THIS STEP" -ForegroundColor Yellow
-    Write-Host "         500 ms   = PASS, 20.6 s                  (v3.27)" -ForegroundColor Yellow
-    Write-Host "        1000 ms   = PASS, 25.6 s                  (v3.24-26)" -ForegroundColor Yellow
-    Write-Host "" -ForegroundColor Yellow
-    Write-Host "       EXPECTED ~18.1 s IF it passes. The arithmetic, so you can check it:" -ForegroundColor Yellow
-    Write-Host "         one slow call at 250 ms budget costs 260.5 ms (250 + 10 settle)" -ForegroundColor Yellow
-    Write-Host "         QSLOW says 10 of them: 10 x 260.5 = 2 610 ms (was 5 100 ms)" -ForegroundColor Yellow
-    Write-Host "         20 575 - (5 100 - 2 610) = 18 085 ms" -ForegroundColor Yellow
-    Write-Host "" -ForegroundColor Yellow
-    Write-Host "       A FAIL here is EXPECTED INFORMATION, not a regression - it halves" -ForegroundColor Yellow
-    Write-Host "       the interval. Then probe 125 ms if 250 passes, 200 ms if it fails." -ForegroundColor Yellow
-    Write-Host "       What must NOT change: 8 of 8 masks." -ForegroundColor Yellow
-    Write-Host "" -ForegroundColor Yellow
-    Write-Host "       NOTE: the previous step predicted 30.7 s and reality was 20.6 s, because" -ForegroundColor Yellow
-    Write-Host "       I added the saving instead of subtracting it. The number above is done" -ForegroundColor Yellow
-    Write-Host "       the other way round and is one line of addition." -ForegroundColor Yellow
+    Write-Host "       EXPECTED 16.6-18.1 s. The lower bound assumes the device answers fast;" -ForegroundColor Yellow
+    Write-Host "       the upper bound is guaranteed by the unchanged budget. I do NOT know" -ForegroundColor Yellow
+    Write-Host "       the responsiveness time - that is exactly what this run measures." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v327.txt (20.6 s, 8 of 8). Known good budget: 500 ms." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v328.txt (18.1 s, 8 of 8)." -ForegroundColor Cyan
 }
 exit 0
