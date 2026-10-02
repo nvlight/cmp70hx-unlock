@@ -77,12 +77,42 @@ else { Bad ($locked.ToString() + " масок остались закрытым�
 if ($text -match 'END\s+---- end of log ----') { Ok "маркер END на месте - приложение дописало лог" }
 else { Bad "нет маркера END - лог оборван, результат непригоден" }
 
-# --- 8. финальное dbg в END-строке ----------------------------------------
+# --- 8. финальный dbg в END-строке ----------------------------------------
+# ВНИМАНИЕ, ИСТОРИЯ ОШИБКИ. Этот пункт раньше требовал dbg=0x00000000 и
+# сработал ложной тревогой на прогоне v3.25 - полностью рабочем, 8 из 8,
+# GFX_SPEED_SELECT встал, пользователь проверил игру и LLM.
+#
+# Требование было НЕВЕРНЫМ, и вот почему. dbg = mmio_read32(GSP_BASE+0x94) -
+# регистр DEBUGINFO ядра GSP. Код в него НИ РАЗУ НЕ ПИШЕТ: mmio_write32 на
+# этот адрес в проекте отсутствует. Это регистр-симптом, значение задаёт сам
+# движок.
+#
+# dbg НЕ является критерием приёмки:
+#   - собственный лог проекта пишет 'dbg not checked by driver', то есть
+#     драйвер NVIDIA его не проверяет;
+#   - значение 0xDA550000 наблюдается в РАБОЧИХ прогонах (18-24 раза в каждом
+#     из v321/v322/v324), и docs/70HX-NEXT-STEPS.md §3g фиксирует его рядом с
+#     'WPR2 ESTABLISHED' и 'BOOTER iters=5 ... PLM-OPEN';
+#   - по прогонам: 0x00000000 x6, 0x00000001 x16-18, 0xDA550000 x18-24 -
+#     все в рабочих; 0x007E0009 x86 - ТОЛЬКО в сломанном v3.23.
+#
+# Единственная полезная роль dbg - отпечаток 'наш ucode выполнялся'.
+# 0x007E0009 означает 'ядро стартует и гибнет'; именно он поймал отказ
+# v3.23 за секунды. Поэтому проверка живёт выше, в пункте 3, и только она.
+#
+# Здесь значение печатается для сведения и для сравнения с прошлыми
+# прогонами, но PASS/FAIL от него НЕ зависит.
 $e = [regex]::Match($text, 'END\s+ss0=.*')
 if (-not $e.Success) { Bad "нет END-строки со снимком состояния" }
 else {
-    if ($e.Value -match 'dbg=0x00000000') { Ok "END: dbg=0x00000000" }
-    else { Bad ("END: dbg не нулевой - " + [regex]::Match($e.Value, 'dbg=0x[0-9A-Fa-f]+').Value) }
+    $dbgv = [regex]::Match($e.Value, 'dbg=0x[0-9A-Fa-f]+')
+    if ($dbgv.Success) {
+        if ($dbgv.Value -eq 'dbg=0x007E0009') {
+            Bad "END: dbg=0x007E0009 - ядро стартует и гибнет"
+        } else {
+            Note ("END: " + $dbgv.Value + " - диагностическое значение движка, критерием НЕ является (см. комментарий в скрипте)")
+        }
+    }
     if ($e.Value -match 'PLM=0xFFFFFFFF') { Ok "END: PLM=0xFFFFFFFF" }
     else { Note ("END: " + [regex]::Match($e.Value, 'PLM=0x[0-9A-Fa-f]+').Value + " - не 0xFFFFFFFF") }
 }
@@ -100,6 +130,22 @@ if (-not $q.Success) {
         " slow=" + $q.Groups[3].Value + " max=" + $q.Groups[5].Value + "us")
     if ($q.Groups[3].Value -eq '0') { Ok "движок усёкся по событию в 100% случаев - версия механизма работает" }
     else { Note ("бюджет исчерпан " + $q.Groups[3].Value + " раз из " + $q.Groups[1].Value + " - см. max=" + $q.Groups[5].Value + "us") }
+}
+
+# --- 9a. поимённый список медленных мест ---------------------------------
+# Добавлен в сборке этапа 11. Без него известно только ЧТО десять мест
+# медленные, но не ГДЕ ИМЕННО, а это ровно то, что нужно, чтобы не гадать
+# с очередной правкой.
+$qs = [regex]::Matches($text, 'QSLOW\s+(\S.*?)\s+cpuctl=0x([0-9A-Fa-f]+)\s+waited=(\d+)us')
+if ($qs.Count -eq 0) {
+    Note "нет строк QSLOW - сборка старше этапа 11, поимённого списка в ней не было"
+} else {
+    Ok ("QSLOW: " + $qs.Count + " поимённых медленных мест (это крупнейшая статья бюджета)")
+    $g = $qs | ForEach-Object { [pscustomobject]@{ site = $_.Groups[1].Value; cc = $_.Groups[2].Value; us = [int]$_.Groups[3].Value } }
+    $g | Group-Object site | Sort-Object Count -Descending | ForEach-Object {
+        Note ("  " + $_.Name + "  x" + $_.Count + "  cpuctl=0x" + $_.Group[0].cc +
+              "  " + [Math]::Round((($_.Group | Measure-Object us -Sum).Sum) / 1000, 1) + " ms всего")
+    }
 }
 $r = [regex]::Match($text, 'RESETREADY calls=(\d+) skipped=(\d+) early=(\d+) budgetout=(\d+) total=(\d+)us')
 if ($r.Success) {

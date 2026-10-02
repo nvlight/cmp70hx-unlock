@@ -3033,7 +3033,7 @@ falcon_wait_engine_quiesced(const CHAR16 *tag, UINT32 cpuctlReg)
 {
     UINT64 t0 = fx_now_us(), dl;
     UINT32 cc;
-    BOOLEAN already = FALSE;
+    BOOLEAN already = FALSE, wasSlow = FALSE;
     if (!t0) return FALSE;              /* часы не откалиброваны */
     fx_rqCalls++;
     cc = mmio_read32(cpuctlReg);
@@ -3049,6 +3049,7 @@ falcon_wait_engine_quiesced(const CHAR16 *tag, UINT32 cpuctlReg)
     for (;;) {
         if (fx_now_us() >= dl) {        /* бюджет: худший случай = v322 */
             fx_rqSlow++;
+            wasSlow = TRUE;
             cc = mmio_read32(cpuctlReg);   /* финальное чтение для лога */
             goto out;
         }
@@ -3071,6 +3072,24 @@ out:
         fx_rqUs += d;
         if (d > fx_rqUsMax) fx_rqUsMax = d;
         fx_rqLastCpu = cc;
+        /* v3.26: ПОИМЯННЫЙ СПИСОК МЕДЛЕННЫХ МЕСТ.
+         *
+         * Сводка QUIESCE сливает все 37 вызовов в три числа, поэтому из
+         * прогона v3.25 известно только ЧТО десять мест медленные, но не
+         * ГДЕ ИМЕННО. Любая правка после этого была бы прикидкой - ровно
+         * та ошибка, которая стоила этапу 8 сломанного рендера, а этапу 9
+         * десяти лишних секунд.
+         *
+         * Поэтому каждый медленный вызов печатает отдельную строку: имя
+         * места, состояние CPUCTL, на котором ожидание остановилось, и
+         * сколько ждали. Десять строк за прогон по 10 мкс - то есть ничего.
+         *
+         * Имя места - это tag вызывающего кода, то есть ровно то, что
+         * уже видно в строках 'rr: ...' из этапа 7. */
+        if (wasSlow)
+            ulogf(L"QSLOW  %s cpuctl=0x%08x waited=%lldus "
+                  L"(budget exhausted, engine did NOT quiesce)\n",
+                  tag, cc, (INT64)d);
         /* Метка ставится по ТОЙ ЖЕ схеме, что и раньше, но теперь видно и
          * время ожидания события, и сколько раз бюджет исчерпан. */
         fx_mk_acc(t0, tag);

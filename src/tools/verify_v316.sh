@@ -195,6 +195,7 @@ else
         'QUIESCE calls=' \
         'fast=%d slow=%d' \
         'last_cpuctl=' \
+        'QSLOW' \
         'rr: [E1] BL reset-ready' \
         'rr: [E3] ResetIntoRiscv ready' \
         'rr: booter SEC2 reset' \

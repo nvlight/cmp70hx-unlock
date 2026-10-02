@@ -314,23 +314,15 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. 'TIME  QUIESCE calls=N fast=F slow=S max=M us'  <- READ FIRST" -ForegroundColor Yellow
-    Write-Host "       slow>0 means the engine did NOT reach CPUCTL=0 within the" -ForegroundColor Yellow
-    Write-Host "       1 s budget: my explanation is then incomplete and nothing may" -ForegroundColor Yellow
-    Write-Host "       be shortened." -ForegroundColor Yellow
+    Write-Host "    7. 'QSLOW  <место> cpuctl=0x... waited=...us'  <- READ FIRST" -ForegroundColor Yellow
+    Write-Host "       One line per call site where the engine did NOT quiesce within" -ForegroundColor Yellow
+    Write-Host "       the 1 s budget. These are the 10.4 s - 40% of the whole run." -ForegroundColor Yellow
+    Write-Host "       This stage only NAMES them. No behaviour changed, so the time" -ForegroundColor Yellow
+    Write-Host "       should be ~25.6 s again. If it moves, something else changed." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Stage 8 passed the BUILD check 52/52 and still broke render 0 of 8," -ForegroundColor Yellow
-    Write-Host "  because the build check never asked. Verify the log, not the build." -ForegroundColor Yellow
-    Write-Host "  Baseline: out\usb-log-v324.txt (stage 9, 66.2 s, 8 of 8, VERIFIED)" -ForegroundColor Cyan
-    Write-Host "  Expected: ~25.5 s with 8 of 8. Stage 10 makes ONE wait instead of two:" -ForegroundColor Cyan
-    Write-Host "  the blind HWCFG2 poll is skipped where the engine is already quiesced." -ForegroundColor Cyan
-    Write-Host "  It ran on all 37 sites in v3.24 but was needed on only 10 - the other 27" -ForegroundColor Cyan
-    Write-Host "  answered instantly (fast=27 slow=10), so the second was pure waste." -ForegroundColor Cyan
-    Write-Host "  LOOK FOR: 'RESETREADY ... skipped=27' - if skipped=0, nothing changed." -ForegroundColor Yellow
-    Write-Host "  Expect ~10.4 s of waiting total. 25.5 s is an EXPECTATION; report" -ForegroundColor Yellow
-    Write-Host "  what the counter says, not what this line promises." -ForegroundColor Yellow
+    Write-Host "  Baseline: out\usb-log-v325.txt (stage 10, 25.6 s, 8 of 8, RECORD)" -ForegroundColor Cyan
 }
 exit 0
