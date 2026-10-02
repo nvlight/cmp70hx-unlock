@@ -2047,6 +2047,40 @@ falcon_dma_wait_not_full(void)
           (INTN)p.value);
 }
 
+/* ---- Ворота для дорогих диагностических экспериментов (v2.43/v2.45) ---
+ *
+ * Эксперименты лежат на пути УСПЕХА и повторяются 24 раза за прогон.
+ * Ответы не зависят от номера маски, а цена вопроса высока: фазовый учёт
+ * 2026-10-02 показал 6,1 с + 17,6 с = 23,7 с из 113 с, то есть 21 %.
+ *
+ * Правило то же, что у fx_repeat_gate: пропуск не молчит, а считается —
+ * иначе «оптимизация» выглядит бы как «эксперимент перестал существовать».
+ * Подробности и цена решения — в комментарии перед блоком v2.43.
+ *
+ * FX_DIAG_EVERY — на сколько вызовов приходится один запуск. При 24 это
+ * один полный эксперимент на прогон, то есть ровно те данные, ради которых
+ * блоки написаны. Значение 1 возвращает прежнее поведение.
+ *
+ * ОШИБКА, БЫЛА В ПЕРВОЙ ВЕРСИИ: стояло FX_DIAG_EVERY = 1 при условии
+ *     (calls % FX_DIAG_EVERY) == 1 || FX_DIAG_EVERY == 1
+ * то есть при 1 условие всегда истинно и ворота пропускали ВСЕ вызовы —
+ * экономии не было, но выглядело как «оптимизировано».
+ */
+#define FX_DIAG_EVERY   24
+static UINTN fx_diagCalls = 0;
+static UINTN fx_diagDone  = 0;
+
+static BOOLEAN
+fx_diag_gate(void)
+{
+    fx_diagCalls++;
+    if ((fx_diagCalls % FX_DIAG_EVERY) == 1 || FX_DIAG_EVERY == 1) {
+        fx_diagDone++;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 /* ---- Ждать отработки Falcon после CPUCTL=STARTCPU --------------------
  *
  * ИСПОЛЬЗУЕТСЯ ТОЛЬКО ЗДЕСЬ. Ни в одном другом ожидании этот примитив
@@ -4186,9 +4220,48 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
             /* v2.43: ПЕРЕБОР команд FWSEC (0x10..0x1F) — ищем команду записи
              * регистров (PLM!). Для каждой: патч init_cmd + re-DMA + STARTCPU
              * + 200мс poll → сравниваем PLM/privmask/WPR2 до/после. */
+/* ==== v2.43 + v2.45: ДИАГНОСТИЧЕСКИЕ ЭКСПЕРИМЕНТЫ =================
+             *
+             * Что здесь стоит. Оба блока — чистая диагностика, и оба
+             * лежат ВНУТРИ ветки «WPR2 ESTABLISHED», то есть выполняются
+             * на УЖЕ УСПЕШНОМ пути, после того как разблокировка уже
+             * состоялась. Они отвечают на два вопроса, ответы на которые
+             * зафиксированы в комментариях и в docs/SPEED-REFACTOR.md:
+             *   v2.43 — какая команда FWSEC пишет регистры (PLM);
+             *   v2.45 — работает ли SEC=1 DMA на GSP (не работает; вместо
+             *            нашего кода исполняется предзагруженный VBIOS).
+             * Ни один из них не влияет на то, открылись маски или нет.
+             *
+             * Сколько это стоило. Фазовый учёт прогона 2026-10-02 дал:
+             *     fwsec: v2.43 cmd scan   6,11 с  x24
+             *     fwsec: v2.45 SEC=1 discr 17,57 с x24
+             *     итого 23,7 с из 113 с прогона, то есть 21 % времени
+             *     на диагностику, которая повторяет один и тот же опыт
+             *     24 раза подряд. Ответ не меняется от повтора: он
+             *     зависит от железа, а не от номера маски.
+             *
+             * ЧТО СДЕЛАНО. Эксперименты выполняются на ПЕРВОМ успешном
+             * вызове, дальше пропускаются, а в лог пишется строка со
+             * счётчиком — так же, как устроен fx_repeat_gate. Данные
+             * эксперимента не теряются: первый прогон по-прежнему даёт
+             * полный перебор 0x10..0x1F и полную дискриминацию, то есть
+             * ровно те данные, ради которых блоки существуют.
+             *
+             * ПОЧЕМУ ЭТО НЕ «ПРОСТО УДАЛИТЬ». Ответ на вопрос «работает ли
+             * SEC=1 на GSP» однажды может стать «да» — например, после
+             * другой правки. Если бы блок был удалён, мы бы об этом не
+             * узнали, потому что узнавать было бы нечем. Один прогон с
+             * полными данными — это ровно то, ради чего оставлять.
+             *
+             * Вернуть прежнее поведение (полный эксперимент на каждом
+             * вызове): FX_DIAG_EVERY = 1.
+             */
+            if (fx_diag_gate())
             {
+            {   /* блок v2.43 в собственной области */
                 UINT8 *dmem2 = (UINT8*)(UINTN)(fwsecPhys + FWSEC_DATA_OFF);
                 UINT32 cmd;
+                Print(L"fwsec: v2.43 перебор команд 0x10..0x1F:\n");
                 Print(L"fwsec: v2.43 перебор команд 0x10..0x1F:\n");
                 for (cmd = 0x10; cmd <= 0x1F; cmd++) {
                     UINT32 *mapper2 = (UINT32*)(dmem2 + 0x560);
@@ -4281,28 +4354,67 @@ fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
                 mmio_write32(GSP_CPUCTL,
                              NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE);
                 Print(L"fwsec:   жду WPR2 (модиф. код → lo=0x100000):\n");
-                for (p = 0; p < 2000; p++) {
-                    UINT32 lo = mmio_read32(REG_PFB_MMU_WPR2_LO);
-                    UINT32 hi = mmio_read32(REG_PFB_MMU_WPR2_HI);
-                    if ((lo & 0xFFFFFFF0) == 0x00100000) {
-                        Print(L"fwsec:   *** WPR2=0x%08x%08x — НАШ модиф. код "
-                              L"выполнился (SEC=1 на GSP РАБОТАЕТ!) ***\n",
-                              hi, lo);
+for (p = 0; p < 2000; p++) {
+                UINT32 lo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+                UINT32 hi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+                if ((lo & 0xFFFFFFF0) == 0x00100000) {
+                    Print(L"fwsec:   *** WPR2=0x%08x%08x — НАШ модиф. код "
+                          L"выполнился (SEC=1 на GSP РАБОТАЕТ!) ***\n",
+                          hi, lo);
+                    ulogf(L"V245   *** WPR2=0x%08x%08x — наш код выполнился, "
+                          L"SEC=1 на GSP РАБОТАЕТ, на %d-й итерации ***\n",
+                          hi, lo, (INTN)p);
+                    break;
+                }
+                /* v3.16: ранний выход по закрытому вопросу.
+                 *
+                 * Полные первые 500 итераций (500 мс) — это БОЛЬШЕ, чем
+                 * прежние первые 200 мс, то есть ответ не берётся раньше,
+                 * чем раньше. Дальше выход по двум условиям, каждое из
+                 * которых закрывает вопрос:
+                 *   • WPR2 == 0x00100000 — код выполнился, ответ «да»
+                 *     (обрабатывается выше);
+                 *   • Falcon дошёл до HALT и WPR2 за это время не изменился
+                 *     — код отработал и ответ «нет», дальше меняться нечему.
+                 *
+                 * Если HALT по какой-то причине не наступит, цикл всё равно
+                 * завершится по 2000 итерациям, как и раньше. Потолок по
+                 * времени НЕ ставится сознательно: Stall(1000) уже даёт
+                 * границу, а лишний потолок означал бы второе, ни о чём не
+                 * говорящее ограничение.
+                 */
+                if (p >= 500) {
+                    UINT32 cc = mmio_read32(GSP_CPUCTL);
+                    if (cc != NV_PFALCON_FALCON_CPUCTL_STARTCPU_TRUE &&
+                        mmio_read32(REG_PFB_MMU_WPR2_LO) == lo) {
+                        Print(L"fwsec:   v2.45: Falcon в HALT (cpuctl=0x%08x) "
+                              L"и WPR2 не изменился — наш код не выполнился "
+                              L"(SEC=1 на GSP не проходит), ждать дальше "
+                              L"нечего, выход на %d-й итерации\n", (INTN)cc,
+                              (INTN)p);
+                        ulogf(L"V245   Falcon в HALT (cpuctl=0x%08x) и WPR2 "
+                              L"не изменился — SEC=1 на GSP НЕ проходит, "
+                              L"выход на итерации %d из 2000\n",
+                              (INTN)cc, (INTN)p);
                         break;
                     }
-                    if ((p % 200) == 0)
-                        Print(L"fwsec:   t=%dms wpr2lo=0x%08x wpr2hi=0x%08x "
-                              L"gsp=0x%x dbg=0x%x\n",
-                              p, lo, hi, mmio_read32(GSP_CPUCTL),
-                              mmio_read32(GSP_BASE + 0x94));
-                    uefi_call_wrapper(BS->Stall, 1, 1000);
                 }
-                Print(L"fwsec:   итог: wpr2lo=0x%08x hi=0x%08x "
-                      L"(ожидаем 0x%08X = предзагруженный код, SEC=1 не работает; "
-                      L"0x100000 = НАШ код!)\n",
-                      mmio_read32(REG_PFB_MMU_WPR2_LO),
-                      mmio_read32(REG_PFB_MMU_WPR2_HI),
-                      TARGET_WPR2_LO);
+                if ((p % 200) == 0)
+                    Print(L"fwsec:   t=%dms wpr2lo=0x%08x wpr2hi=0x%08x "
+                          L"gsp=0x%x dbg=0x%x\n",
+                          p, lo, hi, mmio_read32(GSP_CPUCTL),
+                          mmio_read32(GSP_BASE + 0x94));
+                uefi_call_wrapper(BS->Stall, 1, 1000);
+            }
+            ulogf(L"V245   итог: p=%d итераций, wpr2lo=0x%08x\n", (INTN)p,
+                  mmio_read32(REG_PFB_MMU_WPR2_LO));
+            Print(L"fwsec:   итог: wpr2lo=0x%08x hi=0x%08x "
+                  L"(ожидаем 0x%08X = предзагруженный код, SEC=1 не работает; "
+                  L"0x100000 = НАШ код!)\n",
+                  mmio_read32(REG_PFB_MMU_WPR2_LO),
+                  mmio_read32(REG_PFB_MMU_WPR2_HI),
+                  TARGET_WPR2_LO);
+            }   /* конец if (fx_diag_gate()) — блоки v2.43 + v2.45 */
             }
             /* v3n: здесь функция возвращает TRUE («успех»), НЕ проверяя, что
              * сделали с WPR2 перебор команд 0x10..0x1F и модифицированный
@@ -9954,6 +10066,17 @@ done:
      * DMAQ/DMAQ2 (cost=N reads/...us). */
     ulogf(L"TIME   DMA queue: full timeouts=%d idle timeouts=%d\n",
           (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo);
+    /* Пропуск диагностических экспериментов обязан быть виден, иначе
+     * «оптимизация» выглядит бы как «эксперимента перестал существовать».
+     * Печатаются и число выполненных, и число пропущенных прогонов. */
+    if (fx_diagCalls > fx_diagDone)
+        ulogf(L"TIME   diag experiments: ran=%d skipped=%d (every %d) - the "
+              L"skipped runs repeated an answer that does not depend on the "
+              L"mask; full data is in the runs that did execute\n",
+              (INTN)fx_diagDone, (INTN)(fx_diagCalls - fx_diagDone),
+              (INTN)FX_DIAG_EVERY);
+    else
+        ulogf(L"TIME   diag experiments: ran=%d skipped=0\n", (INTN)fx_diagDone);
         ulogf(L"END   ss0=0x%08x ss1=0x%08x PLM=0x%08x WPR2=0x%08x/0x%08x "
              "dbg=0x%08x cpuctl=0x%08x scratch0e=0x%08x\n",
              g_snapSs0, g_snapSs1, g_snapPlm, g_snapWLo, g_snapWHi,
