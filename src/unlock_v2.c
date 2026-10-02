@@ -5019,7 +5019,13 @@ booter_load_v67(UINT64 wprMetaPhys, UINT64 ucodePhys)
     }
     Print(L"booter: reset ok (dmactl=0x%x)\n", mmio_read32(SEC2_DMACTL));
     sec2_health(L"8-booter-post-reset");
-    fx_ph_end(fx_ph, L"booter_load_v67: load+reset");
+    /* v3.16: ВЛОЖЕННАЯ фаза. booter_load_v67 зовётся и изнутри
+     * early_unlock_path (ботер#1), и напрямую из рендер-цикла (ботер#2),
+     * а оба эти вызова уже покрыты своими фазами верхнего уровня. Если
+     * считать её в верхнем итоге, её время попадёт туда дважды. Именно
+     * это и произошло в прогоне 2026-10-02: SUM top-level показывал
+     * 326,6 с при прогоне 229,8 с. */
+    fx_ph_end_in(fx_ph, L"booter_load_v67: load+reset");
     fx_ph = fx_ph_begin();
 
     /* v2.16: WPR2 = frtsOffset (эффект FWSEC/FRTS). В рабочем флоу перед
@@ -8674,11 +8680,10 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 #ifdef PCIE_GEN2_REJOIN
     if (!g_gen2Fire)   /* v2.99b: fire-итерациям не нужен гигантский свип */
 #endif
-        sweep_all(L"POST");
-    {
+        {
         UINT64 ph0 = fx_ph_begin();
         sweep_all(L"POST");
-        ulogf(L"TIME   sweep_all(POST) took %lldus\\n", (INT64)(fx_now_us()-ph0));
+        ulogf(L"TIME   sweep_all(POST) took %lldus\n", (INT64)(fx_now_us()-ph0));
     }
     log_ms(L"after sweep_all(POST)");
 
