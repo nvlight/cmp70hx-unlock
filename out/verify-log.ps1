@@ -101,8 +101,16 @@ if (-not $q.Success) {
     if ($q.Groups[3].Value -eq '0') { Ok "движок усёкся по событию в 100% случаев - версия механизма работает" }
     else { Note ("бюджет исчерпан " + $q.Groups[3].Value + " раз из " + $q.Groups[1].Value + " - см. max=" + $q.Groups[5].Value + "us") }
 }
-$r = [regex]::Match($text, 'RESETREADY calls=(\d+) early=(\d+) budgetout=(\d+) total=(\d+)us')
-if ($r.Success) { Note ("RESETREADY calls=" + $r.Groups[1].Value + " early=" + $r.Groups[2].Value + " total=" + $r.Groups[4].Value + "us") }
+$r = [regex]::Match($text, 'RESETREADY calls=(\d+) skipped=(\d+) early=(\d+) budgetout=(\d+) total=(\d+)us')
+if ($r.Success) {
+    Note ("RESETREADY calls=" + $r.Groups[1].Value + " skipped=" + $r.Groups[2].Value +
+          " early=" + $r.Groups[3].Value + " total=" + $r.Groups[5].Value + "us")
+    if ([int]$r.Groups[2].Value -eq 0) {
+        Note "skipped=0 - правка этапа 10 не сработала, время не упадёт"
+    }
+} else {
+    Note "нет строки RESETREADY в формате этапа 10 (skipped=) - сборка старше"
+}
 
 # --- 10. время прогона -----------------------------------------------------
 $last = [regex]::Matches($text, 'TIME  t=(\d+)ms')

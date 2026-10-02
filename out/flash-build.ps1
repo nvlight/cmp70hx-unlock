@@ -324,9 +324,13 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
     Write-Host "  Stage 8 passed the BUILD check 52/52 and still broke render 0 of 8," -ForegroundColor Yellow
     Write-Host "  because the build check never asked. Verify the log, not the build." -ForegroundColor Yellow
-    Write-Host "  Baseline: out\usb-log-v322.txt (stage 7, 56.1 s, 8 of 8, VERIFIED)" -ForegroundColor Cyan
-    Write-Host "  Expected: <= 56.1 s with 8 of 8. Stage 9 added an event wait before" -ForegroundColor Cyan
-    Write-Host "  the old blind one, whose budget is 1 s again, so the worst case" -ForegroundColor Cyan
-    Write-Host "  EQUALS the working v322. Faster only if the event wait exits early." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v324.txt (stage 9, 66.2 s, 8 of 8, VERIFIED)" -ForegroundColor Cyan
+    Write-Host "  Expected: ~25.5 s with 8 of 8. Stage 10 makes ONE wait instead of two:" -ForegroundColor Cyan
+    Write-Host "  the blind HWCFG2 poll is skipped where the engine is already quiesced." -ForegroundColor Cyan
+    Write-Host "  It ran on all 37 sites in v3.24 but was needed on only 10 - the other 27" -ForegroundColor Cyan
+    Write-Host "  answered instantly (fast=27 slow=10), so the second was pure waste." -ForegroundColor Cyan
+    Write-Host "  LOOK FOR: 'RESETREADY ... skipped=27' - if skipped=0, nothing changed." -ForegroundColor Yellow
+    Write-Host "  Expect ~10.4 s of waiting total. 25.5 s is an EXPECTATION; report" -ForegroundColor Yellow
+    Write-Host "  what the counter says, not what this line promises." -ForegroundColor Yellow
 }
 exit 0
