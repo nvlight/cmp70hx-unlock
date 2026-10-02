@@ -293,4 +293,19 @@ Write-Host "    3. out\pull-log.ps1 -Tag <name>" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  The change is NOT tested until that log comes back and shows" -ForegroundColor Yellow
 Write-Host "  'G2GFX ... GFX_SPEED_SELECT=0x00000004 ***ВСТАЛ***'." -ForegroundColor Yellow
+if ($outMd5 -ne $REF_MD5) {
+    Write-Host ""
+    Write-Host "  This build differs from the reference md5. If it is the v3.16 speed" -ForegroundColor Yellow
+    Write-Host "  refactor (docs\SPEED-REFACTOR.md), check these lines in the log:" -ForegroundColor Yellow
+    Write-Host "    1. 'G2RMS ... TOTAL: XVE window open 24 of 25'  <- unlocks alive" -ForegroundColor Yellow
+    Write-Host "    2. 'WPR2 ESTABLISHED' must appear 24x; no 'dbg=0x007E0009'" -ForegroundColor Yellow
+    Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
+    Write-Host "    4. 'SCRUB  ...'  <- what the scrub wait actually costs" -ForegroundColor Yellow
+    Write-Host "    5. 'CLOCK tsc=... BAR0 read=...ns'  <- must have a price on" -ForegroundColor Yellow
+    Write-Host "       the SECOND call, or the measurement is broken again" -ForegroundColor Yellow
+    Write-Host "    6. 'TIME   === phase accounting ==='  <- where the rest of the time goes" -ForegroundColor Yellow
+    Write-Host "    7. 'TIME   DMA queue: ...'          <- what waits cost" -ForegroundColor Yellow
+    Write-Host "  Baseline: out\usb-log-2026-10-01-single-build.txt (24 of 25)" -ForegroundColor Yellow
+    Write-Host "  Expected runtime about 1:50 (measured 2026-10-02: was 5:30)." -ForegroundColor Yellow
+}
 exit 0
