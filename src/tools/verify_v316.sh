@@ -189,6 +189,8 @@ else
         'accumulated marks' \
         'SUM of marks' \
         'RESETREADY calls=' \
+        'budgetout=' \
+        'last_hwcfg2=' \
         'rr: [E1] BL reset-ready' \
         'rr: [E3] ResetIntoRiscv ready' \
         'rr: booter SEC2 reset' \
@@ -270,13 +272,17 @@ cat <<EOF
       END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF
       TIME  I/O: Print n=... measured=...us/call  <- цена вывода
       TIME  === accumulated marks ===
-      TIME  RESETREADY calls=N early=M total=T us   <- ПЕРВОЕ, что читать
+      TIME  RESETREADY calls=N early=M budgetout=K total=T us <- ПЕРВОЕ
       TIME  MK  ...                                <- накопить по участкам
 
-  Строка RESETREADY отвечает на вопрос плана §7.2: если early=0 и
-  total ~= calls*1000000, то falcon_wait_reset_ready выжигает весь свой
-  секундный бюджет и следующий этап сокращает его. Если early>0 -
-  гипотеза опровергнута и сокращать нечего.
+  Строка RESETREADY после этапа 8 (сокращение бюджета с 1 с до 50 мс)
+  читается так:
+    early=0 и budgetout=N  - признак HWCFG2[31] не выставляется, бюджет
+                              исчерпывается. Так и было на v3.22 (37/37).
+    early>0                  - признак НАЧАЛ выставляться. Значит сокращение
+                              было лишним, бюджет надо вернуть обратно.
+    last_hwcfg2=0x........   - последнее прочитанное значение; бит 31 в нём
+                              должен быть нулевым при early=0.
 
 
   Забытый вызов fx_mk_acc виден НЕ как сломанная таблица, а как

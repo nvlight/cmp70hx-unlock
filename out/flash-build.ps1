@@ -314,13 +314,16 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. 'TIME  RESETREADY calls=N early=M total=T us avg=...'  <- READ FIRST" -ForegroundColor Yellow
-    Write-Host "       early=0 and total ~= calls*1000000 means falcon_wait_reset_ready" -ForegroundColor Yellow
-    Write-Host "       burns its whole 1-second budget every call. That is the answer to" -ForegroundColor Yellow
-    Write-Host "       PLAN-SPEED.md 7.2 and it decides whether stage 8 shortens it." -ForegroundColor Yellow
-    Write-Host "    8. 'TIME  MK  rr: ...' and 'pro: ...' - where the rest of the time went" -ForegroundColor Yellow
-    Write-Host "  Baseline: out\usb-log-v321.txt (stage 6, 56.1 s counter, 8 of 8)" -ForegroundColor Yellow
-    Write-Host "  Expected: ~56 s. This stage adds measurement only, so if the runtime" -ForegroundColor Yellow
-    Write-Host "  MOVES, something else changed - read the diff before trusting it." -ForegroundColor Yellow
+    Write-Host "    7. 'TIME  RESETREADY calls=N early=M budgetout=K total=T us' <- READ FIRST" -ForegroundColor Yellow
+    Write-Host "       early>0 means the 50 ms budget was TOO SHORT and must go back" -ForegroundColor Yellow
+    Write-Host "       to 1 s. early=0 budgetout=N is the expected result." -ForegroundColor Yellow
+    Write-Host "    8. 'TIME  MK  rr: ...' - must now total ~2 s, NOT 41.5 s" -ForegroundColor Yellow
+    Write-Host "  Baseline: out\usb-log-v322.txt (stage 7, 56.1 s counter, 8 of 8)" -ForegroundColor Yellow
+    Write-Host "  Expected: ~16.6 s. Stage 8 cut falcon_wait_reset_ready from 10,000" -ForegroundColor Yellow
+    Write-Host "  iterations (1.000 s) to 500 (50 ms). Measured on v3.22: 37 calls," -ForegroundColor Yellow
+    Write-Host "  early=0, 41.5 s of a 56.1 s run - 74% of everything." -ForegroundColor Yellow
+    Write-Host "  41.5 s -> 2.1 s expected. This is an EXPECTATION, not a promise." -ForegroundColor Yellow
+    Write-Host "  A pass here means the cut is safe; it does NOT mean the number" -ForegroundColor Yellow
+    Write-Host "  will be exactly 16.6. Report what the counter says." -ForegroundColor Yellow
 }
 exit 0
