@@ -4267,18 +4267,78 @@ static UINT64 cmp90_ptimer64(void)
  * раскладывать по коду вручную. PTIMER — свободно идущие GPU-часы (нс),
  * читаются через уже проверенный порт. Печатаем миллисекунды от старта
  * приложения: так за один заход видно, какая фаза съедает время. */
-static UINT64 g_t0 = 0;
+static UINT64 g_t0 = 0;      /* NV_PTIMER на старте отсчёта (нужен BAR0) */
+static UINT64 g_t0tsc = 0;   /* TSC на старте отсчёта (работает всегда)  */
+static BOOLEAN g_t0set = FALSE;
 
+/* ---- Часы на TSC: работают с первой инструкции efi_main ---------------
+ *
+ * ЗАЧЕМ. NV_PTIMER (cmp90_ptimer64) — это MMIO, он читается только после
+ * enable_mem_decode(). Старый log_t0() стоял ПОСЛЕ отображения BAR0, то
+ * есть 382 строки efi_main шли вообще без хронометража.
+ *
+ * Нашёл это сравнение с секундомером: прогон занимает 2 мин 05 с, а
+ * счётчик показывает 108 с. Разница ~17 с — не POST и не UEFI, а работа
+ * до начала отсчёта.
+ *
+ * RDTSC для этого подходит: он не требует отображения BAR0 и на x86-64
+ * гарантирован (IA32_TSC). Калибровка против BS->Stall(1000) занимает
+ * 1 мс — на фоне 120 с это несущественно.
+ */
+static UINT64
+fx_rdtsc(void)
+{
+    UINT32 lo, hi;
+    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((UINT64)hi << 32) | lo;
+}
+
+static UINT64 fx_tscPerUs = 0;   /* тиков TSC в микросекунде */
+static UINT64 fx_mark = 0;       /* TSC, от которого считает fx_now_us */
+
+static UINT64
+fx_now_us(void)
+{
+    if (fx_tscPerUs == 0) return 0;
+    return (fx_rdtsc() - fx_mark) / fx_tscPerUs;
+}
+
+/* Включить часы и начать отсчёт. Вызывается ПЕРВЫМ делом в efi_main. */
+static void
+log_clock_start(void)
+{
+    UINT64 a, b;
+    if (g_t0set) return;              /* уже запущены */
+    a = fx_rdtsc();
+    uefi_call_wrapper(BS->Stall, 1, 1000);
+    b = fx_rdtsc();
+    fx_tscPerUs = (b - a) / 1000ULL;
+    if (fx_tscPerUs == 0) fx_tscPerUs = 1;
+    fx_mark = fx_rdtsc();
+    g_t0tsc = fx_mark;
+    g_t0set = TRUE;
+    ulogf(L"TIME  t=0ms - start of count (tsc=%lld ticks/us; NBPTIMER not "
+          L"readable yet, BAR0 not mapped)\n", (INT64)fx_tscPerUs);
+}
+
+/* Прежний нуль по NV_PTIMER. Оставлен: он не сбрасывает TSC-отсчёт, а
+ * только дописывает в лог второе, независимое подтверждение времени. */
 static void
 log_t0(void)
 {
     g_t0 = cmp90_ptimer64();
-    ulogf(L"TIME  t=0ms - start of count\n");
+    ulogf(L"TIME  ptimer zero = %lldns (TSC count already running since "
+          L"efi_main entry)\n", (INT64)g_t0);
 }
 
 static void
 log_ms(const CHAR16 *tag)
 {
+    if (g_t0tsc) {
+        UINT64 ms = fx_now_us() / 1000ULL;
+        ulogf(L"TIME  t=%lldms  %s\n", (INT64)ms, tag);
+        return;
+    }
     if (g_t0 == 0) return;
     {
         UINT64 ms = (cmp90_ptimer64() - g_t0) / 1000000ULL;
@@ -7798,7 +7858,15 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     Print(L"\n=== NVIDIA %s Unlock — PCI 10de:%04X, FB 0x%llX (%d МБ) ===\n",
           TARGET_NAME, (INTN)TARGET_PCI_DEV, TARGET_FB_SIZE,
           (INTN)(TARGET_FB_SIZE >> 20));
-    log_init(ImageHandle);   /* лог на флешку: сырые секторы, без ФС */
+    log_init(ImageHandle);
+    /* v3.16: часы включаются ЗДЕСЬ, а не позже.
+     *
+     * Раньше отсчёт начинался на log_t0() — уже после enable_mem_decode(),
+     * то есть 382 строки шли без хронометража. Секундомер показывал
+     * 2 мин 05 с при 108 с в счётчике, и разница была не «POST», а
+     * именно этим участком. Подробности: docs/SPEED-REFACTOR.md,
+     * раздел «17 секунд, которых нет в счётчике». */
+    log_clock_start();   /* лог на флешку: сырые секторы, без ФС */
 #ifdef RELEASE_BUILD
 #ifdef PCIE_GEN2_REJOIN
 # ifdef FULL_NOGEN2
@@ -8005,11 +8073,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     preload_bootmgfw();
 #endif
 
+    log_ms(L"after preload_bootmgfw");
     probe_preload();
+    log_ms(L"after probe_preload");
 #ifdef PCIE_GEN2_REJOIN
     if (!g_gen2Fire)   /* v2.99b: fire-итерациям не нужен гигантский свип */
 #endif
         sweep_all(L"POST");
+    log_ms(L"after sweep_all(POST)");
 
     /* v2.10: ДИАГНОСТИКА (SEC2 + GSP, только чтения, с паузами) + АНЛОК */
     diag_regs(SystemTable);
@@ -8147,22 +8218,43 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * старшие биты — доп. флаги (наблюдалось 0x3FF = 0x300|0xFF — GPU готов). */
     if ((mmio_read32(REG_GFW_BOOT_OK) & 0xFF) != 0xFF) {
         Print(L"GFW не готов (0x%08x), жду...\n", mmio_read32(REG_GFW_BOOT_OK));
-        for (i = 0; i < 200; i++) {
-            uefi_call_wrapper(BS->Stall, 1, 50000);
-            if ((mmio_read32(REG_GFW_BOOT_OK) & 0xFF) == 0xFF) break;
+        /* v3.16: хронометраж и запись В ЛОГ.
+         *
+         * Раньше обе ветки печатались через Print, то есть только на
+         * экран, и в кольцевой лог на флешке их не попадало. Из-за этого
+         * по логу было невозможно сказать, отработал ли цикл полностью.
+         *
+         * По построению цикл стоит до 200 x 50 мс = 10 СЕКУНД. Это
+         * главный подозреваемый на те 17 с, которых не было в счётчике.
+         * Теперь фактическое время печатается и в лог, и на экран. */
+        {
+            UINT64 gt0 = fx_now_us();
+            for (i = 0; i < 200; i++) {
+                uefi_call_wrapper(BS->Stall, 1, 50000);
+                if ((mmio_read32(REG_GFW_BOOT_OK) & 0xFF) == 0xFF) break;
+            }
+            ulogf(L"GFWT   GFW wait: %lldus over %d iterations of 50ms, "
+                  L"reg=0x%08x %s\n",
+                  (INT64)(fx_now_us() - gt0), (INTN)(i + 1),
+                  mmio_read32(REG_GFW_BOOT_OK),
+                  ((mmio_read32(REG_GFW_BOOT_OK) & 0xFF) == 0xFF)
+                      ? L"OK" : L"TIMEOUT - continuing blind");
         }
         if ((mmio_read32(REG_GFW_BOOT_OK) & 0xFF) != 0xFF)
             Print(L"GFW таймаут — продолжаю вслепую\n");
         else
             Print(L"GFW OK после ожидания (0x%08x)\n", mmio_read32(REG_GFW_BOOT_OK));
     } else {
+        ulogf(L"GFWT   GFW already ready, no wait (0x%08x)\n",
+              mmio_read32(REG_GFW_BOOT_OK));
         Print(L"GFW OK (0x%08x)\n", mmio_read32(REG_GFW_BOOT_OK));
     }
 
     set_gpu_time();
+    log_ms(L"after set_gpu_time (incl. GFW wait)");
 
-    /* v3n: старт отсчёта времени — ПОСЛЕ set_gpu_time(), иначе PTIMER ещё
-     * равен 0 и все log_ms() молча выходят (g_t0==0) */
+    /* v3n: дополнительный нуль по NV_PTIMER. Основной отсчёт уже идёт
+     * с начала efi_main по TSC, поэтому этот вызов его НЕ сбрасывает. */
     log_t0();
 
     /* --- Выделение памяти (ниже 4ГБ — для DMA) --- */
