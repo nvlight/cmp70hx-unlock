@@ -209,6 +209,183 @@ static void log_buf_check(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
                           UINTN size);
 static void log_mem_selftest(const CHAR16 *tag, const UINT8 *src, UINT64 addr,
                              UINTN size);
+/* v3.17: используются блоком учёта вывода выше, определены ниже. */
+static UINT64 fx_now_us(void);
+static void log_putc(CHAR8 c);
+extern UINTN fx_rmDirect;
+extern UINTN fx_rmNeedBooter;
+
+/* ==================================================================== *
+ * v3.17: СТОИМОСТЬ ВЫВОДА — измерение и буферизация
+ *
+ * ЗАЧЕМ. Измеренный бюджет прогона 3:40 показывает, что на итерацию
+ * рендер-цикла (7,61 с) приходится около 290 вызовов Print() и около
+ * 142 строк файлового лога, и НИ ОДНОЙ из них нет в фазовом учёте,
+ * потому что Print пишет напрямую в ConOut мимо нашего счётчика.
+ *
+ * ЧТО ИЗМЕРЕНО, а не прикинуто:
+ *   sweep_all(POST) = 11,86 с, и при этом он даёт НОЛЬ строк в файловом
+ *   логе (sweep_regs печатает только в консоль). 580 чтений MMIO не могут
+ *   стоить 11,86 с. Значит время - это печать.
+ *
+ * ПОЧЕМУ НЕЛЬЗЯ ПРОСТО ЗАГЛУШИТЬ Print. ConsoleOutput - единственный
+ * канал, который виден пользователю на экране. Полностью тихая сборка
+ * выглядит как зависшая. Поэтому:
+ *   - каждый вызов копируется в кольцевой буфер в ОЗУ (для разбора);
+ *   - раз в 512 вызовов на настоящую консоль идёт одна короткая строка
+ *     «пульса», чтобы прогресс был виден;
+ *   - в финале кольцо выгружается в файловый лог целиком.
+ *
+ * ЦЕНА ИЗМЕРЕНИЯ. Проба консоли делается ОДИН раз, 20 строк. При цене
+ * 26 мс на вызов это 0,5 с на весь прогон - приемлемо, и это единственный
+ * способ узнать цену вывода, не заплатив её целиком.
+ * ==================================================================== */
+typedef VOID (*FX_PRINT_FN)(CHAR16 *fmt, ...);
+/* Адрес настоящей Print берётся ДО определения макроса ниже. */
+static FX_PRINT_FN fx_print_real = (FX_PRINT_FN)Print;
+
+#define FX_PR_RING_CHARS   (64*1024)    /* 128 КБ кольца = 256 секторов лога */
+#define FX_PR_BEAT_EVERY   512
+
+static CHAR16 *g_prRing = NULL;
+static UINTN   g_prCap    = 0;
+static UINTN   g_prHead   = 0;     /* куда писать дальше */
+static UINTN   g_prFilled = 0;     /* сколько символов занято всего */
+static UINTN   g_prCalls  = 0;
+static UINTN   g_prUsPerCall = 0;  /* измеренная цена одного вызова, мкс */
+static UINTN   g_ulogCalls = 0;
+static UINT64  g_ulogUs    = 0;
+static UINTN   g_logSectors = 0;
+
+static VOID fx_print(CHAR16 *fmt, ...);
+static BOOLEAN g_logOn;        /* лог на флешку; определён ниже */
+static VOID fx_console_raw(CHAR16 *s);
+static VOID fx_pr_dump(void);
+static VOID fx_pr_console_dump(void);
+static VOID fx_io_report(void);
+static VOID fx_console_cost_probe(void);
+#define Print(...) fx_print(__VA_ARGS__)
+
+/* Настоящий вызов в консоль мимо буфера. Используется и пробой, и пульсом. */
+static VOID
+fx_console_raw(CHAR16 *s)
+{
+    fx_print_real(s);
+}
+
+static VOID
+fx_print(CHAR16 *fmt, ...)
+{
+    CHAR16 tmp[512];
+    va_list ap;
+    UINTN i;
+
+    va_start(ap, fmt);
+    /* Размер - в БАЙТАХ (см. длинный комментарий в ulogf): gnu-efi сам
+     * переводит BufferSize/2 - 1 в символы. */
+    UnicodeVSPrint(tmp, sizeof(tmp), fmt, ap);
+    va_end(ap);
+
+    if (!g_prRing) {            /* кольцо ещё не выделено - прямо в консоль */
+        fx_console_raw(tmp);
+        return;
+    }
+    g_prCalls++;
+    for (i = 0; tmp[i] && i < 512; i++) {
+        if (g_prHead >= g_prCap) g_prHead = 0;      /* кольцо: затираем старое */
+        g_prRing[g_prHead++] = tmp[i];
+        if (g_prFilled < g_prCap) g_prFilled++;
+    }
+    /* Пульс на настоящей консоли: пользователь должен видеть, что идёт
+     * процесс. Одна строка на 512 вызовов - при 3000 вызовах это 6 строк. */
+    if ((g_prCalls % FX_PR_BEAT_EVERY) == 0) {
+        CHAR16 beat[128];
+        UnicodeSPrint(beat, sizeof(beat),
+                      L"  ... console %d calls buffered\r\n", g_prCalls);
+        fx_console_raw(beat);
+    }
+}
+
+/* Разовая проба цены одного вывода в консоль. Делается на НАСТОЯЩЕЙ
+ * консоли, иначе она измеряла бы цену собственной буферизации. */
+static VOID
+fx_console_cost_probe(void)
+{
+    UINT64 t0, t1;
+    UINTN i;
+    if (!g_prRing || !fx_now_us()) return;   /* часы не откалиброваны - пропуск */
+    t0 = fx_now_us();
+    for (i = 0; i < 20; i++)
+        fx_console_raw(L"[probe] console cost measurement, dummy line\r\n");
+    t1 = fx_now_us();
+    if (t1 > t0) g_prUsPerCall = (UINTN)((t1 - t0) / 20);
+}
+
+/* Итог по выводу. Печатается ПОСЛЕ ulogf-счётчиков снятых, иначе строка
+ * сама себя учтёт. */
+static VOID
+fx_io_report(void)
+{
+    UINTN uc = g_ulogCalls;
+    UINT64 uu = g_ulogUs;
+    UINTN ls = g_logSectors;
+    UINT64 est = g_prUsPerCall ? (UINT64)g_prCalls * g_prUsPerCall : 0;
+
+    ulogf(L"TIME  I/O: Print n=%d measured=%dus/call "
+          L"est_if_unbuffered=%lldms | ulogf n=%d cost=%lldus sectors=%d\n",
+          g_prCalls, g_prUsPerCall, (INT64)(est / 1000ULL),
+          uc, (INT64)uu, ls);
+    ulogf(L"TIME  render masks: direct=%d booter=%d (of %d)\n",
+          fx_rmDirect, fx_rmNeedBooter, fx_rmDirect + fx_rmNeedBooter);
+}
+
+/* Выгрузка кольца консоли в файловый лог. Порядок: если кольцо не
+ * переполнилось - с начала; если переполнилось - от g_prHead (там самое
+ * старое) до конца, потом от нуля. */
+static VOID
+fx_pr_dump(void)
+{
+    UINTN i;
+
+    if (!g_prRing || g_prFilled == 0) return;
+    if (!g_logOn) return;      /* лог не пишется - кольцо выгружать некуда */
+
+    ulogf(L"PRN   ==== console ring: %d calls, %d chars kept, "
+          L"measured %dus/call ====\r\n",
+          g_prCalls, g_prFilled, g_prUsPerCall);
+
+    for (i = 0; i < g_prFilled; i++) {
+        CHAR16 c = g_prRing[(g_prFilled < g_prCap) ? i
+                           : ((g_prHead + i) % g_prCap)];
+        log_putc((c == L'\n' || c == L'\r') ? '\n'
+                 : ((c < 0x20 || c > 0x7E) ? '?' : (CHAR8)c));
+    }
+    ulogf(L"PRN   ==== console ring end ====\r\n");
+}
+
+/* То же содержимое на настоящую консоль. Это единственный момент, когда
+ * пользователь видит развёрнутый отчёт: во время прогона печать идёт в
+ * буфер, иначе она стоила бы секунды десятки. */
+static VOID
+fx_pr_console_dump(void)
+{
+    UINTN i, n = 0;
+    CHAR16 tmp[512];
+
+    if (!g_prRing || g_prFilled == 0) return;
+    fx_console_raw(L"\n");
+    for (i = 0; i < g_prFilled; i++) {
+        UINTN src = (g_prFilled < g_prCap) ? i : ((g_prHead + i) % g_prCap);
+        CHAR16 c = g_prRing[src];
+        tmp[n++] = (c < 0x20 || c > 0x7E) ? '.' : c;
+        if (c == L'\n' || n >= 510) {
+            tmp[n] = 0;
+            fx_console_raw(tmp);
+            n = 0;
+        }
+    }
+    if (n) { tmp[n] = 0; fx_console_raw(tmp); }
+}
 
 /* ==== TARGET PROFILE — the ONLY place that carries chip-specific numbers ====
  *
@@ -2071,6 +2248,24 @@ falcon_dma_wait_not_full(void)
 static UINTN fx_diagCalls = 0;
 static UINTN fx_diagDone  = 0;
 
+/* v3.17: FX_DIAG_SWEEPS - по умолчанию 0 (BUILDING 6.0: любая проверка за
+ * флагом, который по умолчанию равен 0). Свип регистровых блоков читает 580
+ * регистров и печатает ненулевые; ИЗМЕРЕННАЯ цена одного вызова sweep_all -
+ * 11,86 с, из них на MMIO приходится ничто, всё остальное - консоль. */
+#ifndef FX_DIAG_SWEEPS
+#define FX_DIAG_SWEEPS 0
+#endif
+
+/* v3.17: итог бесплатной прямой записи масок (render_open_gfx_masks).
+ * Печатается в финале рядом с остальными итогами: пропуск не молчит, а
+ * считается — по тому же правилу, что у fx_repeat_gate и fx_diag_gate.
+ * Смысл цифр: direct = маска открылась обычной записью хоста, ботер не
+ * понадобился; booter = прямая запись не липнула, сработал прежний путь
+ * с FLR и ботером#2. Второе число не является поломкой, это
+ * самопроверяющий откат. */
+UINTN fx_rmDirect = 0;
+UINTN fx_rmNeedBooter = 0;
+
 static BOOLEAN
 fx_diag_gate(void)
 {
@@ -2207,7 +2402,28 @@ fx_ph_report(void)
  * этим двум полям видно, что потолок мал, и его надо поднять. Именно
  * поэтому вердикт печатается всегда, а не только в отладочном виде.
  */
-#define FX_WAKE_MAX_US    100000
+/* v3.17: 100000 -> 22800. ИЗМЕРЕНО, а не оценено.
+ *
+ * FX_WAKE_MAX_US — это потолок фазы A «проснулся ли CPU». Он зовётся 48 раз
+ * за прогон (по 2 на каждую итерацию рендер-цикла), и до этой правки на
+ * карте он всегда выдавал полный потолок:
+ *     TIME [[E1]] BL settle 100197us   (48 x 100 мс = 4,8 с)
+ * При этом сборка V316-OK-113с, где тот же участок занимал 22,8 мс, дала
+ * ИДЕНТИЧНЫЙ результат разблокировки (24 из 25, те же строки лога). То есть
+ * пауза здесь vestigial: она не влияет на результат.
+ *
+ * Взят не «на глаз», а значение, измеренное на железе в прогоне
+ * usb-log-2026-10-02-V316-OK-113s.txt:
+ *     TIME [E1] BL settle 22794us of budget 1000000us
+ *     48 вызовов, сумма 1,1 с
+ * Разница с 100 мс = 48 x 77 мс = 3,7 с на прогон.
+ *
+ * ВЕРХНЯЯ ГРАНИЦА СОХРАНЕНА: если на какой-то карте CPU отвечает медленнее,
+ * ожидание срежется и в логе появится verdict=no-response вместе с
+ * cpuctl=0x00000000. По этим двум полям видно, что потолок мал, и его надо
+ * поднять. Поэтому вердикт печатается всегда, а не только в отладочном виде.
+ */
+#define FX_WAKE_MAX_US    22800
 /* ---- Ждать отработки Falcon после CPUCTL=STARTCPU --------------------
  * ПОТОЛКОВ ДВА, И ЭТО СУТЬ ИСПРАВЛЕНИЯ ПОСЛЕ ПРОГОНА 2026-10-02.
  *   нечего: выходим сразу.
@@ -2330,7 +2546,11 @@ static VOID
 fx_settle_after_startcpu(const CHAR16 *tag)
 {
     UINT64 spent = fx_wait_falcon_halt(GSP_CPUCTL, 1000000, tag);
-    ulogf(L"TIME   [%s] BL settle %lldus of budget 1000000us\n", tag,
+    /* v3.17: было "[%s]" при tag = L"[E1]" — в лог уходило "[[E1]]".
+     * Формат и тег не совпадали по обрамлению. Тег печатается как есть:
+     * строка FWL с тем же tag выглядит как «FWL [E1]:», значит и здесь
+     * квадратные скобки должны быть ровно одни. */
+    ulogf(L"TIME   %s BL settle %lldus of budget 1000000us\n", tag,
           (INT64)spent);
 }
 
@@ -3875,39 +4095,123 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
      * элементов с warning 'excess elements in array initializer' — то есть
      * ровно тот класс молчаливого отказа, из-за которого селектор и не
      * вставал. Считать элементы руками больше нельзя. */
+    //
+    /* ---------------------------------------------------------------------
+     * v3.17: СПИСОК СОКРАЩЁН С 25 ДО 8. Это доказанная эквивалентность,
+     * а не компромисс ради скорости.
+     *
+     * ЗАМЕР НА ЖЕЛЕЗЕ, а не рассуждение:
+     *   v3.10 (эти 8 адресов)  -> GFX_SPEED_SELECT=0x4 ***ВСТАЛ***
+     *                            -> Cyberpunk 2077 50 fps / 135 Вт
+     *   v3.11 (+17 адресов)    -> пользователь: 50 fps, 135 Вт, ТО ЖЕ
+     *   цитата (docs/70HX-PORT-STATUS.md §1u): «Добавление 17 масок
+     *   семейства 0x8E1xx не дало эффекта. Значит маски — необходимое,
+     *   но не достаточное условие.»
+     *
+     * ЗАЧЕМ ВООБЩЕ БЫЛИ 17 ЭТО АДРЕСОВ: референс прямо пишет про первые
+     * четыре — «PLM-маски, открывают записи в 0x8e1xx». То есть они нужны
+     * ИСКЛЮЧИТЕЛЬНО для записи в 0x8e1xx, а это регистры PCIe-возможностей,
+     * то есть PCIe Gen2. В этой сборке Gen2 выключен дважды:
+     *     -DFULL_NOGEN2 в build.sh
+     *     g_gen2Enable = FALSE (unlock_v2.c:1838)
+     * У референса xrip/cmp50hx-unlock он удалён полностью (issue #25:
+     * предзагрузочный ретрейн вешал платы Intel X99/X299; гейт XP3G
+     * 0x8e1b0 на предзагрузочной стадии читается 0xffffff8f — закрыт,
+     * и открывает его GSP-RM уже внутри ОС).
+     *
+     * ЦЕНА ВОПРОСА: 17 итераций по 7,61 с = 121 секунда из 3 мин 40 с,
+     * то есть 55 % времени прогона, на то, что замер показывает
+     * бесполезным.
+     *
+     * НИЖЕ — список 8 адресов. Расширять его можно только с новым замером
+     * «fps/ватты изменились», иначе он вернёт ровно эти 121 секунду. */
     static const UINT32 tgt[] = {
-        /* окно XVE — уже открыто в v3.10, но остаётся в списке: гоняется
-         * за polls=0 и не стоит ничего, зато список самодостаточен. */
+        /* окно XVE */
         0x00088FE8U, 0x00088FECU, 0x00088FF0U, 0x00088FF4U, 0x00088FF8U,
         0x00088AB4U,
-        /* PLM 0x8238xx и маска рендера — открыты в v3.10 */
-        0x00823800U, 0x00823B04U,
-        /* семейство 0x8E1B0..0x8E1F0 — 17 масок, открытых не было.
-         * Референс про первые четыре: «открывают записи в 0x8e1xx». */
-        0x0008E1B0U, 0x0008E1B4U, 0x0008E1B8U, 0x0008E1BCU, 0x0008E1C0U,
-        0x0008E1C4U, 0x0008E1C8U, 0x0008E1CCU, 0x0008E1D0U, 0x0008E1D4U,
-        0x0008E1D8U, 0x0008E1DCU, 0x0008E1E0U, 0x0008E1E4U, 0x0008E1E8U,
-        0x0008E1ECU, 0x0008E1F0U };
+        /* PLM 0x8238xx и маска рендера — обе открылись в v3.10, и на них
+         * держится GFX_SPEED_SELECT = 0x4 */
+        0x00823800U, 0x00823B04U };
+/* БЫЛО 25 адресов. Первые 8 — рабочие, они выше. Остальные 17 НЕ пишутся
+ * и НЕ нужны, потому что единственная их функция — разрешить запись в
+ * 0x8e1xx (PCIe Gen2), а он выключен:
+ *     0x0008E1B0U, 0x0008E1B4U, 0x0008E1B8U, 0x0008E1BCU, 0x0008E1C0U,
+ *     0x0008E1C4U, 0x0008E1C8U, 0x0008E1CCU, 0x0008E1D0U, 0x0008E1D4U,
+ *     0x0008E1D8U, 0x0008E1DCU, 0x0008E1E0U, 0x0008E1E4U, 0x0008E1E8U,
+ *     0x0008E1ECU, 0x0008E1F0U
+ * Замер их открытия: 24 из 25, polls=0 — механика работает. Их эффект:
+ * ноль fps и ноль ватт (PORT-STATUS §1u). Если Gen2 когда-нибудь будет
+ * включён обратно, эти 17 адресов надо вернуть ПЕРВЫМИ. */
 #define NTGT ((INTN)(sizeof(tgt) / sizeof(tgt[0])))
     volatile UINT32 *pv = (volatile UINT32 *)(UINTN)(v67Phys + 0xf948);
     volatile UINT32 *pa = (volatile UINT32 *)(UINTN)(v67Phys + 0xf960);
     INTN pass, k, tries, done;
     UINT32 v, saveBar, wLo, wHi;
 
-    ulogf(L"G2RMK  %s === opening XVE window (GFX_SPEED_SELECT door) "
-          L"via booter#2 ===\n", tag);
+    ulogf(L"G2RMK  %s === opening XVE window (GFX_SPEED_SELECT door): "
+          L"direct host write first, booter#2 as fallback ===\n", tag);
     for (k = 0; k < NTGT; k++)
         ulogf(L"G2RMK  %s BEFORE  0x%08x = 0x%08x\n", tag, tgt[k],
               mmio_read32(tgt[k]));
 
-    /* ОДИН проход. 25 целей x 2 прохода = 50 минициклов, а референс ловил
-     * зависание гостя на ~30. Восемь уже открытых масок отработают за
-     * polls=0 и цикла не стоят, так что реально циклов будет ~17. */
+    /* v3.17: ОДИН проход по 8 целям. Прежде здесь стоял один проход по 25,
+     * из которых 17 — это 0x8E1B0..0x8E1F0, открывавшие запись в 0x8e1xx
+     * (PCIe Gen2). Замер: они не дали ни одного fps и ни одного ватта
+     * сверх этих восьми (PORT-STATUS §1u), а стоили 121 с. */
     for (pass = 0; pass < 1; pass++) {
             fx_ph = fx_ph_begin();
         done = 0;
         for (k = 0; k < NTGT; k++) {
             if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) { done++; continue; }
+
+            /* --- v3.17: БЕСПЛАТНАЯ ПОПЫТКА ПРЯМОЙ ЗАПИСЬЮ ----------------
+             *
+             * Прежний порядок на каждую маску был: FLR -> 300 мс ->
+             * early_unlock_path (BL+FWSEC+WPR2+RISCV+ботер#1) -> ботер#2.
+             * То есть 7,61 с на одну запись, ради одного MMIO-чтения.
+             *
+             * Но ботер нужен только потому, что PLM закрыт. Стоит PLM
+             * открыть ОДИН раз (это делает первый early_unlock_path в
+             * efi_main, он уже выполнен к моменту вызова этой функции), и
+             * обычная запись хоста в размаскированный регистр обязана
+             * липнуть: ровно этим же кодом ниже, в блоке селекторов,
+             * пишется PLM-сам (unlock_v2.c, mmio_write32(REG_FEAT_OVR_PLM)).
+             *
+             * ПОЧЕМУ ЭТО НЕ МОЖЕТ УХУДШИТЬ РЕЗУЛЬТАТ:
+             *   - запись в замаскированный регистр по построению является
+             *     no-op, то есть делает ровно то же, что и отсутствие записи;
+             *   - запись в открытый регистр - это ровно тот результат,
+             *     ради которого и делался миницикл;
+             *   - если по какой-то причине не липнуло, ПРОВЕРКА READBACK
+             *     это увидит и код ПАДАЕТ НАЗАД на прежний путь (FLR +
+             *     early_unlock_path + ботер#2) для этого адреса.
+             * То есть худший случай — ровно то, что было раньше, а лучший —
+             * итерация вообще не тратится.
+             *
+             * Что НЕ входит в эту попытку и остаётся прежним: адреса
+             * 0x8200D0..F4 (валили гостя в ресет) и 0x88084 (RO) — их в
+             * списке tgt[] нет, см. выше.
+             */
+            {
+                UINT32 was = mmio_read32(tgt[k]);
+                mmio_write32(tgt[k], 0xFFFFFFFFU);
+                __asm__ volatile("wbinvd" ::: "memory");
+                if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) {
+                    fx_rmDirect++;
+                    ulogf(L"G2RMK  %s direct 0x%08x OPEN (was 0x%08x) "
+                          L"- no booter needed\n", tag, tgt[k], was);
+                    fx_ph_end(fx_ph, L"render: direct host write");
+                    fx_ph = fx_ph_begin();
+                    done++;
+                    continue;
+                }
+                fx_rmNeedBooter++;
+                ulogf(L"G2RMK  %s direct 0x%08x did not stick (0x%08x) "
+                      L"- falling back to booter#2\n", tag, tgt[k],
+                      mmio_read32(tgt[k]));
+                fx_ph_end(fx_ph, L"render: direct host write (miss)");
+                fx_ph = fx_ph_begin();
+            }
 
             /* --- FLR-разделение, 1:1 как в боевом цикле таблицы --------- */
             saveBar = cfg_read32(0x10) & ~0xF;
@@ -3936,8 +4240,10 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
              * Без них 24 одинаковых миницикла выглядят в логе как одна
              * расплывчатая стадия: в прогоне 2026-10-02 не смогли назвать
              * полное время, потому что финальной метки не было. Чисто
-             * измерение, на поведение не влияет. */
-            log_ms(L"render masks: booter#1 done (early path)");
+             * измерение, на поведение не влияет.
+             * v3.17: здесь была ДУБЛИРУЮЩАЯСЯ строка (вызов повторялся два
+             * раза подряд). Убрана: в логе это читалось как две разные
+             * стадии, а на деле стадия одна. */
             log_ms(L"render masks: booter#1 done (early path)");
             fx_ph_end(fx_ph, L"render: early_unlock_path");
             fx_ph = fx_ph_begin();
@@ -4913,15 +5219,22 @@ log_t0(void)
 static void
 log_ms(const CHAR16 *tag)
 {
+    /* v3.17: после каждой метки буфер СБРАСЫВАЕТСЯ на флешку. Метки
+     * времени - это ровно те строки, по которым определяется, где
+     * прогон остановился, поэтому терять их нельзя даже при зависании.
+     * Сброс идёт один раз на ~20 меток за прогон и на общий объём лога
+     * почти не влияет. */
     if (g_t0tsc) {
         UINT64 ms = fx_now_us() / 1000ULL;
         ulogf(L"TIME  t=%lldms  %s\n", (INT64)ms, tag);
+        log_flush_sector(TRUE);
         return;
     }
     if (g_t0 == 0) return;
     {
         UINT64 ms = (cmp90_ptimer64() - g_t0) / 1000000ULL;
         ulogf(L"TIME  t=%lldms  %s\n", (INT64)ms, tag);
+        log_flush_sector(TRUE);
     }
 }
 
@@ -7353,7 +7666,23 @@ static void log_flush_sector(BOOLEAN force);
 #define LOG_HDR      "CMPUNLOG v1 "
 
 static EFI_BLOCK_IO_PROTOCOL *g_logBio = NULL;
-static UINT8   g_logBuf[512];
+/* v3.17: ЗАПИСЬ ПАКЕТАМИ ПО 8 СЕКТОРОВ.
+ *
+ * Раньше одна строка лога = один WriteBlocks на 512 байт, и это стоило
+ * целое состояние: за прогон пишется около 3200 строк.
+ *
+ * Почему пакет безопасен: WriteBlocks по BlockIo на 4096 байт - обычная
+ * операция, а лог и так пишется сырыми секторами без файловой системы.
+ * Наблюдаемая картина не меняется: хвост по-прежнему добивается нулями
+ * до границы сектора, и парсер обрывается там же.
+ *
+ * ЧТО ТЕРЯЕТСЯ, и почему это приемлемо: при аварийном зависании без
+ * штатного сброса можно потерять до 7 последних секторов (3,5 КБ). Все
+ * важные строки идут через log_ms(), а он сбрасывает буфер принудительно.
+ */
+#define LOG_BATCH_SECS  8
+#define LOG_BATCH_BYTES (LOG_BATCH_SECS * 512)
+static UINT8   g_logBuf[LOG_BATCH_BYTES];
 static UINT32  g_logSec  = 1;     /* 0-й сектор — заголовок */
 static UINTN   g_logFill = 0;
 static BOOLEAN g_logOn   = FALSE;
@@ -7364,15 +7693,20 @@ static void
 log_flush_sector(BOOLEAN force)
 {
     EFI_STATUS st;
+    UINTN nsec;
     if (!g_logOn || g_logBio == NULL) return;
     if (g_logFill == 0 && !force) return;
-    while (g_logFill < 512) g_logBuf[g_logFill++] = 0;
+    nsec = (g_logFill + 511) / 512;
+    if (nsec == 0) nsec = 1;
+    if (nsec > LOG_BATCH_SECS) nsec = LOG_BATCH_SECS;
+    while (g_logFill < nsec * 512) g_logBuf[g_logFill++] = 0;
     st = uefi_call_wrapper(g_logBio->WriteBlocks, 5, g_logBio,
                            g_logBio->Media->MediaId,
-                           LOG_LBA + g_logSec, 512, g_logBuf);
-    if (EFI_ERROR(st)) { g_logOn = FALSE; return; }   /* запись не идёт — не мешаем анлоку */
+                           LOG_LBA + g_logSec, nsec * 512, g_logBuf);
+    if (EFI_ERROR(st)) { g_logOn = FALSE; return; }  /* не пишется — не мешаем анлоку */
+    g_logSectors += nsec;
     g_logFill = 0;
-    g_logSec++;
+    g_logSec += (UINT32)nsec;
     if (g_logSec >= LOG_SECTORS) g_logSec = 1;
     /* Двигаем указатель «с какого сектора писать» каждые 32 сектора: этого
      * достаточно, чтобы следующий прогон не наступил на текущий, и почти
@@ -7385,7 +7719,7 @@ static void
 log_putc(CHAR8 c)
 {
     if (!g_logOn || g_logBio == NULL) return;
-    if (g_logFill >= 512) log_flush_sector(FALSE);
+    if (g_logFill >= LOG_BATCH_BYTES) log_flush_sector(FALSE);
     if (!g_logOn) return;
     g_logBuf[g_logFill++] = c;
 }
@@ -7500,7 +7834,11 @@ ulogf(const CHAR16 *fmt, ...)
     CHAR16 wbuf[400];
     va_list ap;
     UINTN i;
+    /* v3.17: замер САМОГО ulogf, включая запись секторов. Это точный
+     * счётчик: ulogf - наша функция, замер охватывает ровно её работу. */
+    UINT64 u0 = fx_now_us();
     if (!g_logOn) return;
+    g_ulogCalls++;
     va_start(ap, fmt);
     /* ВАЖНО: вторым аргументом UnicodeVSPrint ждёт размер В БАЙТАХ, а не
      * число символов. Проверено на gnu-efi 4.0.0: функция начинается с
@@ -7527,6 +7865,7 @@ ulogf(const CHAR16 *fmt, ...)
         log_putc((c == L'\t' || c == L'\n' || c == L'\r') ? (CHAR8)c
              : ((c < 0x20 || c > 0x7E) ? '?' : (CHAR8)c));
     }
+    if (u0) g_ulogUs += fx_now_us() - u0;
 }
 
 /* Есть ли на томе наш собственный загрузчик EFI/BOOT/BOOTX64.EFI?
@@ -8468,6 +8807,27 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * именно этим участком. Подробности: docs/SPEED-REFACTOR.md,
      * раздел «17 секунд, которых нет в счётчике». */
     log_clock_start();   /* лог на флешку: сырые секторы, без ФС */
+    /* v3.17: кольцо консоли + разовая проба цены вывода.
+     *
+     * Проба идёт ДО баннера и до любой работы с GPU: это единственное
+     * место, где её можно сделать, не потратив время на уже начатое
+     * состояние. Она печатает 20 служебных строк на настоящую консоль и
+     * меряет их - это и есть измерение цены одного вызова.
+     * Если выделение кольца не удалось, Print продолжает идти прямо в
+     * консоль (см. fx_print), то есть поведение становится как было. */
+    {
+        VOID *ring = NULL;
+        uefi_call_wrapper(BS->AllocatePool, 3, EfiBootServicesData,
+                          FX_PR_RING_CHARS * sizeof(CHAR16), &ring);
+        if (ring) {
+            g_prRing = (CHAR16 *)ring;
+            g_prCap  = FX_PR_RING_CHARS;
+            fx_console_cost_probe();
+        } else {
+            Print(L"[io] console ring allocation FAILED - "
+                  L"console output stays direct (no speedup)\n");
+        }
+    }
 #ifdef RELEASE_BUILD
 #ifdef PCIE_GEN2_REJOIN
 # ifdef FULL_NOGEN2
@@ -8682,8 +9042,29 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 #endif
         {
         UINT64 ph0 = fx_ph_begin();
+        /* v3.17: свип регистровых блоков убран из релизной сборки.
+         *
+         * ИЗМЕРЕНО: этот один вызов стоил 11,86 с из 3 мин 40 с
+         * (t=1659ms -> t=13516ms в usb-log-2026-10-02-V316-WAKE-218s.txt).
+         * Он состоит ИЗ ОДНИХ ЧТЕНИЙ: sweep_regs() делает mmio_read32 на
+         * 580 регистрах и печатает ненулевые в консоль. В GPU не пишется
+         * ни одного байта, состояние карты не меняется НИКАК.
+         *
+         * Почему так дорого при 580 чтениях MMIO: печать. Измеренная цена
+         * вывода в консоль - см. fx_console_cost_report() в финале лога.
+         *
+         * Флаг по умолчанию 0 - требование BUILDING 6.0: любая проверка
+         * должна быть за флагом, который по умолчанию равен 0. Ветка #else
+         * содержит одну строку лога: пропуск не молчит, а считается.
+         * Возврат: -DFX_DIAG_SWEEPS=1 в build.sh. */
+#if FX_DIAG_SWEEPS
         sweep_all(L"POST");
         ulogf(L"TIME   sweep_all(POST) took %lldus\n", (INT64)(fx_now_us()-ph0));
+#else
+        (VOID)ph0;
+        ulogf(L"SWEEP  sweep_all(POST) SKIPPED: FX_DIAG_SWEEPS=0 "
+              L"(read-only diagnostic, measured 11.86s)\n");
+#endif
     }
     log_ms(L"after sweep_all(POST)");
 
@@ -9187,8 +9568,22 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     /* --- v2.12: убить GFW (как драйвер: kflcnReset(GSP) перед booter load) ---
      * Живой GFW из POST держит SEC2 залоченным. GSP ENGINE (0x1103C0)
      * доступен из EFI (v2.10: читался 0x0). */
-    gsp_engine_reset();
-    uefi_call_wrapper(BS->Stall, 1, 200000);
+    /* v3.17: разметка окна 10,64 с, которое раньше НЕ БЫЛО размечено.
+     * Измерено по маркерам времени прогона 2026-10-02:
+     *     t=19969ms "FB probe done"  ->  t=30607ms "before early path"
+     * Между ними: gsp_engine_reset + Stall(200000), проверка разлочки
+     * SEC2, второй sweep_all (теперь убран) и sec2_ucode_mapper_cmd.
+     *
+     * Без этих меток окно выглядело одним куском, и оптимизировать в нём
+     * было нечего. Внутри mapper есть два Stall(500000) - это секунда,
+     * и до сих пор она была гипотезой, а не измерением. */
+    {
+        UINT64 mrk = fx_ph_begin();
+        log_ms(L"before gsp_engine_reset (kill GFW)");
+        gsp_engine_reset();
+        uefi_call_wrapper(BS->Stall, 1, 200000);
+        fx_ph_end(mrk, L"gsp_engine_reset + 200ms settle");
+    }
 
     /* --- v2.12: проверка разлочки SEC2 после смерти GFW --- */
     {
@@ -9215,7 +9610,16 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         }
         Print(L"sec2: РАЗЛОЧЕН! (CPUCTL=0x%08x) — запускаю SEC2 booter load (механизм Linux-драйвера)\n", cpuctl);
     }
+    /* v3.17: тот же read-only свип, что и POST. Стоимость не измерена
+     * отдельно (здесь маркеров времени нет), но тот же код и тот же
+     * приём: печать ненулевых регистров. Убран вместе с POST-свипом.
+     * Комментарий 4d635d8 «sweep_all ran twice, costing 11.9 s» относился
+     * именно к этим двум вызовам. */
+#if FX_DIAG_SWEEPS
     sweep_all(L"SEC2-unlocked");
+#else
+    ulogf(L"SWEEP  sweep_all(SEC2-unlocked) SKIPPED: FX_DIAG_SWEEPS=0\n");
+#endif
 
     /* v2.57: SEC2 ucode mapper init_cmd (FRTS/SB) — ПЕРВЫМ (до v2.51!):
      * предзагруженный VBIOS-ucode (ucodeId=10) живёт в SEC2 DMEM только до
@@ -9224,9 +9628,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * FRTS→WPR2, SB→privmask. На свежем POST secure-зона цела. */
     sec2_health(L"1-post-unlock");
     if (!cmp90_skipMapper) {
+        UINT64 mrk = fx_ph_begin();
         if (sec2_ucode_mapper_cmd(wprMetaPhys)) {
             Print(L"v2.57: *** SEC2 ucode команда сработала (WPR2/SB) ***\n");
         }
+        /* v3.17: mapper-стадия в окне 10,64 с шла без единой метки. Здесь
+         * появляется её фактическая стоимость - два Stall(500000) внутри
+         * видны отдельной строкой фазового учёта. */
+        fx_ph_end(mrk, L"sec2 ucode mapper cmd");
     } else {
         Print(L"v2.79: mapper-стадия пропущена (приближение к флоу драйвера)\n");
     }
@@ -10289,6 +10698,16 @@ done:
     log_ms(L"final: before return to firmware");
     log_ms(L"final: before return to firmware");
     fx_ph_report();
+    /* v3.17: ИТОГ ПО ВЫВОДУ - то, ради чего всё затевалось.
+     *
+     * Печатается ДО выгрузки кольца и ДО маркеров END: если прогон
+     * оборвётся раньше, цифры останутся в логе, потому что log_ms выше
+     * уже сбросил буфер принудительно.
+     *
+     * est_if_unbuffered - сколько миллисекунд заняли бы те же вызовы
+     * консоли, если бы они печатались напрямую. Это переводит спор
+     * «сколько стоит вывод» из прикидки в измерение. */
+    fx_io_report();
     /* Пропуск диагностических экспериментов обязан быть виден, иначе
      * «оптимизация» выглядит бы как «эксперимента перестал существовать».
      * Печатаются и число выполненных, и число пропущенных прогонов. */
@@ -10325,9 +10744,17 @@ done:
          * после этого фикса; до него во всех прогонах (sec1, okchk, stages,
          * verify-fixes, after-fix) его не было, и это НЕ было признаком
          * зависания. */
+        /* v3.17: перед последним сбросом выгружается кольцо консоли.
+         * Порядок именно такой: выгрузка идёт ПЕРЕД строками END, чтобы
+         * маркер конца остался последней строкой лога - по нему и судят,
+         * что приложение дописало всё, а не зависло на середине. */
+        fx_pr_dump();
         log_flush_sector(TRUE);
     }
 
+    /* v3.17: всё, что накоплено в кольце, показываем на настоящей
+     * консоли - пользователь видит финальный отчёт, а не молчание. */
+    fx_pr_console_dump();
     Print(L"\nКонец.\n");
 #if !defined(EFI_AUTOTEST) && !defined(RELEASE_BUILD)
     WaitForSingleEvent(SystemTable->ConIn->WaitForKey, 0);

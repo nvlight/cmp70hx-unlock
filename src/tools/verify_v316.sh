@@ -102,6 +102,13 @@ else
     #   'full dump throttled'          — разрежение повторов sec2_window_dump
     #   'PROBE  throttled'             — разрежение повторов wpr2_probe
     # Они добавляются вместе с самой возможностью.
+    #
+    # v3.17: 'sweep_all(POST) took' заменена на 'sweep_all(POST) SKIPPED'.
+    # Свип ушёл за флаг FX_DIAG_SWEEPS (=0), поэтому в релизной сборке
+    # обязана присутствовать строка ОТКАЗА, а не отчёт о выполнении:
+    # пропуск обязан быть виден (BUILDING 6.0). Проверка не ослаблена, а
+    # перенаправлена на ту строку, которая теперь обязана быть в бинаре.
+    # Три новых маркера - итог v3.17 по прямой записи масок и по цене вывода.
     for m in \
         'BL settle' \
         'DMAQ2' \
@@ -113,12 +120,15 @@ else
         'render: early_unlock_path' \
         'render: ROP write' \
         'booter_load_v67: load+reset' \
-        'sweep_all(POST) took' \
+        'sweep_all(POST) SKIPPED' \
         'render masks: booter#1 done' \
         'render masks: sweep finished' \
         'final: before return' \
         'BOOTER iters=' \
         'XVE window open' \
+        'direct ' \
+        'render masks: direct=' \
+        'I/O: Print n=' \
         'end of log'
     do
         n=$( { strings -a "$EFITEXT"; strings -a -el "$EFITEXT"; } | grep -cF "$m" || true)
@@ -169,20 +179,18 @@ cat <<EOF
   карте и сверка строк (docs/SPEED-REFACTOR.md, раздел «Что нужно
   проверить на железе»), по убыванию важности:
 
-      G2RMS ... TOTAL: XVE window open 24 of 25   <- рендер жив
-      WPR2 ESTABLISHED = 24 раза, нигде dbg=0x007E0009
+      G2RMS ... TOTAL: XVE window open 8 of 8     <- рендер жив
+      G2GFX ... GFX_SPEED_SELECT=0x00000004 ВСТАЛ <- главный признак
+      WPR2 ESTABLISHED, нигде dbg=0x007E0009
       END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF
-      SCRUB  ...                      <- сколько стоит скраб (не знаем)
-      CLOCK tsc=... BAR0 read=...ns   <- цена ОБЯЗАНА быть на 2-м вызове
-
-  ФАКТИЧЕСКОЕ ВРЕМЯ (2026-10-02, исправленная сборка): 1 мин 53 с против
-  5 мин 30 с исходных, при ЖИВОЙ разблокировке (24 из 25). То есть
-  оптимизация ожиданий дала реальный выигрыш в ~2,9 раза — но не потому,
-  что время шло в пустое вращение DMA, как считалось раньше, а потому что
-  убраны слепые паузы и ожидания, которые не ждали события. Следующая
-  строка, которая разбирает ОСТАВШЕЕСЯ время, — фазовый учёт:
-
+      TIME  I/O: Print n=... measured=...us/call  <- цена вывода (v3.17)
+      TIME  render masks: direct=... booter=...   <- сработала ли прямая
       TIME   === phase accounting ===
 
   Без этого лога сборка не проверена, а md5 записывать в build.sh рано.
+
+  ОСТАВШЕЕСЯ ВРЕМЯ. Бюджет прогона 3:40 и его разложение — в
+  ../PLAN-SPEED.md; разбор прошлых неудачных оптимизаций и почему
+  оценка без измерения дала три регрессии подряд — в
+  docs/SPEED-REFACTOR.md. Читать перед следующей правкой.
 EOF
