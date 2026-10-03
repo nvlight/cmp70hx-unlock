@@ -304,7 +304,7 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host ""
     Write-Host "  This build differs from the reference md5. Check these lines in the log" -ForegroundColor Yellow
     Write-Host "  (PLAN-SPEED.md has the budget and why each step exists):" -ForegroundColor Yellow
-    Write-Host "    1. 'G2RMS ... TOTAL: XVE window open 8 of 8'   <- unlocks alive" -ForegroundColor Yellow
+    Write-Host "    1. 'G2RMS ... TOTAL: GFX gates open 2 of 2'     <- unlocks alive" -ForegroundColor Yellow
     Write-Host "    2. 'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET' <- main marker" -ForegroundColor Yellow
     Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
     Write-Host "    4. no 'dbg=0x007E0009' anywhere" -ForegroundColor Yellow
@@ -342,6 +342,6 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  3. powershell -ExecutionPolicy Bypass -File out\cmp-marks.ps1 -A out\usb-log-v338.txt -B out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v338.txt (15.3 s, 8 of 8)." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v339.txt (15.96 s, 8 of 8, md5 67f7b5a8 - last 8-mask build)." -ForegroundColor Cyan
 }
 exit 0

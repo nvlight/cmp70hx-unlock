@@ -35,15 +35,18 @@ if (-not (Test-Path $LogPath)) { throw "log not found: $LogPath" }
 $text = [IO.File]::ReadAllText($LogPath)
 Write-Host ("=== " + (Split-Path $LogPath -Leaf) + " (" + $text.Length + " байт) ===")
 
-# --- 1. главный признак: рендер-окно открылось целиком ------------------
+# --- 1. главный признак: все гейты открылись -------------------------------
 # Именно это сломалось в v3.23, и именно это пользователь видит.
-$m = [regex]::Match($text, 'XVE window open (\d+) of (\d+)')
+# v3.40 переименовал строку: 'XVE window open' -> 'GFX gates open', потому что
+# окно XVE вышло из списка целей. Регулярка берёт ОБА имени, иначе новая
+# сборка объявила бы свой лог оборванным. Старые логи v3.3x проверяются как есть.
+$m = [regex]::Match($text, '(?:XVE window open|GFX gates open) (\d+) of (\d+)')
 if (-not $m.Success) {
-    Bad "нет строки 'XVE window open' - лог оборван или прогона не было"
+    Bad "нет строки 'GFX gates open' (ранее 'XVE window open') - лог оборван или прогона не было"
 } elseif ($m.Groups[1].Value -ne $m.Groups[2].Value) {
-    Bad ("XVE window open " + $m.Groups[1].Value + " из " + $m.Groups[2].Value + " - рендер сломан")
+    Bad ("гейты открыты " + $m.Groups[1].Value + " из " + $m.Groups[2].Value + " - рендер сломан")
 } else {
-    Ok ("XVE window open " + $m.Groups[1].Value + " из " + $m.Groups[2].Value)
+    Ok ("гейты открыты " + $m.Groups[1].Value + " из " + $m.Groups[2].Value)
 }
 
 # --- 2. главный признак рендера: 50 fps / 135 W --------------------------
@@ -63,6 +66,11 @@ if ($fails4 -eq 0) { Ok "нет ни одного 'FWSEC ours FAIL'" }
 else { Bad ("'FWSEC ours FAIL' " + $fails4 + " раз - путь открытия масок не проходит") }
 
 # --- 5. WPR2 ---------------------------------------------------------------
+# Считается как 1 + <число масок> + 9: вход в путь, по одной на итерацию
+# рендер-цикла, и 9 в фазе после свипа. На 8 масках было 18 (usb-log-v339).
+# Порог 9 намеренно НЕ пересчитывается под новое число масок: это грубый
+# «цикл вообще шёл»-фильтр, а не счётчик. За «маски открылись поимённо»
+# отвечает пункт 6, который от числа масок не зависит.
 $w = ([regex]::Matches($text, 'WPR2 ESTABLISHED')).Count
 if ($w -ge $ExpectWpr2) { Ok ("WPR2 ESTABLISHED " + $w + " раз (ожидалось >= " + $ExpectWpr2 + ")") }
 else { Bad ("WPR2 ESTABLISHED всего " + $w + ", ожидалось >= " + $ExpectWpr2 + " - цикл не прошёл") }
