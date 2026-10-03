@@ -1,9 +1,37 @@
 # Known issues & unsolved problems
 
-An honest list of what does **not** work or remains unverified, as of the
-v3.03 release (2026-08-25) plus the CMP 70HX port. See also `docs/GOTCHAS.md`
-(platform quirks digest), `docs/REGISTERS.md` (framebuffer/WPR2 geometry) and
-`docs/DIAG-REPORT-2026-08-25-CODE43.md` (the Code 43 root cause).
+An honest list of what does **not** work or remains unverified, as of
+**`unlock_v3r` / v3.39 (2026-10-03)** plus the CMP 70HX port. See also
+`docs/GOTCHAS.md` (platform quirks digest), `docs/REGISTERS.md`
+(framebuffer/WPR2 geometry) and `docs/DIAG-REPORT-2026-08-25-CODE43.md`
+(the Code 43 root cause).
+
+> **Scope warning.** Sections 1–18 below are the **v3.03-era record**
+> (2026-08-25) and several of them were overtaken by the 70HX port:
+> §14 (port unverified on metal), §13 (TARGET switch), §17, §20, §35 are
+> historical — read them for the reasoning, not as current state. Current
+> status lives in `README.md`, `docs/70HX-FINAL-SUMMARY.md` and
+> `docs/70HX-PORT-STATUS.md` §9.
+>
+> **Two numbering caveats.** (1) This file grew by appending, so a few
+> numbers are used twice — §36, §38 and §39 each appear twice for **different**
+> content (the later ones are the framebuffer-probe / logging-procedure
+> sections). An anchor like `§38` is therefore ambiguous; disambiguate by
+> title, not by number. (2) Numbers are stable identities here, so they were
+> deliberately **not** renumbered — that would break the many cross-references
+> from `README.md`, `BUILDING.md`, `PLAN-SPEED.md` and `docs/70HX-*.md`.
+>
+> **Логи прогонов.** С 2026-10-03 в `out/` хранятся только
+> `usb-log-v337/v338/v339.txt` (плюс один старый диагностический дамп
+> `usb-log.txt` — в нём `frts=0x1FFE00000`, то есть формула до
+> `TARGET_WPR_END_MARGIN`; не сверяйте с ним геометрию). Остальные удалены из
+> рабочего дерева, но не уничтожены и лежат в истории git:
+> `git show <коммит>:out/<файл> > out/<файл>`. **Имена логов в этом документе
+> оставлены как есть: они обозначают прогон, а не ссылку.** Реестр
+> md5 → коммит → результат — [out/BUILDS.md](out/BUILDS.md).
+>
+> **Время прогона — ≈16 с** (диапазон 15 303…15 964 мс). Оценки вида
+> «прогон ≈2,2 минуты» ниже относятся к старым ревизиям флоу.
 
 ## Fundamental
 
@@ -82,21 +110,25 @@ v3.03 release (2026-08-25) plus the CMP 70HX port. See also `docs/GOTCHAS.md`
 
 ## Scope
 
-13. **This tree targets the CMP 70HX (GA104, 8 GB, `10de:248a`)**, and the
-    CMP 90HX (GA102, 10 GB, `10de:220d`) is still one `TARGET=90HX` away. All
-    framebuffer-derived constants live in one `TARGET PROFILE` block at the top
-    of `src/unlock_v2.c` and are *derived*, not hand-copied — see
-    `docs/REGISTERS.md`. Other CMP SKUs (90HXA, 170HX, GA103/GA106/GA107…)
-    are not covered: add a line to that block and rebuild.
+13. **This tree targets the CMP 70HX (GA104, 8 GB, `10de:248a`) only.** The
+    CMP 90HX (GA102, 10 GB, `10de:220d`) is **no longer a build target** — the
+    `TARGET` variable is gone from `build.sh` and the original 90HX no longer
+    produces its own binary (see §49). All framebuffer-derived constants live in
+    one `TARGET PROFILE` block at the top of `src/unlock_v2.c` and are *derived*,
+    not hand-copied — see `docs/REGISTERS.md`. Other CMP SKUs (90HXA, 170HX,
+    GA103/GA106/GA107…) are **not** supported by decision, not by omission:
+    porting means adding a profile block and re-deriving, not just one line.
 
-14. **The 70HX port is unverified on metal.** What is solid: the framebuffer
-    geometry is the driver's own formula applied to an 8 GB FB
-    (`frtsOffset=0x1FFE00000`), the register offsets are shared GA10x-wide,
-    and both target builds compile and produce a structurally valid PE. What
-    is *inferred*, from a single measurement on the 10 GB card: the WPR2
-    encoding (`lo = frtsOffset>>8`, `hi = lo+0xE00`). If the FWSEC WPR2 poll
-    times out on a 70HX, the log prints the observed `wpr2lo`/`wpr2hi` every
-    200 ms — paste those two numbers into `TARGET_WPR2_LO/HI` and rebuild.
+14. **HISTORICAL (v3.03-era) — the 70HX port has since been verified extensively
+    on metal.** What was solid then: the framebuffer geometry follows the
+    driver's own formula applied to an 8 GB FB. What is current:
+    `frtsOffset=0x1F7E00000`, `WPR2=0x01F7E000/0x01F7EE00`, and the WPR2
+    encoding is **not** an extrapolation — `(frts>>0xC)<<4` is *identical* to
+    `frts>>8` (`docs/70HX-PORT-STATUS.md` §5.7). Verification evidence:
+    compute ×11.25, `GFX_SPEED_SELECT=0x4` + 50 fps / 135 W, and the 1/32
+    issue-rate A/B (`docs/70HX-PORT-STATUS.md` §1j, §1k, §1l, §1t). The old
+    `0x1FFE00000` / `lo = frtsOffset>>8, hi = lo+0xE00` figures belong to the
+    pre-margin formula and are **retired** — see §35d and README's banner note.
 
 15. **The GSP firmware blob still has to come from the right package.** The
     app reads `gsp_ga10x.bin` off the stick; the chip is picked inside that
@@ -172,8 +204,13 @@ v3.03 release (2026-08-25) plus the CMP 70HX port. See also `docs/GOTCHAS.md`
       is `NO NAME    `, not `CMP70UNLOCK` — do not match on it.
     * **`LOG_LBA` is written in decimal for a reason.** It was `0x3E8000`,
       which is 4 096 000, while the reader used 4 000 000 — a 48 MB gap, so
-      the log could never be found even with the right device. `lba_sync.py`
-      now compares the two and fails the build on a mismatch.
+      the log could never be found even with the right device. ⚠️ **The
+      original claim that `lba_sync.py` "compares the two and fails the build
+      on a mismatch" is no longer true — that script is not in the tree and
+      `src/build.sh` has no LBA check.** The two constants are only manually
+      in sync: `LOG_LBA` in `src/unlock_v2.c` and `$LBA` in
+      `out/read-log.ps1` (currently both `4000000`). If you move one, move
+      both, or grep for `3D0900` / `4000000` and check them.
 
     Rule of thumb this produced: **nothing in the logging path may touch the
     disk beyond single-sector reads, and may not touch the filesystem at
@@ -1813,66 +1850,14 @@ do_flr();
 Запись при этом липнет — регистр не проверяет смысл, — что и даёт
 наблюдаемую картину «всё хорошо, анлока нет». См. NEXT-STEPS §3k.
 
-## 43. ЛОЖНОЕ УТВЕРЖДЕНИЕ ИСПРАВЛЕНО: `is_unlocked()=1` ≠ анлок состоялся
+## 43. ЛОЖНОЕ УТВЕРЖДЕНИЕ ИСПРАВЛЕНИЕ (дубликат — удалён 2026-10-04)
 
-`out/usb-log-selectors.txt`:
-
-```
-G2NVR  CMP90G2=37 есть, но свип выключен -> fire-режим НЕ включаем
-STG    reached selector block success=0 direct=0 early=1 gen2Fire=0
-STG    PLM 0xFFFFFFFF -> 0xFFFFFFFF readback 0xFFFFFFFF OPEN
-STG    selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 *** UNLOCKED ***
-STG    is_unlocked()=1
-```
-
-**Подтверждено пользователем 2026-09-29: видеокарта начала правильно
-определяться системой.** Это независимое подтверждение со стороны хоста.
-
-| признак | до | после |
-|---|---|---|
-| `WPR2` | `0x1FFFFE00/0x00000000` | **`0x01F7E000/0x01F7EE00`** |
-| `SS0` | `0x05173106` | **`0x88888888`** |
-| `SS1` | `0x00000007` | **`0x00000008`** |
-| `is_unlocked()` | `0` | **`1`** |
-
-### Три исправления, каждое — одно
-
-| # | Исправление | Раздел |
-|---|---|---|
-| 1 | бит `IMEM` в `DMATRFCMD` (`0x604` → `0x614`) | §36 |
-| 2 | `g_fwsecImemSec = 1` (было `0`) | §37 |
-| 3 | fire-режим не входит при выключенном свипе | §42 |
-
-Первые два убрали неверную расшифровку регистра и ошибочный вывод из неё.
-Третье — блокировку состояния в NVRAM, из-за которой рабочий путь
-анлока был недостижим при `WPR2`, уже защёлкнутом.
-
-### 43.1 Что осталось открытым
-
-* **PCIe Gen2** не восстановлен (свип выключен рубильником) — на анлок не
-  влияет, ограничивает host↔GPU.
-* **Порты IMEM/DMEM отказывают** после `STARTCPU`. «Что изменил маппер в
-  DMEM» неразрешимо текущими средствами: три разных адреса дают одно
-  значение `0xDEAD5EC2`, то есть это отказ порта, а не содержимое.
-* **Замер производительности 70HX не делался.** Цифры ~3700 t/s в README —
-  от проверенной сборки 90HX.
-
-### 43.2 Урок по трём правкам
-
-Все три ошибки были одного класса: **сообщение от asserted-ного кода
-интерпретировалось как отказ, хотя код работал.**
-
-| код | сообщение | как читалось | что означало |
-|---|---|---|---|
-| `0xDEAD5EC1` | отказ читать secure-IMEM | «secure-доступ закрыт» | IMEM защищён, код загружен |
-| `0xDEAD5EC2` | отказ читать secure-DMEM | «буфер команды не изменён» | порт отказал, содержимое неизвестно |
-| `CMP90G2=37` | есть счётчик незавершённых циклов | «идёт gen2-свип» | блокирует обычный путь |
-
-Общее правило: **`DEAD` в имени значения — это ответ на запрос, а не
-сообщение об отказе выполнить действие.** Прежде чем объявлять
-оборудование неспособным, нужно установить, что именно этот код
-сообщает и на каком уровне привилегий задан вопрос.
-
+> **Этот раздел был продублирован и удалён.** Живая версия §43 — выше по
+> файлу, с баннером `⚠️ ОПРОВЕРГНУТО ЗАМЕРОМ 2026-09-30 — НЕ УДАЛЯТЬ`.
+> Копия ниже была предопроверочным черновиком: она утверждала «анлок не
+> состоялся, 75 Вт» и «замер 70HX не делался» — оба вывода опровергнуты
+> (compute 2262.22 t/s, ×11.25; рендер 50 fps / 135 Вт). Не читайте её как
+> текущее состояние.
 ## 42. ВЗАИМНАЯ БЛОКИРОВКА: счётчик `CMP90G2` подавлял запись селекторов
 
 `out/usb-log-stages.txt`:
