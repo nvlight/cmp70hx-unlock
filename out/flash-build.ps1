@@ -308,37 +308,43 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    2. 'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET' <- main marker" -ForegroundColor Yellow
     Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
     Write-Host "    4. no 'dbg=0x007E0009' anywhere" -ForegroundColor Yellow
-    Write-Host "    5. 'render: FLR settle' must be ~400 ms x8, NOT 15 s - a" -ForegroundColor Yellow
+    Write-Host "    5. 'render: FLR settle' must be ~500 ms x8, NOT 15 s - a" -ForegroundColor Yellow
     Write-Host "       bigger number means a mark was lost (the delta swallowed the" -ForegroundColor Yellow
     Write-Host "       next section). This is the failure the old CHECK used to hide." -ForegroundColor Yellow
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 14 IS A BISECTION: total post-FLR settle 500 -> 400 ms." -ForegroundColor Yellow
+    Write-Host "    7. STAGE 15: QUIESCE budget 250 -> 150 ms, FLR settle back to 500 ms." -ForegroundColor Yellow
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Measured ends of the interval:" -ForegroundColor Cyan
-    Write-Host "         300 ms total = FAIL, 0 of 8 masks     (v3.29)" -ForegroundColor Cyan
-    Write-Host "         400 ms total = THIS STEP" -ForegroundColor Cyan
-    Write-Host "         500 ms total = PASS, 18.1 s, 8 of 8   (v3.28, v3.30)" -ForegroundColor Cyan
+    Write-Host "       Arithmetic, so you can check it. Every slow QUIESCE call in v3.30" -ForegroundColor Cyan
+    Write-Host "       and v3.31 logged 'budget exhausted, engine did NOT quiesce' - all 10." -ForegroundColor Cyan
+    Write-Host "       At 250 ms one slow call costs 260.5 ms (QSLOW confirmed). At 150 ms" -ForegroundColor Cyan
+    Write-Host "       I expect ~160.5 ms:" -ForegroundColor Cyan
+    Write-Host "         10 calls x 100 ms = 1.0 s saved" -ForegroundColor Cyan
+    Write-Host "         18 084 - 1 000 = 17 084 ms   -> expect ~17.1 s" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Arithmetic, so you can check it: the FLR section measured 499.3 ms" -ForegroundColor Cyan
-    Write-Host "       with a 500 ms budget, i.e. essentially all of it is the two stalls." -ForegroundColor Cyan
-    Write-Host "       Cutting 100 ms x 8 iterations = 0.8 s -> expected 17.3 s." -ForegroundColor Cyan
+    Write-Host "       I DO NOT KNOW where the threshold is, it is only known to lie in" -ForegroundColor Cyan
+    Write-Host "       (50 ms; 250 ms]. If it sits right next to 250 the gain is 0.1 s, not" -ForegroundColor Cyan
+    Write-Host "       1.0 s. I am not going to pretend otherwise." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       READ BOTH OF THESE - together they answer the important question:" -ForegroundColor Cyan
-    Write-Host "         BARR  bar0 write: want=0x.. got=0x.. STUCK | *** NOT STUCK ***" -ForegroundColor Cyan
-    Write-Host "         render: FLR settle   t=..ms   (should now be ~399, was ~499)" -ForegroundColor Cyan
-    Write-Host "         render broken + BAR0 STUCK    -> BAR0 is NOT predictive, stop using it" -ForegroundColor Cyan
-    Write-Host "         render broken + BAR0 NOT STUCK -> BAR0 IS predictive, build a poll on it" -ForegroundColor Cyan
-    Write-Host "         render works                   -> working point, cut further next run" -ForegroundColor Cyan
+    Write-Host "       Only ONE thing changed by design (the 150 ms budget). The FLR" -ForegroundColor Cyan
+    Write-Host "       settle was set back to 500 ms because 400 ms broke the render in" -ForegroundColor Cyan
+    Write-Host "       v3.31 (3 of 8). 500 ms is already proven twice on hardware, so it is" -ForegroundColor Cyan
+    Write-Host "       not a new variable - which makes this run unambiguous either way:" -ForegroundColor Cyan
+    Write-Host "         PASS ~17.1 s -> both hold, next lever is the final Stall(500000)" -ForegroundColor Cyan
+    Write-Host "         FAIL         -> the 150 ms budget is below threshold, 500 ms is not" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       NOTE: verify-log.ps1 now parses BARR only from lines starting with" -ForegroundColor Cyan
-    Write-Host "       'BARR'. It previously searched the whole log for 'NOT STUCK' and" -ForegroundColor Cyan
-    Write-Host "       cried wolf on v3.30 by matching an unrelated wpr2_probe line." -ForegroundColor Yellow
+    Write-Host "       READ: QSLOW lines - every one should say waited=~160000us" -ForegroundColor Cyan
+    Write-Host "             BARR lines - BAR0 is NOT a readiness signal, see below" -ForegroundColor Cyan
+    Write-Host "" -ForegroundColor Cyan
+    Write-Host "       DO NOT BUILD A POLL ON BARR. In v3.31 BAR0 stuck 8 of 8 while the" -ForegroundColor Cyan
+    Write-Host "       render was broken 3 of 8. That is the fourth readiness candidate" -ForegroundColor Cyan
+    Write-Host "       killed by measurement, after stages 3, 2 and 13. BARR is kept only" -ForegroundColor Cyan
+    Write-Host "       because it costs 81 us and it stopped a false alarm in v3.30." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v330.txt (18.1 s, 8 of 8, BAR0 stuck 8 of 8)." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v330.txt (18.1 s, 8 of 8)." -ForegroundColor Cyan
 }
 exit 0
