@@ -314,37 +314,36 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 18: ONE blind stall cut - Stall(50000) -> Stall(10000) in [E1]." -ForegroundColor Yellow
+    Write-Host "    7. STAGE 19: SECOND blind stall cut - Stall(50000) -> Stall(10000) in [E3]." -ForegroundColor Yellow
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Exactly ONE line changed (src/unlock_v2.c:6689). The other two" -ForegroundColor Cyan
-    Write-Host "       blind 50 ms stalls inside early_unlock_path (lines 6754 and 6845)" -ForegroundColor Cyan
-    Write-Host "       are still 50 ms - deliberately, one change per run." -ForegroundColor Cyan
+    Write-Host "       Exactly ONE line changed (src/unlock_v2.c:6772). The last remaining" -ForegroundColor Cyan
+    Write-Host "       blind 50 ms stall inside early_unlock_path (line 6863) is still 50 ms." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Arithmetic, so you can check it:" -ForegroundColor Cyan
-    Write-Host "         8 iterations x 40 ms = 320 ms" -ForegroundColor Cyan
-    Write-Host "         17 417 - 320 = 17 097 ms   -> expect ~17.1 s" -ForegroundColor Cyan
+    Write-Host "       THIS IS A TRANSFER OF A MEASURED THRESHOLD, NOT A GUESS. Stage 18" -ForegroundColor Cyan
+    Write-Host "       proved at the identical spot in the same block (line 6689, [E1]) that" -ForegroundColor Cyan
+    Write-Host "       50 ms is not needed and 10 ms is enough, render 8 of 8. Same block," -ForegroundColor Cyan
+    Write-Host "       same stage, same surroundings, same kind of blind stall." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       WHY A BIG JUMP AND NOT A HALVING. The project rule is: measure the" -ForegroundColor Cyan
-    Write-Host "       ends first, then halve the interval. Here there ARE no ends - no run" -ForegroundColor Cyan
-    Write-Host "       has ever shown these 50 ms are needed. There is no lower bound, so" -ForegroundColor Cyan
-    Write-Host "       there is no interval, so there is nothing to halve. The first probe" -ForegroundColor Cyan
-    Write-Host "       should be informative rather than careful." -ForegroundColor Cyan
+    Write-Host "         9 calls x 40 ms = 360 ms" -ForegroundColor Cyan
+    Write-Host "         17 040 - 360 = 16 680 ms   -> expect ~16.7 s" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       THE RISK IS REAL, and this is a fact and not a disclaimer. This stall" -ForegroundColor Cyan
-    Write-Host "       sits in the same [E1]/[E3] sequence where the 150 ms QUIESCE budget" -ForegroundColor Cyan
-    Write-Host "       broke the render in v3.32 (1 of 8). Three outcomes, all useful:" -ForegroundColor Cyan
-    Write-Host "         PASS ~17.1 s -> threshold is <=10 ms. Next run cuts 6754 and 6845 too." -ForegroundColor Cyan
-    Write-Host "         FAIL         -> threshold is in (10; 50]. Then bisect and stop." -ForegroundColor Cyan
-    Write-Host "         surprise     -> that is new information, tell me, do not guess" -ForegroundColor Cyan
+    Write-Host "       Two outcomes:" -ForegroundColor Cyan
+    Write-Host "         PASS ~16.7 s -> next run cuts 6863 the same way, another ~320 ms." -ForegroundColor Cyan
+    Write-Host "         FAIL         -> [E3] is more sensitive than [E1], threshold in" -ForegroundColor Cyan
+    Write-Host "                         (10; 50]. Then bisect and stop. Do NOT touch 6863" -ForegroundColor Cyan
+    Write-Host "                         in that case - it would make the cause ambiguous." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       CONTEXT: batching was measured impossible in v3.34 - 'already open'" -ForegroundColor Cyan
-    Write-Host "       equalled the iteration number on all 8 iterations, so each FLR cycle" -ForegroundColor Cyan
-    Write-Host "       opens exactly one mask. That closes the 14 s idea and puts the" -ForegroundColor Cyan
-    Write-Host "       architectural ceiling at roughly 15.5 s. We are 1.9 s from it." -ForegroundColor Yellow
+    Write-Host "       All three stalls inside early_unlock_path were verified by brace balance:" -ForegroundColor Cyan
+    Write-Host "       the function spans lines 6647..6875 and holds exactly three of them." -ForegroundColor Cyan
+    Write-Host "       My earlier count said three using a naive first-closing-brace scan;" -ForegroundColor Cyan
+    Write-Host "       that scan stopped on an inner block. Brace counting confirms three." -ForegroundColor Cyan
+    Write-Host "" -ForegroundColor Cyan
+    Write-Host "       Batching was measured impossible in v3.34, so 14 s is off the table." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
+    Write-Host "  3. powershell -ExecutionPolicy Bypass -File out\cmp-marks.ps1 -A out\usb-log-v335.txt -B out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v334.txt (17.4 s, 8 of 8)." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v335.txt (17.0 s, 8 of 8)." -ForegroundColor Cyan
 }
 exit 0
