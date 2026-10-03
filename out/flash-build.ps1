@@ -314,33 +314,35 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 15: QUIESCE budget 250 -> 150 ms, FLR settle back to 500 ms." -ForegroundColor Yellow
+    Write-Host "    7. STAGE 16: QUIESCE back to 250 ms + v2.43/v2.45 diagnostics OFF." -ForegroundColor Yellow
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Arithmetic, so you can check it. Every slow QUIESCE call in v3.30" -ForegroundColor Cyan
-    Write-Host "       and v3.31 logged 'budget exhausted, engine did NOT quiesce' - all 10." -ForegroundColor Cyan
-    Write-Host "       At 250 ms one slow call costs 260.5 ms (QSLOW confirmed). At 150 ms" -ForegroundColor Cyan
-    Write-Host "       I expect ~160.5 ms:" -ForegroundColor Cyan
-    Write-Host "         10 calls x 100 ms = 1.0 s saved" -ForegroundColor Cyan
-    Write-Host "         18 084 - 1 000 = 17 084 ms   -> expect ~17.1 s" -ForegroundColor Cyan
+    Write-Host "       Arithmetic, so you can check it:" -ForegroundColor Cyan
+    Write-Host "         18 084 - 705 = 17 379 ms   -> expect ~17.4 s" -ForegroundColor Cyan
+    Write-Host "       The 705 ms is not an estimate. It is the measured gap between the" -ForegroundColor Cyan
+    Write-Host "       'fwsec: reset+STARTCPU' and 'fwsec: v2.43+v2.45 diagnostics' marks" -ForegroundColor Cyan
+    Write-Host "       in the GOOD log out\usb-log-v330.txt." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       I DO NOT KNOW where the threshold is, it is only known to lie in" -ForegroundColor Cyan
-    Write-Host "       (50 ms; 250 ms]. If it sits right next to 250 the gain is 0.1 s, not" -ForegroundColor Cyan
-    Write-Host "       1.0 s. I am not going to pretend otherwise." -ForegroundColor Cyan
+    Write-Host "       WHY THAT BLOCK IS SAFE TO SWITCH OFF. The code's own comment says" -ForegroundColor Cyan
+    Write-Host "       both experiments live INSIDE the 'WPR2 ESTABLISHED' branch, i.e." -ForegroundColor Cyan
+    Write-Host "       they run on the already-successful path, after the unlock has" -ForegroundColor Cyan
+    Write-Host "       happened, and neither affects whether the masks opened. Everything" -ForegroundColor Cyan
+    Write-Host "       they report is already recorded in out\BUILDS.md." -ForegroundColor Cyan
+    Write-Host "       The old fx_diag_gate() let the first call of every 24 through, and" -ForegroundColor Cyan
+    Write-Host "       in v3.30 it fired. Paying 3.9% of the run for that is waste." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Only ONE thing changed by design (the 150 ms budget). The FLR" -ForegroundColor Cyan
-    Write-Host "       settle was set back to 500 ms because 400 ms broke the render in" -ForegroundColor Cyan
-    Write-Host "       v3.31 (3 of 8). 500 ms is already proven twice on hardware, so it is" -ForegroundColor Cyan
-    Write-Host "       not a new variable - which makes this run unambiguous either way:" -ForegroundColor Cyan
-    Write-Host "         PASS ~17.1 s -> both hold, next lever is the final Stall(500000)" -ForegroundColor Cyan
-    Write-Host "         FAIL         -> the 150 ms budget is below threshold, 500 ms is not" -ForegroundColor Cyan
+    Write-Host "       Only ONE risk in this build, and it is a proven-good value:" -ForegroundColor Cyan
+    Write-Host "         QUIESCE back to 250 ms - proven 8 of 8 on hardware twice already" -ForegroundColor Cyan
+    Write-Host "         fx_diagV245 = 0      - diagnostics only, no functional path" -ForegroundColor Cyan
+    Write-Host "       So a FAIL here would be a surprise and would mean something I have" -ForegroundColor Cyan
+    Write-Host "       not accounted for. Tell me and I will treat it as new information." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       READ: QSLOW lines - every one should say waited=~160000us" -ForegroundColor Cyan
-    Write-Host "             BARR lines - BAR0 is NOT a readiness signal, see below" -ForegroundColor Cyan
+    Write-Host "       READ: TIME  diag experiments: ran=0 skipped=N   <- was ran=1" -ForegroundColor Cyan
+    Write-Host "             QSLOW lines          - waited=~260000us, back to normal" -ForegroundColor Cyan
+    Write-Host "             render: FLR settle   - ~499 ms per iteration, unchanged" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       DO NOT BUILD A POLL ON BARR. In v3.31 BAR0 stuck 8 of 8 while the" -ForegroundColor Cyan
-    Write-Host "       render was broken 3 of 8. That is the fourth readiness candidate" -ForegroundColor Cyan
-    Write-Host "       killed by measurement, after stages 3, 2 and 13. BARR is kept only" -ForegroundColor Cyan
-    Write-Host "       because it costs 81 us and it stopped a false alarm in v3.30." -ForegroundColor Yellow
+    Write-Host "       BARR IS NOT A READINESS SIGNAL. It stuck 8 of 8 in v3.31 with the" -ForegroundColor Cyan
+    Write-Host "       render broken 3 of 8, and again 8 of 8 in v3.32 with it broken 1 of 8." -ForegroundColor Cyan
+    Write-Host "       Two confirmations in a row. Do not build a poll on it." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
