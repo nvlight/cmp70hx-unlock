@@ -314,36 +314,34 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 19: SECOND blind stall cut - Stall(50000) -> Stall(10000) in [E3]." -ForegroundColor Yellow
+    Write-Host "    7. STAGE 20: THIRD blind stall cut - the last one inside early_unlock_path." -ForegroundColor Yellow
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Exactly ONE line changed (src/unlock_v2.c:6772). The last remaining" -ForegroundColor Cyan
-    Write-Host "       blind 50 ms stall inside early_unlock_path (line 6863) is still 50 ms." -ForegroundColor Cyan
-    Write-Host "" -ForegroundColor Cyan
-    Write-Host "       THIS IS A TRANSFER OF A MEASURED THRESHOLD, NOT A GUESS. Stage 18" -ForegroundColor Cyan
-    Write-Host "       proved at the identical spot in the same block (line 6689, [E1]) that" -ForegroundColor Cyan
-    Write-Host "       50 ms is not needed and 10 ms is enough, render 8 of 8. Same block," -ForegroundColor Cyan
-    Write-Host "       same stage, same surroundings, same kind of blind stall." -ForegroundColor Cyan
+    Write-Host "       One line changed (src/unlock_v2.c:6880). All three blind 50 ms stalls" -ForegroundColor Cyan
+    Write-Host "       inside early_unlock_path are now 10 ms:" -ForegroundColor Cyan
+    Write-Host "         6689 [E1]  v3.35 PASS, 40.0 ms/call" -ForegroundColor Cyan
+    Write-Host "         6772 [E3]  v3.36 PASS, 40.0 ms/call, prediction off by 1 ms" -ForegroundColor Cyan
+    Write-Host "         6880       THIS RUN" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
     Write-Host "         9 calls x 40 ms = 360 ms" -ForegroundColor Cyan
-    Write-Host "         17 040 - 360 = 16 680 ms   -> expect ~16.7 s" -ForegroundColor Cyan
+    Write-Host "         16 679 - 360 = 16 319 ms   -> expect ~16.3 s" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Two outcomes:" -ForegroundColor Cyan
-    Write-Host "         PASS ~16.7 s -> next run cuts 6863 the same way, another ~320 ms." -ForegroundColor Cyan
-    Write-Host "         FAIL         -> [E3] is more sensitive than [E1], threshold in" -ForegroundColor Cyan
-    Write-Host "                         (10; 50]. Then bisect and stop. Do NOT touch 6863" -ForegroundColor Cyan
-    Write-Host "                         in that case - it would make the cause ambiguous." -ForegroundColor Cyan
-    Write-Host "" -ForegroundColor Cyan
-    Write-Host "       All three stalls inside early_unlock_path were verified by brace balance:" -ForegroundColor Cyan
-    Write-Host "       the function spans lines 6647..6875 and holds exactly three of them." -ForegroundColor Cyan
-    Write-Host "       My earlier count said three using a naive first-closing-brace scan;" -ForegroundColor Cyan
-    Write-Host "       that scan stopped on an inner block. Brace counting confirms three." -ForegroundColor Cyan
-    Write-Host "" -ForegroundColor Cyan
+    Write-Host "       NEW FINDING, and it corrects something I said. The pattern" -ForegroundColor Cyan
+    Write-Host "         falcon_wait_scrub_done(...)  followed by  Stall(50000)" -ForegroundColor Cyan
+    Write-Host "       is a project IDIOM, not a one-off. There are 12 scrub sites and at" -ForegroundColor Cyan
+    Write-Host "       least 8 of them still carry a 50 ms stall:" -ForegroundColor Cyan
+    Write-Host "         3593 pre-reset | 3818 fbp-reset | 5247 gsp-reset | 6242 sec2-reset" -ForegroundColor Cyan
+    Write-Host "         6942 gsp-reset | 7402 gsp-reset | 7489 sec2-reset | 7707 sec2-reset" -ForegroundColor Cyan
+    Write-Host "       I only ever considered the 3 inside early_unlock_path, so my claim" -ForegroundColor Cyan
+    Write-Host "       'the lever is exhausted' was too narrow. From the log the scrub wait" -ForegroundColor Cyan
+    Write-Host "       'gsp-reset' runs 19 times and 'sec2-reset' 9 times, so some of those" -ForegroundColor Cyan
+    Write-Host "       sites are hot. NEXT STAGE is to count calls per site BEFORE touching" -ForegroundColor Cyan
+    Write-Host "       anything - the tags repeat, so the log cannot attribute them." -ForegroundColor Cyan
     Write-Host "       Batching was measured impossible in v3.34, so 14 s is off the table." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
-    Write-Host "  3. powershell -ExecutionPolicy Bypass -File out\cmp-marks.ps1 -A out\usb-log-v335.txt -B out\usb-log-XXXX.txt" -ForegroundColor Cyan
+    Write-Host "  3. powershell -ExecutionPolicy Bypass -File out\cmp-marks.ps1 -A out\usb-log-v336.txt -B out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v335.txt (17.0 s, 8 of 8)." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v336.txt (16.7 s, 8 of 8)." -ForegroundColor Cyan
 }
 exit 0
