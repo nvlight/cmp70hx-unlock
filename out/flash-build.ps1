@@ -60,13 +60,24 @@ $srcEfi = Join-Path $srcDir 'unlock_v3r.efi'
 $outEfi = Join-Path $outDir 'unlock_v3r_CMP70HX.efi'
 $gspRef = Join-Path $outDir 'gsp_ga10x.bin'
 
-# The single reference. Verified on hardware twice: 2026-09-30 and again after a
-# reboot run on 2026-10-01 (G2GFX ... GFX_SPEED_SELECT=0x00000004 ***ВСТАЛ***).
-# Pinned by the git tag below. A rebuild that stops matching this md5 means a
-# string or a helper leaked in outside an #ifdef — BUILDING.md §6.0.
-$REF_MD5       = 'DEE0BAAB1B7C222399C091EAD15D071B'
-$REF_SIZE      = 657408
-$ROLLBACK_TAG  = 'rollback-2026-10-01'
+# The single reference: the fingerprint of the source state we LAST proved on
+# metal. A rebuild that stops matching it means a string or a helper leaked in
+# outside an #ifdef — BUILDING.md §6.0.
+#
+# WAS 'DEE0BAAB...' / 657408 - that is tag rollback-2026-10-01, i.e. v3.15. Every
+# build since v3.16 has differed from it, so this check has been refusing
+# anything unless -AllowNewBuild was passed, which quietly trains the reader to
+# pass that flag on reflex and defeats the check. Same bug the build.sh banner
+# had. Now it points at the current verified state instead.
+#
+# 67f7b5a8... = v3.39, 8 render masks, 15 964 ms on 2026-10-03, then 15 958 ms
+# on the same binary (out/usb-log-v340.txt) - two runs of one build, 6 ms apart.
+# Markers in that log: 'GFX_SPEED_SELECT=0x00000004 SET', 'END' present.
+# Pinned by commit 0fb8ab6, not by a tag: the rollback is 'git revert', and
+# 0fb8ab6 rebuilds byte-identically.
+$REF_MD5       = '67F7B5A84F8EFEBA5A4718004B0589ED'
+$REF_SIZE      = 671744
+$ROLLBACK_TAG  = 'rollback-2026-10-01'   # v3.15, the older independent image
 $GSP_MD5       = 'EB9BEB5D062CCBF3295391C926A2D7AD'
 
 # Strings that must survive into the binary. gfx/rmask are the graphics markers:
@@ -299,7 +310,7 @@ Write-Host "    2. wait for the end marker, do not interrupt" -ForegroundColor Y
 Write-Host "    3. out\pull-log.ps1 -Tag <name>" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  The change is NOT tested until that log comes back and shows" -ForegroundColor Yellow
-Write-Host "  'G2GFX ... GFX_SPEED_SELECT=0x00000004 ***ВСТАЛ***'." -ForegroundColor Yellow
+Write-Host "  'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET'." -ForegroundColor Yellow
 if ($outMd5 -ne $REF_MD5) {
     Write-Host ""
     Write-Host "  This build differs from the reference md5. Check these lines in the log" -ForegroundColor Yellow
@@ -308,9 +319,10 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    2. 'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET' <- main marker" -ForegroundColor Yellow
     Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
     Write-Host "    4. no 'dbg=0x007E0009' anywhere" -ForegroundColor Yellow
-    Write-Host "    5. 'render: FLR settle' must be ~500 ms x8, NOT 15 s - a" -ForegroundColor Yellow
-    Write-Host "       bigger number means a mark was lost (the delta swallowed the" -ForegroundColor Yellow
-    Write-Host "       next section). This is the failure the old CHECK used to hide." -ForegroundColor Yellow
+    Write-Host "    5. 'render: FLR settle' must be ~500 ms per render iteration, and the" -ForegroundColor Yellow
+    Write-Host "       number of iterations must equal the mask count. NOT 15 s - that" -ForegroundColor Yellow
+    Write-Host "       means a mark was lost (the delta swallowed the next section)," -ForegroundColor Yellow
+    Write-Host "       which is what the old CHECK used to hide." -ForegroundColor Yellow
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
