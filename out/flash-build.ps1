@@ -314,39 +314,36 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 16: QUIESCE back to 250 ms + v2.43/v2.45 diagnostics OFF." -ForegroundColor Yellow
+    Write-Host "    7. STAGE 17 IS MEASUREMENT ONLY - ONE Print added, nothing else." -ForegroundColor Green
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Arithmetic, so you can check it:" -ForegroundColor Cyan
-    Write-Host "         18 084 - 705 = 17 379 ms   -> expect ~17.4 s" -ForegroundColor Cyan
-    Write-Host "       The 705 ms is not an estimate. It is the measured gap between the" -ForegroundColor Cyan
-    Write-Host "       'fwsec: reset+STARTCPU' and 'fwsec: v2.43+v2.45 diagnostics' marks" -ForegroundColor Cyan
-    Write-Host "       in the GOOD log out\usb-log-v330.txt." -ForegroundColor Cyan
+    Write-Host "       This build must behave EXACTLY like v3.33: ~17.4 s, 8 of 8." -ForegroundColor Cyan
+    Write-Host "       If it does not, the Print is at fault, which would be news." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       WHY THAT BLOCK IS SAFE TO SWITCH OFF. The code's own comment says" -ForegroundColor Cyan
-    Write-Host "       both experiments live INSIDE the 'WPR2 ESTABLISHED' branch, i.e." -ForegroundColor Cyan
-    Write-Host "       they run on the already-successful path, after the unlock has" -ForegroundColor Cyan
-    Write-Host "       happened, and neither affects whether the masks opened. Everything" -ForegroundColor Cyan
-    Write-Host "       they report is already recorded in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "       The old fx_diag_gate() let the first call of every 24 through, and" -ForegroundColor Cyan
-    Write-Host "       in v3.30 it fired. Paying 3.9% of the run for that is waste." -ForegroundColor Cyan
+    Write-Host "       THE ONE LINE THAT MATTERS:" -ForegroundColor Cyan
+    Write-Host "         G2RMC render-masks top of iter 0: already open 0 of 8" -ForegroundColor Cyan
+    Write-Host "         G2RMC render-masks top of iter 1: already open ? of 8" -ForegroundColor Cyan
+    Write-Host "         ...                                    x8" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Only ONE risk in this build, and it is a proven-good value:" -ForegroundColor Cyan
-    Write-Host "         QUIESCE back to 250 ms - proven 8 of 8 on hardware twice already" -ForegroundColor Cyan
-    Write-Host "         fx_diagV245 = 0      - diagnostics only, no functional path" -ForegroundColor Cyan
-    Write-Host "       So a FAIL here would be a surprise and would mean something I have" -ForegroundColor Cyan
-    Write-Host "       not accounted for. Tell me and I will treat it as new information." -ForegroundColor Cyan
+    Write-Host "       Read the '?' column against the iteration number:" -ForegroundColor Cyan
+    Write-Host "         already open == k        -> each FLR cycle opens exactly ONE" -ForegroundColor Cyan
+    Write-Host "                                  mask. No batching possible." -ForegroundColor Cyan
+    Write-Host "                                  17.4 s is the CEILING of this design." -ForegroundColor Cyan
+    Write-Host "         already open  > k        -> masks open on their own, so one" -ForegroundColor Cyan
+    Write-Host "                                  FLR cycle can serve several masks." -ForegroundColor Cyan
+    Write-Host "                                  Gain up to 7 s -> below 14 s." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       READ: TIME  diag experiments: ran=0 skipped=N   <- was ran=1" -ForegroundColor Cyan
-    Write-Host "             QSLOW lines          - waited=~260000us, back to normal" -ForegroundColor Cyan
-    Write-Host "             render: FLR settle   - ~499 ms per iteration, unchanged" -ForegroundColor Cyan
+    Write-Host "       This single question is worth more than every remaining constant." -ForegroundColor Cyan
+    Write-Host "       The render loop is 10.9 s of the 17.4 s: 8 masks x 1.36 s, each" -ForegroundColor Cyan
+    Write-Host "       with its own FLR cycle. Everything else on the table is 0.5 s." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       BARR IS NOT A READINESS SIGNAL. It stuck 8 of 8 in v3.31 with the" -ForegroundColor Cyan
-    Write-Host "       render broken 3 of 8, and again 8 of 8 in v3.32 with it broken 1 of 8." -ForegroundColor Cyan
-    Write-Host "       Two confirmations in a row. Do not build a poll on it." -ForegroundColor Yellow
+    Write-Host "       Note the batching mechanism ALREADY EXISTS in the code - an already" -ForegroundColor Cyan
+    Write-Host "       open mask is skipped via continue. The log just never showed" -ForegroundColor Cyan
+    Write-Host "       whether it ever fires. If 'already open' is always 0 for the current" -ForegroundColor Cyan
+    Write-Host "       mask, it never fires." -ForegroundColor Cyan
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v330.txt (18.1 s, 8 of 8)." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v333.txt (17.4 s, 8 of 8)." -ForegroundColor Cyan
 }
 exit 0
