@@ -308,32 +308,37 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    2. 'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET' <- main marker" -ForegroundColor Yellow
     Write-Host "    3. 'END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF'" -ForegroundColor Yellow
     Write-Host "    4. no 'dbg=0x007E0009' anywhere" -ForegroundColor Yellow
-    Write-Host "    5. 'render: FLR + 300ms settle' must be ~500 ms x8, NOT 15 s - a" -ForegroundColor Yellow
+    Write-Host "    5. 'render: FLR settle' must be ~400 ms x8, NOT 15 s - a" -ForegroundColor Yellow
     Write-Host "       bigger number means a mark was lost (the delta swallowed the" -ForegroundColor Yellow
     Write-Host "       next section). This is the failure the old CHECK used to hide." -ForegroundColor Yellow
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 13r IS A REVERT. Expected: 18.1 s and 8 of 8, same as v3.28." -ForegroundColor Green
+    Write-Host "    7. STAGE 14 IS A BISECTION: total post-FLR settle 500 -> 400 ms." -ForegroundColor Yellow
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Stage 13 removed the blind Stall(200000) after initiating FLR and" -ForegroundColor Cyan
-    Write-Host "       broke the render: 0 of 8 masks. It is now restored EXACTLY." -ForegroundColor Cyan
-    Write-Host "       The probe stays as measurement only (8-9 us per call, 81 us per run)." -ForegroundColor Cyan
+    Write-Host "       Measured ends of the interval:" -ForegroundColor Cyan
+    Write-Host "         300 ms total = FAIL, 0 of 8 masks     (v3.29)" -ForegroundColor Cyan
+    Write-Host "         400 ms total = THIS STEP" -ForegroundColor Cyan
+    Write-Host "         500 ms total = PASS, 18.1 s, 8 of 8   (v3.28, v3.30)" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       WHY IT BROKE - do not repeat it. The probe asked whether config" -ForegroundColor Cyan
-    Write-Host "       space answers. It answered in 8-9 us with 0x248A10DE, every time." -ForegroundColor Cyan
-    Write-Host "       LIVENESS is not READINESS. The device is alive at once but the" -ForegroundColor Cyan
-    Write-Host "       function needs ~500 ms to accept a BAR0 rewrite." -ForegroundColor Cyan
+    Write-Host "       Arithmetic, so you can check it: the FLR section measured 499.3 ms" -ForegroundColor Cyan
+    Write-Host "       with a 500 ms budget, i.e. essentially all of it is the two stalls." -ForegroundColor Cyan
+    Write-Host "       Cutting 100 ms x 8 iterations = 0.8 s -> expected 17.3 s." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       NEW MEASUREMENT, read this one first:" -ForegroundColor Cyan
-    Write-Host "         BARR  bar0 write: want=0x.. got=0x.. STUCK / *** NOT STUCK ***" -ForegroundColor Cyan
-    Write-Host "       This is the FUNCTIONAL signal, and it is what stage 14 will use" -ForegroundColor Cyan
-    Write-Host "       to size the wait. All 8 must read STUCK - a single NOT STUCK means" -ForegroundColor Cyan
-    Write-Host "       the wait is too short, exactly as in v3.29." -ForegroundColor Cyan
+    Write-Host "       READ BOTH OF THESE - together they answer the important question:" -ForegroundColor Cyan
+    Write-Host "         BARR  bar0 write: want=0x.. got=0x.. STUCK | *** NOT STUCK ***" -ForegroundColor Cyan
+    Write-Host "         render: FLR settle   t=..ms   (should now be ~399, was ~499)" -ForegroundColor Cyan
+    Write-Host "         render broken + BAR0 STUCK    -> BAR0 is NOT predictive, stop using it" -ForegroundColor Cyan
+    Write-Host "         render broken + BAR0 NOT STUCK -> BAR0 IS predictive, build a poll on it" -ForegroundColor Cyan
+    Write-Host "         render works                   -> working point, cut further next run" -ForegroundColor Cyan
+    Write-Host "" -ForegroundColor Cyan
+    Write-Host "       NOTE: verify-log.ps1 now parses BARR only from lines starting with" -ForegroundColor Cyan
+    Write-Host "       'BARR'. It previously searched the whole log for 'NOT STUCK' and" -ForegroundColor Cyan
+    Write-Host "       cried wolf on v3.30 by matching an unrelated wpr2_probe line." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v328.txt (18.1 s, 8 of 8)." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v330.txt (18.1 s, 8 of 8, BAR0 stuck 8 of 8)." -ForegroundColor Cyan
 }
 exit 0
