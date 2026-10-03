@@ -314,36 +314,37 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 17 IS MEASUREMENT ONLY - ONE Print added, nothing else." -ForegroundColor Green
+    Write-Host "    7. STAGE 18: ONE blind stall cut - Stall(50000) -> Stall(10000) in [E1]." -ForegroundColor Yellow
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       This build must behave EXACTLY like v3.33: ~17.4 s, 8 of 8." -ForegroundColor Cyan
-    Write-Host "       If it does not, the Print is at fault, which would be news." -ForegroundColor Cyan
+    Write-Host "       Exactly ONE line changed (src/unlock_v2.c:6689). The other two" -ForegroundColor Cyan
+    Write-Host "       blind 50 ms stalls inside early_unlock_path (lines 6754 and 6845)" -ForegroundColor Cyan
+    Write-Host "       are still 50 ms - deliberately, one change per run." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       THE ONE LINE THAT MATTERS:" -ForegroundColor Cyan
-    Write-Host "         G2RMC render-masks top of iter 0: already open 0 of 8" -ForegroundColor Cyan
-    Write-Host "         G2RMC render-masks top of iter 1: already open ? of 8" -ForegroundColor Cyan
-    Write-Host "         ...                                    x8" -ForegroundColor Cyan
+    Write-Host "       Arithmetic, so you can check it:" -ForegroundColor Cyan
+    Write-Host "         8 iterations x 40 ms = 320 ms" -ForegroundColor Cyan
+    Write-Host "         17 417 - 320 = 17 097 ms   -> expect ~17.1 s" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Read the '?' column against the iteration number:" -ForegroundColor Cyan
-    Write-Host "         already open == k        -> each FLR cycle opens exactly ONE" -ForegroundColor Cyan
-    Write-Host "                                  mask. No batching possible." -ForegroundColor Cyan
-    Write-Host "                                  17.4 s is the CEILING of this design." -ForegroundColor Cyan
-    Write-Host "         already open  > k        -> masks open on their own, so one" -ForegroundColor Cyan
-    Write-Host "                                  FLR cycle can serve several masks." -ForegroundColor Cyan
-    Write-Host "                                  Gain up to 7 s -> below 14 s." -ForegroundColor Cyan
+    Write-Host "       WHY A BIG JUMP AND NOT A HALVING. The project rule is: measure the" -ForegroundColor Cyan
+    Write-Host "       ends first, then halve the interval. Here there ARE no ends - no run" -ForegroundColor Cyan
+    Write-Host "       has ever shown these 50 ms are needed. There is no lower bound, so" -ForegroundColor Cyan
+    Write-Host "       there is no interval, so there is nothing to halve. The first probe" -ForegroundColor Cyan
+    Write-Host "       should be informative rather than careful." -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       This single question is worth more than every remaining constant." -ForegroundColor Cyan
-    Write-Host "       The render loop is 10.9 s of the 17.4 s: 8 masks x 1.36 s, each" -ForegroundColor Cyan
-    Write-Host "       with its own FLR cycle. Everything else on the table is 0.5 s." -ForegroundColor Cyan
+    Write-Host "       THE RISK IS REAL, and this is a fact and not a disclaimer. This stall" -ForegroundColor Cyan
+    Write-Host "       sits in the same [E1]/[E3] sequence where the 150 ms QUIESCE budget" -ForegroundColor Cyan
+    Write-Host "       broke the render in v3.32 (1 of 8). Three outcomes, all useful:" -ForegroundColor Cyan
+    Write-Host "         PASS ~17.1 s -> threshold is <=10 ms. Next run cuts 6754 and 6845 too." -ForegroundColor Cyan
+    Write-Host "         FAIL         -> threshold is in (10; 50]. Then bisect and stop." -ForegroundColor Cyan
+    Write-Host "         surprise     -> that is new information, tell me, do not guess" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       Note the batching mechanism ALREADY EXISTS in the code - an already" -ForegroundColor Cyan
-    Write-Host "       open mask is skipped via continue. The log just never showed" -ForegroundColor Cyan
-    Write-Host "       whether it ever fires. If 'already open' is always 0 for the current" -ForegroundColor Cyan
-    Write-Host "       mask, it never fires." -ForegroundColor Cyan
+    Write-Host "       CONTEXT: batching was measured impossible in v3.34 - 'already open'" -ForegroundColor Cyan
+    Write-Host "       equalled the iteration number on all 8 iterations, so each FLR cycle" -ForegroundColor Cyan
+    Write-Host "       opens exactly one mask. That closes the 14 s idea and puts the" -ForegroundColor Cyan
+    Write-Host "       architectural ceiling at roughly 15.5 s. We are 1.9 s from it." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v333.txt (17.4 s, 8 of 8)." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v334.txt (17.4 s, 8 of 8)." -ForegroundColor Cyan
 }
 exit 0
