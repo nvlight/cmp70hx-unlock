@@ -1,0 +1,2889 @@
+﻿Флешка: X:  метка 'CMP70UNLOCK'  PhysicalDrive1  14,41 ГБ  30218842 секторов
+
+Магия найдена: сектор 1, LBA 4000001.
+
+Останов на: маркер конца
+Прогонов в области лога: 1 (чисто).
+
+================ ЛОГ С ФЛЕШКИ (102643 байт) ================
+CMPUNLOG v1 profile=CMP 70HX (GA104) pci=10de:248A fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+stick  lastLba=0x1CD1A59 partLba=0x800 logLba=0x3D0900 sec=1 by=geometry
+
+TIME  t=0ms - start of count (tsc=2405 ticks/us; NBPTIMER not readable yet, BAR0 not mapped)
+FIND  target 10de:248A bus=2 dev=0 fn=0 rb=0 card#0 fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+FIND  target 10de:248A bus=16 dev=0 fn=0 rb=0 card#1 fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+FIND  total targets=2 (MC_MAX=16)
+BARSCN card BAR0=0xF6000000 type=0 size=0x1000000
+BARSCN card BAR1=0xF800000C type=C size=0x4000000
+BARSCN card BAR2=0x0000002F (I/O BAR, skipping)
+BARSCN card BAR3=0xFC00000C type=C size=0x2000000
+BARSCN card BAR4=0x0000002F (I/O BAR, skipping)
+BARSCN card BAR5=0x0000E001 (I/O BAR, skipping)
+VROM  expBAR(0x30)=0x00000000
+VROM  found @0xF6300000
+VROM  hdr: 55 aa 7f eb 4b 37 34 30 30 e9 4c 19 77 cc 56 49
+VROM  CRC32 first 4KB = 0x31F7E28C (compare with GA104.rom)
+PROBE card#0 bus=2 dev=0 fn=0 id=10de:248A class=030200 bar0=0xF6000000
+PROBE   chip=0xB74000A1 gfw=0xBADF5040 fbsz=0xBADF1100 plm=0xFFFFFF8F wpr2=0x1FFFFE00/0x00000000
+SEC2W  POST-locked 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  POST-locked 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  POST-locked 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  POST-locked 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  POST-locked 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  POST-locked 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  POST-locked 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  POST-locked 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  POST-locked 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  POST-locked window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=0 idleTo=0
+GEN2M  POST-locked [ 0.. 3] 0x00823804=0xFFFFFF8F! 0x00088FE8=0xFFFFFFCF! 0x00088FEC=0xFFFFFFCF! 0x00088FF0=0xFFFFFFCF!
+GEN2M  POST-locked [ 4.. 7] 0x00088FF4=0xFFFFFF8F! 0x00088FF8=0xFFFFFF8F! 0x00088AB4=0xFFFFFF8F! 0x0008E1B0=0xFFFFFF8F!
+GEN2M  POST-locked [ 8..11] 0x0008E1B4=0xFFFFFFCF! 0x0008E1B8=0xFFFFFFCF! 0x0008E1BC=0xFFFFFFCF! 0x0008E1C0=0xFFFFFFCF!
+GEN2M  POST-locked [12..15] 0x0008E1C4=0xFFFFFFCF! 0x0008E1C8=0xFFFFFFCF! 0x0008E1CC=0xFFFFFFCF! 0x0008E1D0=0xFFFFFFCF!
+GEN2M  POST-locked [16..19] 0x0008E1D4=0xFFFFFFFF* 0x0008E1D8=0xFFFFFFCF! 0x0008E1DC=0xFFFFFF8F! 0x0008E1E0=0xFFFFFFCF!
+GEN2M  POST-locked [20..23] 0x0008E1E4=0xFFFFFFCF! 0x0008E1E8=0xFFFFFFCF! 0x0008E1EC=0xFFFFFFCF! 0x0008E1F0=0xFFFFFFFF*
+GEN2M  POST-locked [24..27] 0x008200D0=0xFFFFFF8F! 0x008200D4=0xFFFFFFFC! 0x008200D8=0xFFFFFF8F! 0x008200DC=0xFFFFFF8F!
+GEN2M  POST-locked [28..31] 0x008200E0=0xFFFFFF8F! 0x008200E4=0xFFFFFF8F! 0x008200E8=0xFFFFFFFC! 0x008200EC=0xFFFFFFFC!
+GEN2M  POST-locked [32..35] 0x008200F0=0xFFFFFFFC! 0x008200F4=0xFFFFFF8F! 0x00823800=0xFFFFFF8F! 0x00823B04=0xFFFFFF8F!
+GEN2M  POST-locked [36..39] 0x00088084=0x00453D01! 0x00088084=0x00453D01! 0x00088084=0x00453D01! 0x00088084=0x00453D01!
+GEN2S  POST-locked masks on target 2 of 37, not on target 35, first 0
+GEN2R  POST-locked       LINK_CAP 0x00088084 = 0x00453D01
+GEN2R  POST-locked   LNKSTA-inner 0x00088088 = 0x11010040
+GEN2R  POST-locked  LNKCTL2-inner 0x000880A8 = 0x00200001
+GEN2R  POST-locked  LINK_CONFIG_0 0x0008C040 = 0x80005800
+GEN2R  POST-locked    PRIV_MISC_1 0x0008841C = 0x20360500
+GEN2R  POST-locked          CYA_0 0x0008C2C0 = 0x00802005
+GEN2R  POST-locked      XP3G_OVR0 0x0008E110 = 0x00000000
+GEN2R  POST-locked      XP3G_OVR3 0x0008E11C = 0x00000000
+GEN2R  POST-locked      XP3G_VAL0 0x0008E120 = 0x00000000
+GEN2R  POST-locked      XP3G_VAL3 0x0008E12C = 0x00000000
+GEN2R  POST-locked        PLM-gfx 0x00823B04 = 0xFFFFFF8F
+GEN2R  POST-locked       PLM-main 0x00823804 = 0xFFFFFF8F
+GEN2R  POST-locked            SS0 0x0082381C = 0x00000000
+GEN2R  POST-locked            SS1 0x00823820 = 0x00000000
+GEN2R  POST-locked  GFX_SPEED_SEL 0x00823830 = 0x00000000
+GEN2C  POST-locked GPU   pcie_cap not found
+GEN2C  POST-locked BRIDGE pcie_cap not found
+BARSCN card BAR0=0xF6000000 type=0 size=0x1000000
+BARSCN card BAR1=0xF800000C type=C size=0x4000000
+BARSCN card BAR2=0x0000002F (I/O BAR, skipping)
+BARSCN card BAR3=0xFC00000C type=C size=0x2000000
+BARSCN card BAR4=0x0000002F (I/O BAR, skipping)
+BARSCN card BAR5=0x0000E001 (I/O BAR, skipping)
+VROM  expBAR(0x30)=0x00000000
+VROM  found @0xF6300000
+VROM  hdr: 55 aa 7f eb 4b 37 34 30 30 e9 4c 19 77 cc 56 49
+VROM  CRC32 first 4KB = 0x31F7E28C (compare with GA104.rom)
+PROBE card#1 bus=16 dev=0 fn=0 id=10de:248A class=030200 bar0=0xF6000000
+PROBE   chip=0xB74000A1 gfw=0xBADF5040 fbsz=0xBADF1100 plm=0xFFFFFF8F wpr2=0x1FFFFE00/0x00000000
+MC     g_mcIndex=0 g_mcCount=2 g_mcAdvance=1 SINGLE_CARD_ONLY=1 SKIP_FLR=0
+PICK  card#0 of 2 -> bus=2 dev=0 fn=0
+G2NVR  CMP90G2=37 present, but sweep disabled -> fire mode NOT enabling, the normal selector path will run
+TIME  t=354ms  after preload_bootmgfw
+TIME  t=355ms  after probe_preload
+SWEEP  sweep_all(POST) SKIPPED: FX_DIAG_SWEEPS=0 (read-only diagnostic, measured 11.86s)
+TIME  t=356ms  after sweep_all(POST)
+GFWT   GFW already ready, no wait (0x000003FF)
+TIME  t=357ms  after set_gpu_time (incl. GFW wait)
+TIME  ptimer zero = 1790823928001028896ns (TSC count already running since efi_main entry)
+MEM   v67 addr=0x110000000 W/R DEAD (bad 1)
+MEM   v67 CRC32 blob=0x2C6B1DB2 buffer=0x2C6B1DB2 OK | tail blob=0x34A67FE9 buffer=0x34A67FE9 OK
+MEM   v67 words: 0x0000:0000019C/0000019C 0x1F40:0000019C/0000019C 0x3E80:0000019C/0000019C 0x5DC0:0000019C/0000019C 0x7D00:0000019C/0000019C 0x9C40:0000019C/0000019C 0xBB80:0000019C/0000019C 0xDAC0:0000019C/0000019C
+TIME  t=362ms  pro: alloc+selftest v67
+MEM   ucode addr=0x111010000 W/R DEAD (bad 1)
+MEM   ucode CRC32 blob=0xF920DD5E buffer=0xF920DD5E OK | tail blob=0x98B2714A buffer=0x98B2714A OK
+MEM   ucode words: 0x0000:00000000/00000000 0x1D80:9F21FDFD/9F21FDFD 0x3B00:D24B5B98/D24B5B98 0x5880:84D0E702/84D0E702 0x7600:52D0F90A/52D0F90A 0x9380:00000000/00000000 0xB100:00000000/00000000 0xCE80:00000000/00000000
+TIME  t=365ms  pro: alloc+selftest ucode
+MEM   gsp_rm_boot addr=0x11201F000 W/R DEAD (bad 1)
+MEM   gsp_rm_boot CRC32 blob=0x1C751EB7 buffer=0x1C751EB7 OK | tail blob=0x2565B982 buffer=0x2565B982 OK
+MEM   gsp_rm_boot words: 0x0000:34F9AA8A/34F9AA8A 0x0C00:424D162A/424D162A 0x1800:BC82ED91/BC82ED91 0x2400:9D7C85D1/9D7C85D1 0x3000:1C3B7D4B/1C3B7D4B 0x3C00:DEE8FDD3/DEE8FDD3 0x4800:00000000/00000000 0x5400:C3986705/C3986705
+TIME  t=368ms  pro: alloc+selftest gsp_rm_boot
+MEM   fwsec addr=0xC1051000 W/R DEAD (bad 1)
+MEM   fwsec CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK | tail blob=0x9C78069E buffer=0x9C78069E OK
+MEM   fwsec words: 0x0000:EC547D23/EC547D23 0x1D40:1B7EF0D4/1B7EF0D4 0x3A80:2A689492/2A689492 0x57C0:A254B0C6/A254B0C6 0x7500:A1EA14D0/A1EA14D0 0x9240:5E340DB4/5E340DB4 0xAF80:57DEF6F6/57DEF6F6 0xCCC0:82F5A975/82F5A975
+TIME  t=371ms  pro: alloc+copy+selftest fwsec
+TIME  t=3511ms  pro: radtab SetMem
+TIME  t=3558ms  pro: radtab CopyMem 81MB
+BUF   radtab addr=0x11F103000 size=0x5053000 src0=0x00000000 buf0=0x00000000 src4=0x00000000 buf4=0x00000000 OK
+TIME  t=3559ms  pro: radtab buf_check
+FBIOS fbreg_0x440=0xBADF1100 profile_fb=0x200000000 READABLE
+META  meta@0x125156000 radix@0x11F0D8000 ucode@0x111010000 v67@0xC1041000 fbSize=0x200000000 frtsOffset=0x1F7E00000 frtsSize=0x100000 wprEnd=0x1F7F00000 vgaWS=0x1FFF00000 bootBin=0x1F7DFA000 bootCount=0x0
+GEOM  margin=0x8000000 (128 MB)  wprEnd=0x1F7F00000  frts=0x1F7E00000  frtsPG=0x1F7E00  expectWPR2=0x01F7E000/0x01F7EE00
+GEOM  profile and wpr meta agree
+PRE   WPR2=0x1FFFFE00/0x00000000 PLM=0xFFFFFE8E SS0=0x00000000 SS1=0x00000000 GFW=0xBADF5040
+TIME  t=3562ms  framebuffer access probe
+FBP    SKIPPED: FX_DIAG_FBPROBE=0 (read-only diagnostic, measured 4.40s)
+TIME  t=3563ms  FB probe done
+TIME  t=3564ms  before gsp_engine_reset (kill GFW)
+SCRUB  gsp-post-reset: 104us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=3565ms  gsp_engine_reset + scrub wait
+SWEEP  sweep_all(SEC2-unlocked) SKIPPED: FX_DIAG_SWEEPS=0
+TIME  t=3576ms  before early path (allocs done)
+TIME  t=3588ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 103us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+DMAQ   FULL timeout #1 cmd=0x00000615 (bit0=FULL set, bit1=IDLE clear) cost=17 reads/13us exit=stuck
+DMAQ   FULL timeout #2 cmd=0x00000615 (bit0=FULL set, bit1=IDLE clear) cost=17 reads/14us exit=stuck
+DMAQ   FULL timeout #32 cmd=0x00000615 (bit0=FULL set, bit1=IDLE clear) cost=17 reads/13us exit=stuck
+DMAQ   IDLE timeout #1 cmd=0x00000615 (bit1=IDLE set, bit0=FULL clear) cost=17 reads/13us exit=stuck
+DMAQ   FULL timeout #64 cmd=0x00000615 (bit0=FULL set, bit1=IDLE clear) cost=17 reads/12us exit=stuck
+DMAQ   IDLE timeout #2 cmd=0x00000615 (bit1=IDLE set, bit0=FULL clear) cost=17 reads/13us exit=stuck
+FWL    [E1]: falcon settle 22920us (wake=22800us budget=1000000us, cpuctl=0x00000000, started=0, verdict=no-response)
+TIME   [E1] BL settle 22920us of budget 1000000us
+PROBE  E1-after-BL[1] WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+TIME  t=3664ms  [E1] BL load+settle
+PROBE  E2-pre-fwsec[2] WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0x001C0004 0x00840344=0xBADF5720 0x00840348=0xBADF5720 0x0084034C=0xBADF5720  <<0x001C0004
+SEC2W  E2-pre-fwsec 0x00840350=0x00000000 0x00840354=0xBADF5720 0x00840358=0xBADF5720 0x0084035C=0xBADF5720
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5720 0x00840364=0xBADF5040 0x00840368=0xBADF5040 0x0084036C=0xBADF5040
+SEC2W  E2-pre-fwsec 0x00840370=0x001C0004 0x00840374=0xBADF5720 0x00840378=0xBADF5720 0x0084037C=0xBADF5720  <<0x001C0004
+SEC2W  E2-pre-fwsec 0x00840380=0x00000000 0x00840384=0xBADF5720 0x00840388=0xBADF5720 0x0084038C=0xBADF5720
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=29 live=4 dmatrfcmd=0x00000615 fullTo=69 idleTo=2
+TIME  t=3678ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 103us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   *** WPR2 ESTABLISHED lo=0x01F7E000 hi=0x01F7EE00 after 11 ms ***
+OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+TIME  t=3745ms  fwsec: reset+STARTCPU
+FWL    v2.43 cmd scan: falcon settle 22810us (wake=22800us budget=200000us, cpuctl=0x00000000, started=0, verdict=no-response)
+FWL    v2.43 cmd scan: falcon settle 22941us (wake=22800us budget=200000us, cpuctl=0x00000000, started=0, verdict=no-response)
+FWL    v2.43 cmd scan: falcon settle 22949us (wake=22800us budget=200000us, cpuctl=0x00000000, started=0, verdict=no-response)
+FWL    v2.43 cmd scan: falcon settle 22949us (wake=22800us budget=200000us, cpuctl=0x00000000, started=0, verdict=no-response)
+FWL    v2.43 cmd scan: falcon settle 22864us (wake=22800us budget=200000us, cpuctl=0x00000000, started=0, verdict=no-response)
+FWL    v2.43 cmd scan: falcon settle 22913us (wake=22800us budget=200000us, cpuctl=0x00000000, started=0, verdict=no-response)
+FWL    v2.43 cmd scan: falcon settle 22896us (wake=22800us budget=200000us, cpuctl=0x00000000, started=0, verdict=no-response)
+FWL    v2.43 cmd scan: falcon settle 7898us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+FWL    v2.43 cmd scan: falcon settle 1us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+FWL    v2.43 cmd scan: falcon settle 1us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+FWL    v2.43 cmd scan: falcon settle 1us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+FWL    v2.43 cmd scan: falcon settle 0us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+FWL    v2.43 cmd scan: falcon settle 0us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+FWL    v2.43 cmd scan: falcon settle 0us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+FWL    v2.43 cmd scan: falcon settle 0us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+FWL    v2.43 cmd scan: falcon settle 0us (wake=22800us budget=200000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+PROBE  after-0x10..0x1F-scan[3] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+V245   Falcon ? HALT (cpuctl=0x00000010) ? WPR2 ?? ????????? ? SEC=1 ?? GSP ?? ????????, ????? ?? ???????? 500 ?? 2000
+V245   ????: p=500 ????????, wpr2lo=0x01F7E000
+TIME  t=4450ms  fwsec: v2.43+v2.45 diagnostics
+PROBE  before-return-TRUE[4] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+SEC2W  E2-post-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840340=0x001C0004 0x00840344=0xBADF5720 0x00840348=0xBADF5720 0x0084034C=0xBADF5720  <<0x001C0004
+SEC2W  E2-post-fwsec 0x00840350=0x00000000 0x00840354=0xBADF5720 0x00840358=0xBADF5720 0x0084035C=0xBADF5720
+SEC2W  E2-post-fwsec 0x00840360=0xBADF5720 0x00840364=0xBADF5040 0x00840368=0xBADF5040 0x0084036C=0xBADF5040
+SEC2W  E2-post-fwsec 0x00840370=0x001C0004 0x00840374=0xBADF5720 0x00840378=0xBADF5720 0x0084037C=0xBADF5720  <<0x001C0004
+SEC2W  E2-post-fwsec 0x00840380=0x00000000 0x00840384=0xBADF5720 0x00840388=0xBADF5720 0x0084038C=0xBADF5720
+SEC2S  E2-post-fwsec window 0x00840300..0x00840380 words=33 BADF=29 live=4 dmatrfcmd=0x00000602 fullTo=69 idleTo=2
+TIME  t=4452ms  [E2] fwsec_boot_gsp_sig
+QSLOW  rr: [E3] ResetIntoRiscv ready cpuctl=0x00000010 waited=260923us (budget exhausted, engine did NOT quiesce)
+TIME  t=4714ms  rr: [E3] ResetIntoRiscv ready
+TIME  t=4772ms  rr: [E3] ResetIntoRiscv ready
+TIME  t=4911ms  [E3] ResetIntoRiscv
+FLRX   WPR2 restored after V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** DID NOT HOLD ***
+PROBE  after-early-path[8] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+SEC2W  after-early-path 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  after-early-path 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  after-early-path 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  after-early-path 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  after-early-path 0x00840340=0x001C0004 0x00840344=0xBADF5720 0x00840348=0xBADF5720 0x0084034C=0xBADF5720  <<0x001C0004
+SEC2W  after-early-path 0x00840350=0x00000000 0x00840354=0xBADF5720 0x00840358=0xBADF5720 0x0084035C=0xBADF5720
+SEC2W  after-early-path 0x00840360=0xBADF5720 0x00840364=0xBADF5040 0x00840368=0xBADF5040 0x0084036C=0xBADF5040
+SEC2W  after-early-path 0x00840370=0x001C0004 0x00840374=0xBADF5720 0x00840378=0xBADF5720 0x0084037C=0xBADF5720  <<0x001C0004
+SEC2W  after-early-path 0x00840380=0x00000000 0x00840384=0xBADF5720 0x00840388=0xBADF5720 0x0084038C=0xBADF5720
+SEC2S  after-early-path window 0x00840300..0x00840380 words=33 BADF=29 live=4 dmatrfcmd=0xBADF5620 fullTo=69 idleTo=2
+TIME  t=4963ms  early path finished
+TIME  t=4975ms  rr: gsp engine reset GFW kill
+SCRUB  gsp-reset: 103us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+QSLOW  rr: post-WPR2 sec2 ready cpuctl=0x00000010 waited=260668us (budget exhausted, engine did NOT quiesce)
+TIME  t=5808ms  rr: post-WPR2 sec2 ready
+TIME  t=5866ms  rr: post-WPR2 sec2 ready
+SCRUB  sec2-reset: 103us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+GEN2  switch: fire=0 have2=1 enable=0 -> sweep SKIPPED
+STG   enter gen2 block fire=0 have2=1 enable=0
+STG   gen2: no branch taken (have2=1 success=0 direct=0 early=0) - falling through
+TIME  t=6073ms  pro: early-path to render entry
+G2RMK  render-masks === opening XVE window (GFX_SPEED_SELECT door): full FLR path per mask (fast path was removed in v3.19) ===
+G2RMK  render-masks BEFORE  0x00088FE8 = 0xFFFFFFCF
+G2RMK  render-masks BEFORE  0x00088FEC = 0xFFFFFFCF
+G2RMK  render-masks BEFORE  0x00088FF0 = 0xFFFFFFCF
+G2RMK  render-masks BEFORE  0x00088FF4 = 0xFFFFFF8F
+G2RMK  render-masks BEFORE  0x00088FF8 = 0xFFFFFF8F
+G2RMK  render-masks BEFORE  0x00088AB4 = 0xFFFFFF8F
+G2RMK  render-masks BEFORE  0x00823800 = 0xFFFFFF8F
+G2RMK  render-masks BEFORE  0x00823B04 = 0xFFFFFF8F
+TIME  t=6075ms  render: preamble BEFORE reads
+FLRW  config answers in 9us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+BARR  bar0 write: want=0xF6000000 got=0xF6000000 STUCK
+TIME  t=6475ms  render: FLR settle
+TIME  t=6487ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 0us (0 polls) dmactl=0x00000080 hwcfg2=0x000047F7 done
+FWL    [E1]: falcon settle 19637us (wake=22800us budget=1000000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+TIME   [E1] BL settle 19637us of budget 1000000us
+TIME  t=6559ms  [E1] BL load+settle
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=69 idleTo=2
+QSLOW  rr: fwsec kflcnReset GSP cpuctl=0x00000010 waited=260755us (budget exhausted, engine did NOT quiesce)
+TIME  t=6824ms  rr: fwsec kflcnReset GSP
+TIME  t=6881ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 104us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   *** WPR2 ESTABLISHED lo=0x01F7E000 hi=0x01F7EE00 after 11 ms ***
+OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+TIME  t=6946ms  fwsec: reset+STARTCPU
+SEC2W  E2-post-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-post-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000602 fullTo=69 idleTo=4
+TIME  t=6947ms  [E2] fwsec_boot_gsp_sig
+TIME  t=6958ms  rr: [E3] ResetIntoRiscv ready
+TIME  t=7106ms  [E3] ResetIntoRiscv
+FLRX   WPR2 restored after V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** DID NOT HOLD ***
+TIME  t=7157ms  render masks: booter#1 done (early path)
+TIME  t=7159ms  render: early_unlock_path
+G2RMK  render-masks pass1 booter#1: PLM=0xFFFFFFFF
+G2RMK  render-masks pass1 booter#2: 0x00088FE8 <- 0xffffffff (now 0xFFFFFFCF)
+TIME  t=7171ms  rr: booter SEC2 reset
+SCRUB  sec2-reset: 104us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=7232ms  booter: reset+scrub
+TIME  t=7243ms  booter: wpr2+setup
+TIME  t=7245ms  booter: dma image
+BOOTER iters=5 in 0.049ms PLM-OPEN
+TIME  t=7248ms  booter: start+wait
+TIME  t=7249ms  render masks: booter#2 done (ROP write)
+TIME  t=7250ms  render: booter_load_v67 #2
+TIME  t=7329ms  render: ROP write + poll
+G2RMK  render-masks pass1 0x00088FE8 became 0xFFFFFFFF OPEN (polls=78)
+FLRW  config answers in 9us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+BARR  bar0 write: want=0xF6000000 got=0xF6000000 STUCK
+TIME  t=7730ms  render: FLR settle
+TIME  t=7741ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 0us (0 polls) dmactl=0x00000080 hwcfg2=0x000047F7 done
+FWL    [E1]: falcon settle 21060us (wake=22800us budget=1000000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+TIME   [E1] BL settle 21060us of budget 1000000us
+TIME  t=7814ms  [E1] BL load+settle
+PROBE  E2-pre-fwsec[16] WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=69 idleTo=4
+QSLOW  rr: fwsec kflcnReset GSP cpuctl=0x00000010 waited=260497us (budget exhausted, engine did NOT quiesce)
+TIME  t=8076ms  rr: fwsec kflcnReset GSP
+TIME  t=8133ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 103us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+DMAP   sig=0xDEAD5EC2 versz=0xDEAD5EC2 cmdIn=0xDEAD5EC2/0xDEAD5EC2 cmdOut=0xDEAD5EC2/0xDEAD5EC2 feat=0xDEAD5EC2 initCmd=0xDEAD5EC2 mask=0xDEAD5EC2/0xDEAD5EC2
+DMAP   *** structure CORRUPTED - fwsec reset it
+CMDIN  off=0xDEAD5EC2  readVbiosDesc(ver,size)=0xDEAD5EC2/0xDEAD5EC2  frtsDesc(ver)=0xDEAD5EC2  offset4K=0xDEAD5EC2  mediaType=0xDEAD5EC2
+CMDIN  *** buffer UNCHANGED -> fwsec did NOT execute the command
+CMDOUT unusable off=0xDEAD5EC2 size=0xDEAD5EC2
+SCR    [0x0C] = 0x00000007
+PLMM   wpr2_lo=0x1FFFFE00 wpr2_hi=0x00000000 privLevelMask=0x0004CB8F expect_lo=0x01F7E000
+PLMM   wpr2 reads are priv-masked - value unreliable
+FWSEC   DMEM dump after run (all non-zero):
+FWSEC   dmem[0x000]=0xDEAD5EC2
+FWSEC   dmem[0x004]=0xDEAD5EC2
+FWSEC   dmem[0x008]=0xDEAD5EC2
+FWSEC   dmem[0x00C]=0xDEAD5EC2
+FWSEC   dmem[0x010]=0xDEAD5EC2
+FWSEC   dmem[0x014]=0xDEAD5EC2
+FWSEC   dmem[0x018]=0xDEAD5EC2
+FWSEC   dmem[0x01C]=0xDEAD5EC2
+FWSEC   dmem[0x020]=0xDEAD5EC2
+FWSEC   dmem[0x024]=0xDEAD5EC2
+FWSEC   dmem[0x028]=0xDEAD5EC2
+FWSEC   dmem[0x02C]=0xDEAD5EC2
+FWSEC   dmem[0x030]=0xDEAD5EC2
+FWSEC   dmem[0x034]=0xDEAD5EC2
+FWSEC   dmem[0x038]=0xDEAD5EC2
+FWSEC   dmem[0x03C]=0xDEAD5EC2
+FWSEC   dmem[0x040]=0xDEAD5EC2
+FWSEC   dmem[0x044]=0xDEAD5EC2
+FWSEC   dmem[0x048]=0xDEAD5EC2
+FWSEC   dmem[0x04C]=0xDEAD5EC2
+FWSEC   dmem[0x050]=0xDEAD5EC2
+FWSEC   dmem[0x054]=0xDEAD5EC2
+FWSEC   dmem[0x058]=0xDEAD5EC2
+FWSEC   dmem[0x05C]=0xDEAD5EC2
+FWSEC   dmem[0x060]=0xDEAD5EC2
+FWSEC   dmem[0x064]=0xDEAD5EC2
+FWSEC   dmem[0x068]=0xDEAD5EC2
+FWSEC   dmem[0x06C]=0xDEAD5EC2
+FWSEC   dmem[0x070]=0xDEAD5EC2
+FWSEC   dmem[0x074]=0xDEAD5EC2
+FWSEC   dmem[0x078]=0xDEAD5EC2
+FWSEC   dmem[0x07C]=0xDEAD5EC2
+FWSEC   dmem[0x080]=0xDEAD5EC2
+FWSEC   dmem[0x084]=0xDEAD5EC2
+FWSEC   dmem[0x088]=0xDEAD5EC2
+FWSEC   dmem[0x08C]=0xDEAD5EC2
+FWSEC   dmem[0x090]=0xDEAD5EC2
+FWSEC   dmem[0x094]=0xDEAD5EC2
+FWSEC   dmem[0x098]=0xDEAD5EC2
+FWSEC   dmem[0x09C]=0xDEAD5EC2
+FWSEC   dmem[0x0A0]=0xDEAD5EC2
+FWSEC   dmem[0x0A4]=0xDEAD5EC2
+FWSEC   dmem[0x0A8]=0xDEAD5EC2
+FWSEC   dmem[0x0AC]=0xDEAD5EC2
+FWSEC   dmem[0x0B0]=0xDEAD5EC2
+FWSEC   dmem[0x0B4]=0xDEAD5EC2
+FWSEC   dmem[0x0B8]=0xDEAD5EC2
+FWSEC   dmem[0x0BC]=0xDEAD5EC2
+FWSEC   dmem[0x0C0]=0xDEAD5EC2
+FWSEC   dmem[0x0C4]=0xDEAD5EC2
+FWSEC   dmem[0x0C8]=0xDEAD5EC2
+FWSEC   dmem[0x0CC]=0xDEAD5EC2
+FWSEC   dmem[0x0D0]=0xDEAD5EC2
+FWSEC   dmem[0x0D4]=0xDEAD5EC2
+FWSEC   dmem[0x0D8]=0xDEAD5EC2
+FWSEC   dmem[0x0DC]=0xDEAD5EC2
+FWSEC   dmem[0x0E0]=0xDEAD5EC2
+FWSEC   dmem[0x0E4]=0xDEAD5EC2
+FWSEC   dmem[0x0E8]=0xDEAD5EC2
+FWSEC   dmem[0x0EC]=0xDEAD5EC2
+FWSEC   dmem[0x0F0]=0xDEAD5EC2
+FWSEC   dmem[0x0F4]=0xDEAD5EC2
+FWSEC   dmem[0x0F8]=0xDEAD5EC2
+FWSEC   dmem[0x0FC]=0xDEAD5EC2
+FWSEC   dmem[0x100]=0xDEAD5EC2
+FWSEC   dmem[0x104]=0xDEAD5EC2
+FWSEC   dmem[0x108]=0xDEAD5EC2
+FWSEC   dmem[0x10C]=0xDEAD5EC2
+FWSEC   dmem[0x110]=0xDEAD5EC2
+FWSEC   dmem[0x114]=0xDEAD5EC2
+FWSEC   dmem[0x118]=0xDEAD5EC2
+FWSEC   dmem[0x11C]=0xDEAD5EC2
+FWSEC   dmem[0x120]=0xDEAD5EC2
+FWSEC   dmem[0x124]=0xDEAD5EC2
+FWSEC   dmem[0x128]=0xDEAD5EC2
+FWSEC   dmem[0x12C]=0xDEAD5EC2
+FWSEC   dmem[0x130]=0xDEAD5EC2
+FWSEC   dmem[0x134]=0xDEAD5EC2
+FWSEC   dmem[0x138]=0xDEAD5EC2
+FWSEC   dmem[0x13C]=0xDEAD5EC2
+FWSEC   dmem[0x140]=0xDEAD5EC2
+FWSEC   dmem[0x144]=0xDEAD5EC2
+FWSEC   dmem[0x148]=0xDEAD5EC2
+FWSEC   dmem[0x14C]=0xDEAD5EC2
+FWSEC   dmem[0x150]=0xDEAD5EC2
+FWSEC   dmem[0x154]=0xDEAD5EC2
+FWSEC   dmem[0x158]=0xDEAD5EC2
+FWSEC   dmem[0x15C]=0xDEAD5EC2
+FWSEC   dmem[0x160]=0xDEAD5EC2
+FWSEC   dmem[0x164]=0xDEAD5EC2
+FWSEC   dmem[0x168]=0xDEAD5EC2
+FWSEC   dmem[0x16C]=0xDEAD5EC2
+FWSEC   dmem[0x170]=0xDEAD5EC2
+FWSEC   dmem[0x174]=0xDEAD5EC2
+FWSEC   dmem[0x178]=0xDEAD5EC2
+FWSEC   dmem[0x17C]=0xDEAD5EC2
+FWSEC   dmem[0x180]=0xDEAD5EC2
+FWSEC   dmem[0x184]=0xDEAD5EC2
+FWSEC   dmem[0x188]=0xDEAD5EC2
+FWSEC   dmem[0x18C]=0xDEAD5EC2
+FWSEC   dmem[0x190]=0xDEAD5EC2
+FWSEC   dmem[0x194]=0xDEAD5EC2
+FWSEC   dmem[0x198]=0xDEAD5EC2
+FWSEC   dmem[0x19C]=0xDEAD5EC2
+FWSEC   dmem[0x1A0]=0xDEAD5EC2
+FWSEC   dmem[0x1A4]=0xDEAD5EC2
+FWSEC   dmem[0x1A8]=0xDEAD5EC2
+FWSEC   dmem[0x1AC]=0xDEAD5EC2
+FWSEC   dmem[0x1B0]=0xDEAD5EC2
+FWSEC   dmem[0x1B4]=0xDEAD5EC2
+FWSEC   ... (dump truncated at 110 lines)
+FWSEC   end of DMEM dump (non-empty words: 512)
+TIME  t=13233ms  render masks: booter#1 done (early path)
+TIME  t=13235ms  render: early_unlock_path
+G2RMK  render-masks pass1 booter#1: PLM=0xFFFFFFFF
+G2RMK  render-masks pass1 booter#2: 0x00088FEC <- 0xffffffff (now 0xFFFFFFCF)
+TIME  t=13247ms  rr: booter SEC2 reset
+SCRUB  sec2-reset: 148us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=13309ms  booter: reset+scrub
+TIME  t=13321ms  booter: wpr2+setup
+TIME  t=13323ms  booter: dma image
+BOOTER iters=5 in 0.050ms PLM-OPEN
+TIME  t=13326ms  booter: start+wait
+TIME  t=13327ms  render masks: booter#2 done (ROP write)
+TIME  t=13328ms  render: booter_load_v67 #2
+TIME  t=13731ms  render: ROP write + poll
+G2RMK  render-masks pass1 0x00088FEC became 0xFFFFFFCF remained locked (polls=400)
+FLRW  config answers in 7us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+BARR  bar0 write: want=0xF6000000 got=0xF6000000 STUCK
+TIME  t=14132ms  render: FLR settle
+TIME  t=14145ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 0us (0 polls) dmactl=0x00000080 hwcfg2=0x000047F7 done
+FWL    [E1]: falcon settle 19506us (wake=22800us budget=1000000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+TIME   [E1] BL settle 19506us of budget 1000000us
+TIME  t=14217ms  [E1] BL load+settle
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=72 idleTo=6
+QSLOW  rr: fwsec kflcnReset GSP cpuctl=0x00000010 waited=260925us (budget exhausted, engine did NOT quiesce)
+TIME  t=14480ms  rr: fwsec kflcnReset GSP
+TIME  t=14538ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 104us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+DMAP   sig=0xDEAD5EC2 versz=0xDEAD5EC2 cmdIn=0xDEAD5EC2/0xDEAD5EC2 cmdOut=0xDEAD5EC2/0xDEAD5EC2 feat=0xDEAD5EC2 initCmd=0xDEAD5EC2 mask=0xDEAD5EC2/0xDEAD5EC2
+DMAP   *** structure CORRUPTED - fwsec reset it
+CMDIN  off=0xDEAD5EC2  readVbiosDesc(ver,size)=0xDEAD5EC2/0xDEAD5EC2  frtsDesc(ver)=0xDEAD5EC2  offset4K=0xDEAD5EC2  mediaType=0xDEAD5EC2
+CMDIN  *** buffer UNCHANGED -> fwsec did NOT execute the command
+CMDOUT unusable off=0xDEAD5EC2 size=0xDEAD5EC2
+SCR    [0x0C] = 0x00000007
+PLMM   wpr2_lo=0x1FFFFE00 wpr2_hi=0x00000000 privLevelMask=0x0004CB8F expect_lo=0x01F7E000
+PLMM   wpr2 reads are priv-masked - value unreliable
+FWSEC   DMEM dump after run (all non-zero):
+FWSEC   dmem[0x000]=0xDEAD5EC2
+FWSEC   dmem[0x004]=0xDEAD5EC2
+FWSEC   dmem[0x008]=0xDEAD5EC2
+FWSEC   dmem[0x00C]=0xDEAD5EC2
+FWSEC   dmem[0x010]=0xDEAD5EC2
+FWSEC   dmem[0x014]=0xDEAD5EC2
+FWSEC   dmem[0x018]=0xDEAD5EC2
+FWSEC   dmem[0x01C]=0xDEAD5EC2
+FWSEC   dmem[0x020]=0xDEAD5EC2
+FWSEC   dmem[0x024]=0xDEAD5EC2
+FWSEC   dmem[0x028]=0xDEAD5EC2
+FWSEC   dmem[0x02C]=0xDEAD5EC2
+FWSEC   dmem[0x030]=0xDEAD5EC2
+FWSEC   dmem[0x034]=0xDEAD5EC2
+FWSEC   dmem[0x038]=0xDEAD5EC2
+FWSEC   dmem[0x03C]=0xDEAD5EC2
+FWSEC   dmem[0x040]=0xDEAD5EC2
+FWSEC   dmem[0x044]=0xDEAD5EC2
+FWSEC   dmem[0x048]=0xDEAD5EC2
+FWSEC   dmem[0x04C]=0xDEAD5EC2
+FWSEC   dmem[0x050]=0xDEAD5EC2
+FWSEC   dmem[0x054]=0xDEAD5EC2
+FWSEC   dmem[0x058]=0xDEAD5EC2
+FWSEC   dmem[0x05C]=0xDEAD5EC2
+FWSEC   dmem[0x060]=0xDEAD5EC2
+FWSEC   dmem[0x064]=0xDEAD5EC2
+FWSEC   dmem[0x068]=0xDEAD5EC2
+FWSEC   dmem[0x06C]=0xDEAD5EC2
+FWSEC   dmem[0x070]=0xDEAD5EC2
+FWSEC   dmem[0x074]=0xDEAD5EC2
+FWSEC   dmem[0x078]=0xDEAD5EC2
+FWSEC   dmem[0x07C]=0xDEAD5EC2
+FWSEC   dmem[0x080]=0xDEAD5EC2
+FWSEC   dmem[0x084]=0xDEAD5EC2
+FWSEC   dmem[0x088]=0xDEAD5EC2
+FWSEC   dmem[0x08C]=0xDEAD5EC2
+FWSEC   dmem[0x090]=0xDEAD5EC2
+FWSEC   dmem[0x094]=0xDEAD5EC2
+FWSEC   dmem[0x098]=0xDEAD5EC2
+FWSEC   dmem[0x09C]=0xDEAD5EC2
+FWSEC   dmem[0x0A0]=0xDEAD5EC2
+FWSEC   dmem[0x0A4]=0xDEAD5EC2
+FWSEC   dmem[0x0A8]=0xDEAD5EC2
+FWSEC   dmem[0x0AC]=0xDEAD5EC2
+FWSEC   dmem[0x0B0]=0xDEAD5EC2
+FWSEC   dmem[0x0B4]=0xDEAD5EC2
+FWSEC   dmem[0x0B8]=0xDEAD5EC2
+FWSEC   dmem[0x0BC]=0xDEAD5EC2
+FWSEC   dmem[0x0C0]=0xDEAD5EC2
+FWSEC   dmem[0x0C4]=0xDEAD5EC2
+FWSEC   dmem[0x0C8]=0xDEAD5EC2
+FWSEC   dmem[0x0CC]=0xDEAD5EC2
+FWSEC   dmem[0x0D0]=0xDEAD5EC2
+FWSEC   dmem[0x0D4]=0xDEAD5EC2
+FWSEC   dmem[0x0D8]=0xDEAD5EC2
+FWSEC   dmem[0x0DC]=0xDEAD5EC2
+FWSEC   dmem[0x0E0]=0xDEAD5EC2
+FWSEC   dmem[0x0E4]=0xDEAD5EC2
+FWSEC   dmem[0x0E8]=0xDEAD5EC2
+FWSEC   dmem[0x0EC]=0xDEAD5EC2
+FWSEC   dmem[0x0F0]=0xDEAD5EC2
+FWSEC   dmem[0x0F4]=0xDEAD5EC2
+FWSEC   dmem[0x0F8]=0xDEAD5EC2
+FWSEC   dmem[0x0FC]=0xDEAD5EC2
+FWSEC   dmem[0x100]=0xDEAD5EC2
+FWSEC   dmem[0x104]=0xDEAD5EC2
+FWSEC   dmem[0x108]=0xDEAD5EC2
+FWSEC   dmem[0x10C]=0xDEAD5EC2
+FWSEC   dmem[0x110]=0xDEAD5EC2
+FWSEC   dmem[0x114]=0xDEAD5EC2
+FWSEC   dmem[0x118]=0xDEAD5EC2
+FWSEC   dmem[0x11C]=0xDEAD5EC2
+FWSEC   dmem[0x120]=0xDEAD5EC2
+FWSEC   dmem[0x124]=0xDEAD5EC2
+FWSEC   dmem[0x128]=0xDEAD5EC2
+FWSEC   dmem[0x12C]=0xDEAD5EC2
+FWSEC   dmem[0x130]=0xDEAD5EC2
+FWSEC   dmem[0x134]=0xDEAD5EC2
+FWSEC   dmem[0x138]=0xDEAD5EC2
+FWSEC   dmem[0x13C]=0xDEAD5EC2
+FWSEC   dmem[0x140]=0xDEAD5EC2
+FWSEC   dmem[0x144]=0xDEAD5EC2
+FWSEC   dmem[0x148]=0xDEAD5EC2
+FWSEC   dmem[0x14C]=0xDEAD5EC2
+FWSEC   dmem[0x150]=0xDEAD5EC2
+FWSEC   dmem[0x154]=0xDEAD5EC2
+FWSEC   dmem[0x158]=0xDEAD5EC2
+FWSEC   dmem[0x15C]=0xDEAD5EC2
+FWSEC   dmem[0x160]=0xDEAD5EC2
+FWSEC   dmem[0x164]=0xDEAD5EC2
+FWSEC   dmem[0x168]=0xDEAD5EC2
+FWSEC   dmem[0x16C]=0xDEAD5EC2
+FWSEC   dmem[0x170]=0xDEAD5EC2
+FWSEC   dmem[0x174]=0xDEAD5EC2
+FWSEC   dmem[0x178]=0xDEAD5EC2
+FWSEC   dmem[0x17C]=0xDEAD5EC2
+FWSEC   dmem[0x180]=0xDEAD5EC2
+FWSEC   dmem[0x184]=0xDEAD5EC2
+FWSEC   dmem[0x188]=0xDEAD5EC2
+FWSEC   dmem[0x18C]=0xDEAD5EC2
+FWSEC   dmem[0x190]=0xDEAD5EC2
+FWSEC   dmem[0x194]=0xDEAD5EC2
+FWSEC   dmem[0x198]=0xDEAD5EC2
+FWSEC   dmem[0x19C]=0xDEAD5EC2
+FWSEC   dmem[0x1A0]=0xDEAD5EC2
+FWSEC   dmem[0x1A4]=0xDEAD5EC2
+FWSEC   dmem[0x1A8]=0xDEAD5EC2
+FWSEC   dmem[0x1AC]=0xDEAD5EC2
+FWSEC   dmem[0x1B0]=0xDEAD5EC2
+FWSEC   dmem[0x1B4]=0xDEAD5EC2
+FWSEC   ... (dump truncated at 110 lines)
+FWSEC   end of DMEM dump (non-empty words: 512)
+TIME  t=19637ms  render masks: booter#1 done (early path)
+TIME  t=19638ms  render: early_unlock_path
+G2RMK  render-masks pass1 booter#1: PLM=0xFFFFFFFF
+G2RMK  render-masks pass1 booter#2: 0x00088FF0 <- 0xffffffff (now 0xFFFFFFCF)
+TIME  t=19650ms  rr: booter SEC2 reset
+SCRUB  sec2-reset: 104us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=19713ms  booter: reset+scrub
+TIME  t=19724ms  booter: wpr2+setup
+TIME  t=19726ms  booter: dma image
+BOOTER iters=5 in 0.049ms PLM-OPEN
+TIME  t=19730ms  booter: start+wait
+TIME  t=19731ms  render masks: booter#2 done (ROP write)
+TIME  t=19732ms  render: booter_load_v67 #2
+TIME  t=20136ms  render: ROP write + poll
+G2RMK  render-masks pass1 0x00088FF0 became 0xFFFFFFCF remained locked (polls=400)
+FLRW  config answers in 8us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+BARR  bar0 write: want=0xF6000000 got=0xF6000000 STUCK
+TIME  t=20536ms  render: FLR settle
+TIME  t=20548ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 0us (0 polls) dmactl=0x00000080 hwcfg2=0x000047F7 done
+FWL    [E1]: falcon settle 20851us (wake=22800us budget=1000000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+TIME   [E1] BL settle 20851us of budget 1000000us
+TIME  t=20621ms  [E1] BL load+settle
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=75 idleTo=7
+QSLOW  rr: fwsec kflcnReset GSP cpuctl=0x00000010 waited=260495us (budget exhausted, engine did NOT quiesce)
+TIME  t=20883ms  rr: fwsec kflcnReset GSP
+TIME  t=20940ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 104us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   *** WPR2 ESTABLISHED lo=0x01F7E000 hi=0x01F7EE00 after 11 ms ***
+OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+TIME  t=21005ms  fwsec: reset+STARTCPU
+SEC2W  E2-post-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-post-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000602 fullTo=75 idleTo=9
+TIME  t=21007ms  [E2] fwsec_boot_gsp_sig
+TIME  t=21018ms  rr: [E3] ResetIntoRiscv ready
+TIME  t=21166ms  [E3] ResetIntoRiscv
+PROBE  E5-after-restore[24] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+FLRX   WPR2 restored after V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** DID NOT HOLD ***
+TIME  t=21218ms  render masks: booter#1 done (early path)
+TIME  t=21220ms  render: early_unlock_path
+G2RMK  render-masks pass1 booter#1: PLM=0xFFFFFFFF
+G2RMK  render-masks pass1 booter#2: 0x00088FF4 <- 0xffffffff (now 0xFFFFFF8F)
+TIME  t=21232ms  rr: booter SEC2 reset
+SCRUB  sec2-reset: 128us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=21294ms  booter: reset+scrub
+TIME  t=21306ms  booter: wpr2+setup
+TIME  t=21308ms  booter: dma image
+BOOTER iters=5 in 0.050ms PLM-OPEN
+TIME  t=21311ms  booter: start+wait
+TIME  t=21312ms  render masks: booter#2 done (ROP write)
+TIME  t=21313ms  render: booter_load_v67 #2
+TIME  t=21393ms  render: ROP write + poll
+G2RMK  render-masks pass1 0x00088FF4 became 0xFFFFFFFF OPEN (polls=79)
+FLRW  config answers in 8us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+BARR  bar0 write: want=0xF6000000 got=0xF6000000 STUCK
+TIME  t=21794ms  render: FLR settle
+TIME  t=21806ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 23us (0 polls) dmactl=0x00000080 hwcfg2=0x000047F7 done
+FWL    [E1]: falcon settle 19819us (wake=22800us budget=1000000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+TIME   [E1] BL settle 19819us of budget 1000000us
+TIME  t=21879ms  [E1] BL load+settle
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=75 idleTo=9
+QSLOW  rr: fwsec kflcnReset GSP cpuctl=0x00000010 waited=260865us (budget exhausted, engine did NOT quiesce)
+TIME  t=22142ms  rr: fwsec kflcnReset GSP
+TIME  t=22200ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 104us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+DMAP   sig=0xDEAD5EC2 versz=0xDEAD5EC2 cmdIn=0xDEAD5EC2/0xDEAD5EC2 cmdOut=0xDEAD5EC2/0xDEAD5EC2 feat=0xDEAD5EC2 initCmd=0xDEAD5EC2 mask=0xDEAD5EC2/0xDEAD5EC2
+DMAP   *** structure CORRUPTED - fwsec reset it
+CMDIN  off=0xDEAD5EC2  readVbiosDesc(ver,size)=0xDEAD5EC2/0xDEAD5EC2  frtsDesc(ver)=0xDEAD5EC2  offset4K=0xDEAD5EC2  mediaType=0xDEAD5EC2
+CMDIN  *** buffer UNCHANGED -> fwsec did NOT execute the command
+CMDOUT unusable off=0xDEAD5EC2 size=0xDEAD5EC2
+SCR    [0x0C] = 0x00000007
+PLMM   wpr2_lo=0x1FFFFE00 wpr2_hi=0x00000000 privLevelMask=0x0004CB8F expect_lo=0x01F7E000
+PLMM   wpr2 reads are priv-masked - value unreliable
+FWSEC   DMEM dump after run (all non-zero):
+FWSEC   dmem[0x000]=0xDEAD5EC2
+FWSEC   dmem[0x004]=0xDEAD5EC2
+FWSEC   dmem[0x008]=0xDEAD5EC2
+FWSEC   dmem[0x00C]=0xDEAD5EC2
+FWSEC   dmem[0x010]=0xDEAD5EC2
+FWSEC   dmem[0x014]=0xDEAD5EC2
+FWSEC   dmem[0x018]=0xDEAD5EC2
+FWSEC   dmem[0x01C]=0xDEAD5EC2
+FWSEC   dmem[0x020]=0xDEAD5EC2
+FWSEC   dmem[0x024]=0xDEAD5EC2
+FWSEC   dmem[0x028]=0xDEAD5EC2
+FWSEC   dmem[0x02C]=0xDEAD5EC2
+FWSEC   dmem[0x030]=0xDEAD5EC2
+FWSEC   dmem[0x034]=0xDEAD5EC2
+FWSEC   dmem[0x038]=0xDEAD5EC2
+FWSEC   dmem[0x03C]=0xDEAD5EC2
+FWSEC   dmem[0x040]=0xDEAD5EC2
+FWSEC   dmem[0x044]=0xDEAD5EC2
+FWSEC   dmem[0x048]=0xDEAD5EC2
+FWSEC   dmem[0x04C]=0xDEAD5EC2
+FWSEC   dmem[0x050]=0xDEAD5EC2
+FWSEC   dmem[0x054]=0xDEAD5EC2
+FWSEC   dmem[0x058]=0xDEAD5EC2
+FWSEC   dmem[0x05C]=0xDEAD5EC2
+FWSEC   dmem[0x060]=0xDEAD5EC2
+FWSEC   dmem[0x064]=0xDEAD5EC2
+FWSEC   dmem[0x068]=0xDEAD5EC2
+FWSEC   dmem[0x06C]=0xDEAD5EC2
+FWSEC   dmem[0x070]=0xDEAD5EC2
+FWSEC   dmem[0x074]=0xDEAD5EC2
+FWSEC   dmem[0x078]=0xDEAD5EC2
+FWSEC   dmem[0x07C]=0xDEAD5EC2
+FWSEC   dmem[0x080]=0xDEAD5EC2
+FWSEC   dmem[0x084]=0xDEAD5EC2
+FWSEC   dmem[0x088]=0xDEAD5EC2
+FWSEC   dmem[0x08C]=0xDEAD5EC2
+FWSEC   dmem[0x090]=0xDEAD5EC2
+FWSEC   dmem[0x094]=0xDEAD5EC2
+FWSEC   dmem[0x098]=0xDEAD5EC2
+FWSEC   dmem[0x09C]=0xDEAD5EC2
+FWSEC   dmem[0x0A0]=0xDEAD5EC2
+FWSEC   dmem[0x0A4]=0xDEAD5EC2
+FWSEC   dmem[0x0A8]=0xDEAD5EC2
+FWSEC   dmem[0x0AC]=0xDEAD5EC2
+FWSEC   dmem[0x0B0]=0xDEAD5EC2
+FWSEC   dmem[0x0B4]=0xDEAD5EC2
+FWSEC   dmem[0x0B8]=0xDEAD5EC2
+FWSEC   dmem[0x0BC]=0xDEAD5EC2
+FWSEC   dmem[0x0C0]=0xDEAD5EC2
+FWSEC   dmem[0x0C4]=0xDEAD5EC2
+FWSEC   dmem[0x0C8]=0xDEAD5EC2
+FWSEC   dmem[0x0CC]=0xDEAD5EC2
+FWSEC   dmem[0x0D0]=0xDEAD5EC2
+FWSEC   dmem[0x0D4]=0xDEAD5EC2
+FWSEC   dmem[0x0D8]=0xDEAD5EC2
+FWSEC   dmem[0x0DC]=0xDEAD5EC2
+FWSEC   dmem[0x0E0]=0xDEAD5EC2
+FWSEC   dmem[0x0E4]=0xDEAD5EC2
+FWSEC   dmem[0x0E8]=0xDEAD5EC2
+FWSEC   dmem[0x0EC]=0xDEAD5EC2
+FWSEC   dmem[0x0F0]=0xDEAD5EC2
+FWSEC   dmem[0x0F4]=0xDEAD5EC2
+FWSEC   dmem[0x0F8]=0xDEAD5EC2
+FWSEC   dmem[0x0FC]=0xDEAD5EC2
+FWSEC   dmem[0x100]=0xDEAD5EC2
+FWSEC   dmem[0x104]=0xDEAD5EC2
+FWSEC   dmem[0x108]=0xDEAD5EC2
+FWSEC   dmem[0x10C]=0xDEAD5EC2
+FWSEC   dmem[0x110]=0xDEAD5EC2
+FWSEC   dmem[0x114]=0xDEAD5EC2
+FWSEC   dmem[0x118]=0xDEAD5EC2
+FWSEC   dmem[0x11C]=0xDEAD5EC2
+FWSEC   dmem[0x120]=0xDEAD5EC2
+FWSEC   dmem[0x124]=0xDEAD5EC2
+FWSEC   dmem[0x128]=0xDEAD5EC2
+FWSEC   dmem[0x12C]=0xDEAD5EC2
+FWSEC   dmem[0x130]=0xDEAD5EC2
+FWSEC   dmem[0x134]=0xDEAD5EC2
+FWSEC   dmem[0x138]=0xDEAD5EC2
+FWSEC   dmem[0x13C]=0xDEAD5EC2
+FWSEC   dmem[0x140]=0xDEAD5EC2
+FWSEC   dmem[0x144]=0xDEAD5EC2
+FWSEC   dmem[0x148]=0xDEAD5EC2
+FWSEC   dmem[0x14C]=0xDEAD5EC2
+FWSEC   dmem[0x150]=0xDEAD5EC2
+FWSEC   dmem[0x154]=0xDEAD5EC2
+FWSEC   dmem[0x158]=0xDEAD5EC2
+FWSEC   dmem[0x15C]=0xDEAD5EC2
+FWSEC   dmem[0x160]=0xDEAD5EC2
+FWSEC   dmem[0x164]=0xDEAD5EC2
+FWSEC   dmem[0x168]=0xDEAD5EC2
+FWSEC   dmem[0x16C]=0xDEAD5EC2
+FWSEC   dmem[0x170]=0xDEAD5EC2
+FWSEC   dmem[0x174]=0xDEAD5EC2
+FWSEC   dmem[0x178]=0xDEAD5EC2
+FWSEC   dmem[0x17C]=0xDEAD5EC2
+FWSEC   dmem[0x180]=0xDEAD5EC2
+FWSEC   dmem[0x184]=0xDEAD5EC2
+FWSEC   dmem[0x188]=0xDEAD5EC2
+FWSEC   dmem[0x18C]=0xDEAD5EC2
+FWSEC   dmem[0x190]=0xDEAD5EC2
+FWSEC   dmem[0x194]=0xDEAD5EC2
+FWSEC   dmem[0x198]=0xDEAD5EC2
+FWSEC   dmem[0x19C]=0xDEAD5EC2
+FWSEC   dmem[0x1A0]=0xDEAD5EC2
+FWSEC   dmem[0x1A4]=0xDEAD5EC2
+FWSEC   dmem[0x1A8]=0xDEAD5EC2
+FWSEC   dmem[0x1AC]=0xDEAD5EC2
+FWSEC   dmem[0x1B0]=0xDEAD5EC2
+FWSEC   dmem[0x1B4]=0xDEAD5EC2
+FWSEC   ... (dump truncated at 110 lines)
+FWSEC   end of DMEM dump (non-empty words: 512)
+TIME  t=27299ms  render masks: booter#1 done (early path)
+TIME  t=27302ms  render: early_unlock_path
+G2RMK  render-masks pass1 booter#1: PLM=0xFFFFFFFF
+G2RMK  render-masks pass1 booter#2: 0x00088FF8 <- 0xffffffff (now 0xFFFFFF8F)
+TIME  t=27314ms  rr: booter SEC2 reset
+SCRUB  sec2-reset: 103us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=27377ms  booter: reset+scrub
+TIME  t=27388ms  booter: wpr2+setup
+TIME  t=27399ms  booter: dma image
+BOOTER iters=5 in 0.049ms PLM-OPEN
+TIME  t=27402ms  booter: start+wait
+TIME  t=27403ms  render masks: booter#2 done (ROP write)
+TIME  t=27404ms  render: booter_load_v67 #2
+TIME  t=27807ms  render: ROP write + poll
+G2RMK  render-masks pass1 0x00088FF8 became 0xFFFFFF8F remained locked (polls=400)
+FLRW  config answers in 9us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+BARR  bar0 write: want=0xF6000000 got=0xF6000000 STUCK
+TIME  t=28208ms  render: FLR settle
+TIME  t=28242ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 0us (0 polls) dmactl=0x00000080 hwcfg2=0x000047F7 done
+FWL    [E1]: falcon settle 0us (wake=22800us budget=1000000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+TIME   [E1] BL settle 0us of budget 1000000us
+TIME  t=28293ms  [E1] BL load+settle
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=76 idleTo=11
+QSLOW  rr: fwsec kflcnReset GSP cpuctl=0x00000010 waited=260379us (budget exhausted, engine did NOT quiesce)
+TIME  t=28555ms  rr: fwsec kflcnReset GSP
+TIME  t=28613ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 116us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+DMAP   sig=0xDEAD5EC2 versz=0xDEAD5EC2 cmdIn=0xDEAD5EC2/0xDEAD5EC2 cmdOut=0xDEAD5EC2/0xDEAD5EC2 feat=0xDEAD5EC2 initCmd=0xDEAD5EC2 mask=0xDEAD5EC2/0xDEAD5EC2
+DMAP   *** structure CORRUPTED - fwsec reset it
+CMDIN  off=0xDEAD5EC2  readVbiosDesc(ver,size)=0xDEAD5EC2/0xDEAD5EC2  frtsDesc(ver)=0xDEAD5EC2  offset4K=0xDEAD5EC2  mediaType=0xDEAD5EC2
+CMDIN  *** buffer UNCHANGED -> fwsec did NOT execute the command
+CMDOUT unusable off=0xDEAD5EC2 size=0xDEAD5EC2
+SCR    [0x0C] = 0x00000007
+PLMM   wpr2_lo=0x1FFFFE00 wpr2_hi=0x00000000 privLevelMask=0x0004CB8F expect_lo=0x01F7E000
+PLMM   wpr2 reads are priv-masked - value unreliable
+FWSEC   DMEM dump after run (all non-zero):
+FWSEC   dmem[0x000]=0xDEAD5EC2
+FWSEC   dmem[0x004]=0xDEAD5EC2
+FWSEC   dmem[0x008]=0xDEAD5EC2
+FWSEC   dmem[0x00C]=0xDEAD5EC2
+FWSEC   dmem[0x010]=0xDEAD5EC2
+FWSEC   dmem[0x014]=0xDEAD5EC2
+FWSEC   dmem[0x018]=0xDEAD5EC2
+FWSEC   dmem[0x01C]=0xDEAD5EC2
+FWSEC   dmem[0x020]=0xDEAD5EC2
+FWSEC   dmem[0x024]=0xDEAD5EC2
+FWSEC   dmem[0x028]=0xDEAD5EC2
+FWSEC   dmem[0x02C]=0xDEAD5EC2
+FWSEC   dmem[0x030]=0xDEAD5EC2
+FWSEC   dmem[0x034]=0xDEAD5EC2
+FWSEC   dmem[0x038]=0xDEAD5EC2
+FWSEC   dmem[0x03C]=0xDEAD5EC2
+FWSEC   dmem[0x040]=0xDEAD5EC2
+FWSEC   dmem[0x044]=0xDEAD5EC2
+FWSEC   dmem[0x048]=0xDEAD5EC2
+FWSEC   dmem[0x04C]=0xDEAD5EC2
+FWSEC   dmem[0x050]=0xDEAD5EC2
+FWSEC   dmem[0x054]=0xDEAD5EC2
+FWSEC   dmem[0x058]=0xDEAD5EC2
+FWSEC   dmem[0x05C]=0xDEAD5EC2
+FWSEC   dmem[0x060]=0xDEAD5EC2
+FWSEC   dmem[0x064]=0xDEAD5EC2
+FWSEC   dmem[0x068]=0xDEAD5EC2
+FWSEC   dmem[0x06C]=0xDEAD5EC2
+FWSEC   dmem[0x070]=0xDEAD5EC2
+FWSEC   dmem[0x074]=0xDEAD5EC2
+FWSEC   dmem[0x078]=0xDEAD5EC2
+FWSEC   dmem[0x07C]=0xDEAD5EC2
+FWSEC   dmem[0x080]=0xDEAD5EC2
+FWSEC   dmem[0x084]=0xDEAD5EC2
+FWSEC   dmem[0x088]=0xDEAD5EC2
+FWSEC   dmem[0x08C]=0xDEAD5EC2
+FWSEC   dmem[0x090]=0xDEAD5EC2
+FWSEC   dmem[0x094]=0xDEAD5EC2
+FWSEC   dmem[0x098]=0xDEAD5EC2
+FWSEC   dmem[0x09C]=0xDEAD5EC2
+FWSEC   dmem[0x0A0]=0xDEAD5EC2
+FWSEC   dmem[0x0A4]=0xDEAD5EC2
+FWSEC   dmem[0x0A8]=0xDEAD5EC2
+FWSEC   dmem[0x0AC]=0xDEAD5EC2
+FWSEC   dmem[0x0B0]=0xDEAD5EC2
+FWSEC   dmem[0x0B4]=0xDEAD5EC2
+FWSEC   dmem[0x0B8]=0xDEAD5EC2
+FWSEC   dmem[0x0BC]=0xDEAD5EC2
+FWSEC   dmem[0x0C0]=0xDEAD5EC2
+FWSEC   dmem[0x0C4]=0xDEAD5EC2
+FWSEC   dmem[0x0C8]=0xDEAD5EC2
+FWSEC   dmem[0x0CC]=0xDEAD5EC2
+FWSEC   dmem[0x0D0]=0xDEAD5EC2
+FWSEC   dmem[0x0D4]=0xDEAD5EC2
+FWSEC   dmem[0x0D8]=0xDEAD5EC2
+FWSEC   dmem[0x0DC]=0xDEAD5EC2
+FWSEC   dmem[0x0E0]=0xDEAD5EC2
+FWSEC   dmem[0x0E4]=0xDEAD5EC2
+FWSEC   dmem[0x0E8]=0xDEAD5EC2
+FWSEC   dmem[0x0EC]=0xDEAD5EC2
+FWSEC   dmem[0x0F0]=0xDEAD5EC2
+FWSEC   dmem[0x0F4]=0xDEAD5EC2
+FWSEC   dmem[0x0F8]=0xDEAD5EC2
+FWSEC   dmem[0x0FC]=0xDEAD5EC2
+FWSEC   dmem[0x100]=0xDEAD5EC2
+FWSEC   dmem[0x104]=0xDEAD5EC2
+FWSEC   dmem[0x108]=0xDEAD5EC2
+FWSEC   dmem[0x10C]=0xDEAD5EC2
+FWSEC   dmem[0x110]=0xDEAD5EC2
+FWSEC   dmem[0x114]=0xDEAD5EC2
+FWSEC   dmem[0x118]=0xDEAD5EC2
+FWSEC   dmem[0x11C]=0xDEAD5EC2
+FWSEC   dmem[0x120]=0xDEAD5EC2
+FWSEC   dmem[0x124]=0xDEAD5EC2
+FWSEC   dmem[0x128]=0xDEAD5EC2
+FWSEC   dmem[0x12C]=0xDEAD5EC2
+FWSEC   dmem[0x130]=0xDEAD5EC2
+FWSEC   dmem[0x134]=0xDEAD5EC2
+FWSEC   dmem[0x138]=0xDEAD5EC2
+FWSEC   dmem[0x13C]=0xDEAD5EC2
+FWSEC   dmem[0x140]=0xDEAD5EC2
+FWSEC   dmem[0x144]=0xDEAD5EC2
+FWSEC   dmem[0x148]=0xDEAD5EC2
+FWSEC   dmem[0x14C]=0xDEAD5EC2
+FWSEC   dmem[0x150]=0xDEAD5EC2
+FWSEC   dmem[0x154]=0xDEAD5EC2
+FWSEC   dmem[0x158]=0xDEAD5EC2
+FWSEC   dmem[0x15C]=0xDEAD5EC2
+FWSEC   dmem[0x160]=0xDEAD5EC2
+FWSEC   dmem[0x164]=0xDEAD5EC2
+FWSEC   dmem[0x168]=0xDEAD5EC2
+FWSEC   dmem[0x16C]=0xDEAD5EC2
+FWSEC   dmem[0x170]=0xDEAD5EC2
+FWSEC   dmem[0x174]=0xDEAD5EC2
+FWSEC   dmem[0x178]=0xDEAD5EC2
+FWSEC   dmem[0x17C]=0xDEAD5EC2
+FWSEC   dmem[0x180]=0xDEAD5EC2
+FWSEC   dmem[0x184]=0xDEAD5EC2
+FWSEC   dmem[0x188]=0xDEAD5EC2
+FWSEC   dmem[0x18C]=0xDEAD5EC2
+FWSEC   dmem[0x190]=0xDEAD5EC2
+FWSEC   dmem[0x194]=0xDEAD5EC2
+FWSEC   dmem[0x198]=0xDEAD5EC2
+FWSEC   dmem[0x19C]=0xDEAD5EC2
+FWSEC   dmem[0x1A0]=0xDEAD5EC2
+FWSEC   dmem[0x1A4]=0xDEAD5EC2
+FWSEC   dmem[0x1A8]=0xDEAD5EC2
+FWSEC   dmem[0x1AC]=0xDEAD5EC2
+FWSEC   dmem[0x1B0]=0xDEAD5EC2
+FWSEC   dmem[0x1B4]=0xDEAD5EC2
+FWSEC   ... (dump truncated at 110 lines)
+FWSEC   end of DMEM dump (non-empty words: 512)
+TIME  t=33708ms  render masks: booter#1 done (early path)
+TIME  t=33710ms  render: early_unlock_path
+G2RMK  render-masks pass1 booter#1: PLM=0xFFFFFFFF
+G2RMK  render-masks pass1 booter#2: 0x00088AB4 <- 0xffffffff (now 0xFFFFFF8F)
+TIME  t=33722ms  rr: booter SEC2 reset
+SCRUB  sec2-reset: 114us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=33784ms  booter: reset+scrub
+TIME  t=33797ms  booter: wpr2+setup
+TIME  t=33799ms  booter: dma image
+BOOTER iters=5 in 0.049ms PLM-OPEN
+TIME  t=33802ms  booter: start+wait
+TIME  t=33803ms  render masks: booter#2 done (ROP write)
+TIME  t=33804ms  render: booter_load_v67 #2
+TIME  t=34207ms  render: ROP write + poll
+G2RMK  render-masks pass1 0x00088AB4 became 0xFFFFFF8F remained locked (polls=400)
+FLRW  config answers in 9us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+BARR  bar0 write: want=0xF6000000 got=0xF6000000 STUCK
+TIME  t=34609ms  render: FLR settle
+TIME  t=34621ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 0us (0 polls) dmactl=0x00000080 hwcfg2=0x000047F7 done
+FWL    [E1]: falcon settle 19443us (wake=22800us budget=1000000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+TIME   [E1] BL settle 19443us of budget 1000000us
+TIME  t=34693ms  [E1] BL load+settle
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=77 idleTo=13
+QSLOW  rr: fwsec kflcnReset GSP cpuctl=0x00000010 waited=260925us (budget exhausted, engine did NOT quiesce)
+TIME  t=34956ms  rr: fwsec kflcnReset GSP
+TIME  t=35014ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 116us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   *** WPR2 ESTABLISHED lo=0x01F7E000 hi=0x01F7EE00 after 11 ms ***
+OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+TIME  t=35081ms  fwsec: reset+STARTCPU
+PROBE  E2-post-fwsec[32] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+SEC2W  E2-post-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-post-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-post-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-post-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000602 fullTo=77 idleTo=15
+TIME  t=35083ms  [E2] fwsec_boot_gsp_sig
+TIME  t=35094ms  rr: [E3] ResetIntoRiscv ready
+TIME  t=35242ms  [E3] ResetIntoRiscv
+FLRX   WPR2 restored after V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** DID NOT HOLD ***
+TIME  t=35294ms  render masks: booter#1 done (early path)
+TIME  t=35298ms  render: early_unlock_path
+G2RMK  render-masks pass1 booter#1: PLM=0xFFFFFFFF
+G2RMK  render-masks pass1 booter#2: 0x00823800 <- 0xffffffff (now 0xFFFFFF8F)
+TIME  t=35312ms  rr: booter SEC2 reset
+SCRUB  sec2-reset: 126us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=35376ms  booter: reset+scrub
+TIME  t=35387ms  booter: wpr2+setup
+TIME  t=35390ms  booter: dma image
+BOOTER iters=5 in 0.049ms PLM-OPEN
+TIME  t=35393ms  booter: start+wait
+TIME  t=35394ms  render masks: booter#2 done (ROP write)
+TIME  t=35395ms  render: booter_load_v67 #2
+TIME  t=35475ms  render: ROP write + poll
+G2RMK  render-masks pass1 0x00823800 became 0xFFFFFFFF OPEN (polls=79)
+FLRW  config answers in 9us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+BARR  bar0 write: want=0xF6000000 got=0xF6000000 STUCK
+TIME  t=35875ms  render: FLR settle
+TIME  t=35887ms  rr: [E1] BL reset-ready
+SCRUB  gsp-reset: 0us (0 polls) dmactl=0x00000080 hwcfg2=0x000047F7 done
+FWL    [E1]: falcon settle 20797us (wake=22800us budget=1000000us, cpuctl=0x00000010, started=0, verdict=finished-immediately)
+TIME   [E1] BL settle 20797us of budget 1000000us
+TIME  t=35960ms  [E1] BL load+settle
+SEC2W  E2-pre-fwsec 0x00840300=0xBADF5108 0x00840304=0xBADF5108 0x00840308=0xBADF5108 0x0084030C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840310=0xBADF5108 0x00840314=0xBADF5108 0x00840318=0xBADF5108 0x0084031C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840320=0xBADF5108 0x00840324=0xBADF5108 0x00840328=0xBADF5108 0x0084032C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840330=0xBADF5108 0x00840334=0xBADF5108 0x00840338=0xBADF5108 0x0084033C=0xBADF5108
+SEC2W  E2-pre-fwsec 0x00840340=0xBADF5620 0x00840344=0xBADF5620 0x00840348=0xBADF5620 0x0084034C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840350=0xBADF5620 0x00840354=0xBADF5620 0x00840358=0xBADF5620 0x0084035C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840360=0xBADF5620 0x00840364=0xBADF5620 0x00840368=0xBADF5620 0x0084036C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840370=0xBADF5620 0x00840374=0xBADF5620 0x00840378=0xBADF5620 0x0084037C=0xBADF5620
+SEC2W  E2-pre-fwsec 0x00840380=0xBADF5620 0x00840384=0xBADF5620 0x00840388=0xBADF5620 0x0084038C=0xBADF5620
+SEC2S  E2-pre-fwsec window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0x00000002 fullTo=77 idleTo=15
+QSLOW  rr: fwsec kflcnReset GSP cpuctl=0x00000010 waited=260649us (budget exhausted, engine did NOT quiesce)
+TIME  t=36222ms  rr: fwsec kflcnReset GSP
+TIME  t=36279ms  rr: fwsec kflcnReset GSP
+SCRUB  gsp-reset: 128us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+DMA   imem_sec=0xDEAD5EC1 MISMATCH
+DMA   imem_sec_0x100=0xDEAD5EC1
+DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+DMAP   sig=0xDEAD5EC2 versz=0xDEAD5EC2 cmdIn=0xDEAD5EC2/0xDEAD5EC2 cmdOut=0xDEAD5EC2/0xDEAD5EC2 feat=0xDEAD5EC2 initCmd=0xDEAD5EC2 mask=0xDEAD5EC2/0xDEAD5EC2
+DMAP   *** structure CORRUPTED - fwsec reset it
+CMDIN  off=0xDEAD5EC2  readVbiosDesc(ver,size)=0xDEAD5EC2/0xDEAD5EC2  frtsDesc(ver)=0xDEAD5EC2  offset4K=0xDEAD5EC2  mediaType=0xDEAD5EC2
+CMDIN  *** buffer UNCHANGED -> fwsec did NOT execute the command
+CMDOUT unusable off=0xDEAD5EC2 size=0xDEAD5EC2
+SCR    [0x0C] = 0x00000007
+PLMM   wpr2_lo=0x1FFFFE00 wpr2_hi=0x00000000 privLevelMask=0x0004CB8F expect_lo=0x01F7E000
+PLMM   wpr2 reads are priv-masked - value unreliable
+FWSEC   DMEM dump after run (all non-zero):
+FWSEC   dmem[0x000]=0xDEAD5EC2
+FWSEC   dmem[0x004]=0xDEAD5EC2
+FWSEC   dmem[0x008]=0xDEAD5EC2
+FWSEC   dmem[0x00C]=0xDEAD5EC2
+FWSEC   dmem[0x010]=0xDEAD5EC2
+FWSEC   dmem[0x014]=0xDEAD5EC2
+FWSEC   dmem[0x018]=0xDEAD5EC2
+FWSEC   dmem[0x01C]=0xDEAD5EC2
+FWSEC   dmem[0x020]=0xDEAD5EC2
+FWSEC   dmem[0x024]=0xDEAD5EC2
+FWSEC   dmem[0x028]=0xDEAD5EC2
+FWSEC   dmem[0x02C]=0xDEAD5EC2
+FWSEC   dmem[0x030]=0xDEAD5EC2
+FWSEC   dmem[0x034]=0xDEAD5EC2
+FWSEC   dmem[0x038]=0xDEAD5EC2
+FWSEC   dmem[0x03C]=0xDEAD5EC2
+FWSEC   dmem[0x040]=0xDEAD5EC2
+FWSEC   dmem[0x044]=0xDEAD5EC2
+FWSEC   dmem[0x048]=0xDEAD5EC2
+FWSEC   dmem[0x04C]=0xDEAD5EC2
+FWSEC   dmem[0x050]=0xDEAD5EC2
+FWSEC   dmem[0x054]=0xDEAD5EC2
+FWSEC   dmem[0x058]=0xDEAD5EC2
+FWSEC   dmem[0x05C]=0xDEAD5EC2
+FWSEC   dmem[0x060]=0xDEAD5EC2
+FWSEC   dmem[0x064]=0xDEAD5EC2
+FWSEC   dmem[0x068]=0xDEAD5EC2
+FWSEC   dmem[0x06C]=0xDEAD5EC2
+FWSEC   dmem[0x070]=0xDEAD5EC2
+FWSEC   dmem[0x074]=0xDEAD5EC2
+FWSEC   dmem[0x078]=0xDEAD5EC2
+FWSEC   dmem[0x07C]=0xDEAD5EC2
+FWSEC   dmem[0x080]=0xDEAD5EC2
+FWSEC   dmem[0x084]=0xDEAD5EC2
+FWSEC   dmem[0x088]=0xDEAD5EC2
+FWSEC   dmem[0x08C]=0xDEAD5EC2
+FWSEC   dmem[0x090]=0xDEAD5EC2
+FWSEC   dmem[0x094]=0xDEAD5EC2
+FWSEC   dmem[0x098]=0xDEAD5EC2
+FWSEC   dmem[0x09C]=0xDEAD5EC2
+FWSEC   dmem[0x0A0]=0xDEAD5EC2
+FWSEC   dmem[0x0A4]=0xDEAD5EC2
+FWSEC   dmem[0x0A8]=0xDEAD5EC2
+FWSEC   dmem[0x0AC]=0xDEAD5EC2
+FWSEC   dmem[0x0B0]=0xDEAD5EC2
+FWSEC   dmem[0x0B4]=0xDEAD5EC2
+FWSEC   dmem[0x0B8]=0xDEAD5EC2
+FWSEC   dmem[0x0BC]=0xDEAD5EC2
+FWSEC   dmem[0x0C0]=0xDEAD5EC2
+FWSEC   dmem[0x0C4]=0xDEAD5EC2
+FWSEC   dmem[0x0C8]=0xDEAD5EC2
+FWSEC   dmem[0x0CC]=0xDEAD5EC2
+FWSEC   dmem[0x0D0]=0xDEAD5EC2
+FWSEC   dmem[0x0D4]=0xDEAD5EC2
+FWSEC   dmem[0x0D8]=0xDEAD5EC2
+FWSEC   dmem[0x0DC]=0xDEAD5EC2
+FWSEC   dmem[0x0E0]=0xDEAD5EC2
+FWSEC   dmem[0x0E4]=0xDEAD5EC2
+FWSEC   dmem[0x0E8]=0xDEAD5EC2
+FWSEC   dmem[0x0EC]=0xDEAD5EC2
+FWSEC   dmem[0x0F0]=0xDEAD5EC2
+FWSEC   dmem[0x0F4]=0xDEAD5EC2
+FWSEC   dmem[0x0F8]=0xDEAD5EC2
+FWSEC   dmem[0x0FC]=0xDEAD5EC2
+FWSEC   dmem[0x100]=0xDEAD5EC2
+FWSEC   dmem[0x104]=0xDEAD5EC2
+FWSEC   dmem[0x108]=0xDEAD5EC2
+FWSEC   dmem[0x10C]=0xDEAD5EC2
+FWSEC   dmem[0x110]=0xDEAD5EC2
+FWSEC   dmem[0x114]=0xDEAD5EC2
+FWSEC   dmem[0x118]=0xDEAD5EC2
+FWSEC   dmem[0x11C]=0xDEAD5EC2
+FWSEC   dmem[0x120]=0xDEAD5EC2
+FWSEC   dmem[0x124]=0xDEAD5EC2
+FWSEC   dmem[0x128]=0xDEAD5EC2
+FWSEC   dmem[0x12C]=0xDEAD5EC2
+FWSEC   dmem[0x130]=0xDEAD5EC2
+FWSEC   dmem[0x134]=0xDEAD5EC2
+FWSEC   dmem[0x138]=0xDEAD5EC2
+FWSEC   dmem[0x13C]=0xDEAD5EC2
+FWSEC   dmem[0x140]=0xDEAD5EC2
+FWSEC   dmem[0x144]=0xDEAD5EC2
+FWSEC   dmem[0x148]=0xDEAD5EC2
+FWSEC   dmem[0x14C]=0xDEAD5EC2
+FWSEC   dmem[0x150]=0xDEAD5EC2
+FWSEC   dmem[0x154]=0xDEAD5EC2
+FWSEC   dmem[0x158]=0xDEAD5EC2
+FWSEC   dmem[0x15C]=0xDEAD5EC2
+FWSEC   dmem[0x160]=0xDEAD5EC2
+FWSEC   dmem[0x164]=0xDEAD5EC2
+FWSEC   dmem[0x168]=0xDEAD5EC2
+FWSEC   dmem[0x16C]=0xDEAD5EC2
+FWSEC   dmem[0x170]=0xDEAD5EC2
+FWSEC   dmem[0x174]=0xDEAD5EC2
+FWSEC   dmem[0x178]=0xDEAD5EC2
+FWSEC   dmem[0x17C]=0xDEAD5EC2
+FWSEC   dmem[0x180]=0xDEAD5EC2
+FWSEC   dmem[0x184]=0xDEAD5EC2
+FWSEC   dmem[0x188]=0xDEAD5EC2
+FWSEC   dmem[0x18C]=0xDEAD5EC2
+FWSEC   dmem[0x190]=0xDEAD5EC2
+FWSEC   dmem[0x194]=0xDEAD5EC2
+FWSEC   dmem[0x198]=0xDEAD5EC2
+FWSEC   dmem[0x19C]=0xDEAD5EC2
+FWSEC   dmem[0x1A0]=0xDEAD5EC2
+FWSEC   dmem[0x1A4]=0xDEAD5EC2
+FWSEC   dmem[0x1A8]=0xDEAD5EC2
+FWSEC   dmem[0x1AC]=0xDEAD5EC2
+FWSEC   dmem[0x1B0]=0xDEAD5EC2
+FWSEC   dmem[0x1B4]=0xDEAD5EC2
+FWSEC   ... (dump truncated at 110 lines)
+FWSEC   end of DMEM dump (non-empty words: 512)
+TIME  t=41375ms  render masks: booter#1 done (early path)
+TIME  t=41376ms  render: early_unlock_path
+G2RMK  render-masks pass1 booter#1: PLM=0xFFFFFFFF
+G2RMK  render-masks pass1 booter#2: 0x00823B04 <- 0xffffffff (now 0xFFFFFF8F)
+TIME  t=41388ms  rr: booter SEC2 reset
+SCRUB  sec2-reset: 128us (1 polls) dmactl=0xBADF5620 hwcfg2=0x000067F7 done
+TIME  t=41452ms  booter: reset+scrub
+TIME  t=41465ms  booter: wpr2+setup
+TIME  t=41468ms  booter: dma image
+BOOTER iters=5 in 0.049ms PLM-OPEN
+TIME  t=41470ms  booter: start+wait
+TIME  t=41471ms  render masks: booter#2 done (ROP write)
+TIME  t=41472ms  render: booter_load_v67 #2
+TIME  t=41876ms  render: ROP write + poll
+G2RMK  render-masks pass1 0x00823B04 became 0xFFFFFF8F remained locked (polls=400)
+G2RMK  render-masks pass 1: open 3 of 8
+G2RMK  render-masks AFTER 0x00088FE8 = 0xFFFFFFFF OPEN
+G2RMK  render-masks AFTER 0x00088FEC = 0xFFFFFFCF locked
+G2RMK  render-masks AFTER 0x00088FF0 = 0xFFFFFFCF locked
+G2RMK  render-masks AFTER 0x00088FF4 = 0xFFFFFFFF OPEN
+G2RMK  render-masks AFTER 0x00088FF8 = 0xFFFFFF8F locked
+G2RMK  render-masks AFTER 0x00088AB4 = 0xFFFFFF8F locked
+G2RMK  render-masks AFTER 0x00823800 = 0xFFFFFFFF OPEN
+G2RMK  render-masks AFTER 0x00823B04 = 0xFFFFFF8F locked
+G2RMS  render-masks TOTAL: XVE window open 3 of 8 | 0x823800=0xFFFFFFFF | 0x823B04=0xFFFFFF8F | WPR2=0x1FFFFE00/0x00000000 *** UNEXPECTED *** | GFX-gate open, GFX_SPEED_SELECT can engage
+TIME  t=41898ms  render masks: sweep finished
+STG   reached selector block success=0 direct=0 early=0 gen2Fire=0
+FUSE   before 0x00823780 = 0xBADF5040
+FUSE   before 0x00823784 = 0xBADF5040
+FUSE   before 0x00823788 = 0xBADF5040
+FUSE   before 0x0082378C = 0xBADF5040
+FUSE   before 0x00823790 = 0xBADF5040
+FUSE   before 0x00823794 = 0xBADF5040
+FUSE   before 0x00823798 = 0xBADF5040
+FUSE   before 0x0082379C = 0xBADF5040
+FUSE   before 0x008237A0 = 0xBADF5040
+FUSE   before 0x008237A4 = 0xBADF5040
+FUSE   before 0x008237A8 = 0xBADF5040
+FUSE   before 0x008237AC = 0xBADF5040
+FUSE   before 0x008237B0 = 0xBADF5040
+FUSE   before 0x008237B4 = 0xBADF5040
+FUSE   before 0x008237B8 = 0xBADF5040
+FUSE   before 0x008237BC = 0xBADF5040
+FUSE   before 0x008237C0 = 0xBADF5040
+FUSE   before 0x008237C4 = 0xBADF5040
+FUSE   before 0x008237C8 = 0xBADF5040
+FUSE   before 0x008237CC = 0xBADF5040
+FUSE   before 0x008237D0 = 0xBADF5040
+FUSE   before 0x008237D4 = 0xBADF5040
+FUSE   before 0x008237D8 = 0xBADF5040
+FUSE   before 0x008237DC = 0xBADF5040
+FUSE   before 0x008237E0 = 0xBADF5040
+FUSE   before 0x008237E4 = 0xBADF5040
+FUSE   before 0x008237E8 = 0xBADF5040
+FUSE   before 0x008237EC = 0xBADF5040
+FUSE   before 0x008237F0 = 0xBADF5040
+FUSE   before 0x008237F4 = 0xBADF5040
+FUSE   before 0x008237F8 = 0xBADF5040
+FUSE   before 0x008237FC = 0xBADF5040
+FUSE   before 0x00823800 = 0xFFFFFFFF
+FUSE   before 0x00823804 = 0xFFFFFFFF
+FUSE   before 0x00823808 = 0x01000380
+FUSE   before 0x0082380C = 0x00888888
+FUSE   before 0x00823810 = 0x002AAAAA
+FUSE   before 0x00823814 = 0x00000033  <- NV_FUSE_FEATURE_READOUT (only ECC_DRAM doc'd)
+FUSE   before 0x00823818 = 0x016DB6ED
+FUSE   before 0x0082381C = 0x00000000  <- SS0 (we write here)
+FUSE   before 0x00823820 = 0x00000000  <- SS1 (we write here)
+FUSE   before 0x00823824 = 0x00000001
+FUSE   before 0x00823828 = 0x00000000
+FUSE   before 0x0082382C = 0x00000008
+FUSE   before 0x00823830 = 0x00000000
+FUSE   before 0x00823834 = 0x00000003
+FUSE   before 0x00823838 = 0x00000001
+FUSE   before 0x0082383C = 0xBADF5040
+STG   PLM 0xFFFFFFFF -> 0xFFFFFFFF readback 0xFFFFFFFF OPEN
+WATCH  before WPR2=0x1FFFFE00/0x00000000 GFW=0x000003FF dbg=0x007E0009 cpuctl=0x00000010 scratch0e=0x00000000 privMask=0x0004CB8F/0x0045CB8F fuse18=0x016DB6ED fuse0C=0x00888888
+WATCH  after  WPR2=0x1FFFFE00/0x00000000 GFW=0x000003FF dbg=0x007E0009 cpuctl=0x00000010 scratch0e=0x00000000 privMask=0x0004CB8F/0x0045CB8F fuse18=0x00000000 fuse0C=0x00888888
+IRM    before 0x504200=0x00090000 0x504204=0x00000005 0x504208=0x00000221 0x50420C=0x00120000
+IRM    after  0x504200=0x00090000 0x504204=0x00000005 0x504208=0x00000221 0x50420C=0x00120000
+STG   selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 written OK
+STG   is_selectors_written()=1  (THIS IS A TAUTOLOGY: it re-reads what was just written; does not prove unlock)
+FUSE   CHANGED 0x00823818: 0x016DB6ED -> 0x00000000 (xor 0x016DB6ED)  <- UNREQUESTED SIDE EFFECT
+FUSE   CHANGED 0x0082381C: 0x00000000 -> 0x88888888 (xor 0x88888888)
+FUSE   CHANGED 0x00823820: 0x00000000 -> 0x00000008 (xor 0x00000008)
+FUSE   3 of 48 changed; FEATURE_READOUT=0x00000033->0x00000033 UNCHANGED (but the field is documented only as ECC_DRAM bit 16 - that is NOT a sign of unlock)
+PROBE  0x0082380C = 0x00888888 (selector candidate), 0x00823810 = 0x002AAAAA
+PROBE  WRITING -> writing 0x88888888 (fill in high byte)
+PROBE  readback 0x0082380C = 0x00888888 NOT STUCK (probably just reporting) | 0x00823810 = 0x002AAAAA (unchanged)
+GEN2M  after-unlock [ 0.. 3] 0x00823804=0xFFFFFFFF* 0x00088FE8=0xFFFFFFFF* 0x00088FEC=0xFFFFFFCF! 0x00088FF0=0xFFFFFFCF!
+GEN2M  after-unlock [ 4.. 7] 0x00088FF4=0xFFFFFFFF* 0x00088FF8=0xFFFFFF8F! 0x00088AB4=0xFFFFFF8F! 0x0008E1B0=0xFFFFFF8F!
+GEN2M  after-unlock [ 8..11] 0x0008E1B4=0xFFFFFFCF! 0x0008E1B8=0xFFFFFFCF! 0x0008E1BC=0xFFFFFFCF! 0x0008E1C0=0xFFFFFFCF!
+GEN2M  after-unlock [12..15] 0x0008E1C4=0xFFFFFFCF! 0x0008E1C8=0xFFFFFFCF! 0x0008E1CC=0xFFFFFFCF! 0x0008E1D0=0xFFFFFFCF!
+GEN2M  after-unlock [16..19] 0x0008E1D4=0xFFFFFFFF* 0x0008E1D8=0xFFFFFFCF! 0x0008E1DC=0xFFFFFF8F! 0x0008E1E0=0xFFFFFFCF!
+GEN2M  after-unlock [20..23] 0x0008E1E4=0xFFFFFFCF! 0x0008E1E8=0xFFFFFFCF! 0x0008E1EC=0xFFFFFFCF! 0x0008E1F0=0xFFFFFFFF*
+GEN2M  after-unlock [24..27] 0x008200D0=0xFFFFFF8F! 0x008200D4=0xFFFFFFFC! 0x008200D8=0xFFFFFF8F! 0x008200DC=0xFFFFFF8F!
+GEN2M  after-unlock [28..31] 0x008200E0=0xFFFFFF8F! 0x008200E4=0xFFFFFF8F! 0x008200E8=0xFFFFFFFC! 0x008200EC=0xFFFFFFFC!
+GEN2M  after-unlock [32..35] 0x008200F0=0xFFFFFFFC! 0x008200F4=0xFFFFFF8F! 0x00823800=0xFFFFFFFF* 0x00823B04=0xFFFFFF8F!
+GEN2M  after-unlock [36..39] 0x00088084=0x00453D01! 0x00088084=0x00453D01! 0x00088084=0x00453D01! 0x00088084=0x00453D01!
+GEN2S  after-unlock masks on target 6 of 37, not on target 31, first 2
+GEN2R  after-unlock       LINK_CAP 0x00088084 = 0x00453D01
+GEN2R  after-unlock   LNKSTA-inner 0x00088088 = 0x11010040
+GEN2R  after-unlock  LNKCTL2-inner 0x000880A8 = 0x00000001
+GEN2R  after-unlock  LINK_CONFIG_0 0x0008C040 = 0x80005800
+GEN2R  after-unlock    PRIV_MISC_1 0x0008841C = 0x20360500
+GEN2R  after-unlock          CYA_0 0x0008C2C0 = 0x00802005
+GEN2R  after-unlock      XP3G_OVR0 0x0008E110 = 0x00000000
+GEN2R  after-unlock      XP3G_OVR3 0x0008E11C = 0x00000000
+GEN2R  after-unlock      XP3G_VAL0 0x0008E120 = 0x00000000
+GEN2R  after-unlock      XP3G_VAL3 0x0008E12C = 0x00000000
+GEN2R  after-unlock        PLM-gfx 0x00823B04 = 0xFFFFFF8F
+GEN2R  after-unlock       PLM-main 0x00823804 = 0xFFFFFFFF
+GEN2R  after-unlock            SS0 0x0082381C = 0x88888888
+GEN2R  after-unlock            SS1 0x00823820 = 0x00000008
+GEN2R  after-unlock  GFX_SPEED_SEL 0x00823830 = 0x00000000
+GEN2C  after-unlock GPU   pcie_cap not found
+GEN2C  after-unlock BRIDGE pcie_cap not found
+CHIP  after-unlock 0x00820C14 = 48 (0x00000030)
+CHIP  after-unlock 0x00820C44 = 48 (0x00000030)
+CHIP  after-unlock 0x00820C48 = 48 (0x00000030)
+CHIP  after-unlock 0x00820C4C = 48 (0x00000030)
+CHIP  after-unlock 0x00820D38 = 48 (0x00000030)
+CHIPS after-unlock window 0x00820000..0x0083FFFC: matches 5
+CHIP  after-unlock 0x00088264 = 40 (0x00000028)
+CHIP  after-unlock 0x00088724 = 38 (0x00000026)
+CHIP  after-unlock 0x0008C440 = 30 (0x0000001E)
+CHIP  after-unlock 0x0008C448 = 30 (0x0000001E)
+CHIP  after-unlock 0x0008C48C = 48 (0x00000030)
+CHIPS after-unlock window 0x00080000..0x0008FFFC: matches 5
+CHIPS after-unlock TOTAL matches 10, printed 10
+G2GFX  step1-GFX_SEL BEFORE : GFX_SPEED_SELECT=0x00000000 (actual, not 0x3)  0x823800=0xFFFFFFFF  0x823B04=0xFFFFFF8F
+G2GFX  step1-GFX_SEL BEFORE : FEAT_READOUT_0=0x00000033  bit8 PGRAPH=0
+G2GFX  step1-GFX_SEL order A attempt 1: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL order A attempt 2: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL order A attempt 3: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL order A attempt 4: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL order A attempt 5: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL ORDER A (GFX after SS): GFX_SPEED_SELECT=0x00000000 NOT SET
+G2GFX  step1-GFX_SEL order B attempt 1: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL order B attempt 2: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL order B attempt 3: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL order B attempt 4: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL order B attempt 5: readback 0x00000000 != 4, retry
+G2GFX  step1-GFX_SEL ORDER B (GFX before SS): GFX_SPEED_SELECT=0x00000000 NOT SET
+G2SCN  step1-GFX_SEL bin scan disabled after measurement: 0x4 = 50 fps, 0x7 = 9 fps (degradation), all 8 values were accepted
+G2SUM  step1-GFX_SEL GFX_SPEED_SELECT=0x4 (kartina: 0x2=9fps, 0x4=50fps/135W, 0x5=26fps, 0x7=9fps - lestnicy net, 0x4 edinstvennyi rabochii): readback 0x00000000 *** DID NOT HOLD ***; FEAT_READOUT_0=0x00000033 bit8=0; DMAQ full=79 idle=17; SS0=0x88888888 SS1=0x00000008
+PREFLR PLM=0xFFFFFFFF SS0=0x88888888 SS1=0x00000008 WPR2=0x1FFFFE00/0x00000000 GFW=0xBADF1100 dbg=0x007E0009 cpuctl=0x00000010 scratch0e=0x00000000
+PREFLR want SS0=0x88888888 SS1=0x00000008 -> written OK
+FLRW  config answers in 8us (id=0x10DE raw=0x248A10DE) - LIVENESS ONLY, not readiness
+FLRX   do_flr() done, no further MMIO reads
+MC     g_mcIndex=0 g_mcCount=2 g_mcAdvance=1 -> BootNext=self SKIPPED (SINGLE_CARD_ONLY=1): reboot from USB = POST = fuse-shadow erase
+STG   reached 'done' label
+STG   post-FLR: MMIO unavailable, summary takes a snapshot from the moment up to FLR
+SEC2W  END-final 0x00840300=0xFFFFFFFF 0x00840304=0xFFFFFFFF 0x00840308=0xFFFFFFFF 0x0084030C=0xFFFFFFFF
+SEC2W  END-final 0x00840310=0xFFFFFFFF 0x00840314=0xFFFFFFFF 0x00840318=0xFFFFFFFF 0x0084031C=0xFFFFFFFF
+SEC2W  END-final 0x00840320=0xFFFFFFFF 0x00840324=0xFFFFFFFF 0x00840328=0xFFFFFFFF 0x0084032C=0xFFFFFFFF
+SEC2W  END-final 0x00840330=0xFFFFFFFF 0x00840334=0xFFFFFFFF 0x00840338=0xFFFFFFFF 0x0084033C=0xFFFFFFFF
+SEC2W  END-final 0x00840340=0xFFFFFFFF 0x00840344=0xFFFFFFFF 0x00840348=0xFFFFFFFF 0x0084034C=0xFFFFFFFF
+SEC2W  END-final 0x00840350=0xFFFFFFFF 0x00840354=0xFFFFFFFF 0x00840358=0xFFFFFFFF 0x0084035C=0xFFFFFFFF
+SEC2W  END-final 0x00840360=0xFFFFFFFF 0x00840364=0xFFFFFFFF 0x00840368=0xFFFFFFFF 0x0084036C=0xFFFFFFFF
+SEC2W  END-final 0x00840370=0xFFFFFFFF 0x00840374=0xFFFFFFFF 0x00840378=0xFFFFFFFF 0x0084037C=0xFFFFFFFF
+SEC2W  END-final 0x00840380=0xFFFFFFFF 0x00840384=0xFFFFFFFF 0x00840388=0xFFFFFFFF 0x0084038C=0xFFFFFFFF
+SEC2S  END-final window 0x00840300..0x00840380 words=33 BADF=33 live=0 dmatrfcmd=0xFFFFFFFF fullTo=79 idleTo=17
+TIME   DMA queue: full timeouts=79 idle timeouts=17
+TIME  t=43993ms  final: before return to firmware
+TIME  t=43994ms  final: before return to firmware
+TIME   === accumulated marks (order: see 'TIME t=' lines) ===
+TIME   MK           pro: alloc+selftest v67      3204 us  x   1   0%
+TIME   MK         pro: alloc+selftest ucode      2727 us  x   1   0%
+TIME   MK   pro: alloc+selftest gsp_rm_boot      1216 us  x   1   0%
+TIME   MK    pro: alloc+copy+selftest fwsec      2707 us  x   1   0%
+TIME   MK                pro: radtab SetMem         0 us  x   1   0%
+TIME   MK          pro: radtab CopyMem 81MB     45935 us  x   1   0%
+TIME   MK             pro: radtab buf_check         3 us  x   1   0%
+TIME   MK     gsp_engine_reset + scrub wait      1164 us  x   1   0%
+TIME   MK           rr: [E1] BL reset-ready     89892 us  x   9   0%
+TIME   MK               [E1] BL load+settle    725905 us  x   9   1%
+TIME   MK          rr: fwsec kflcnReset GSP   2544160 us  x  17   5%
+TIME   MK             fwsec: reset+STARTCPU   1228101 us  x   4   2%
+TIME   MK    fwsec: v2.43+v2.45 diagnostics    702637 us  x   1   1%
+TIME   MK           [E2] fwsec_boot_gsp_sig   1940655 us  x   4   4%
+TIME   MK     rr: [E3] ResetIntoRiscv ready    347303 us  x   5   0%
+TIME   MK               [E3] ResetIntoRiscv    931782 us  x   4   2%
+TIME   MK     rr: gsp engine reset GFW kill      9983 us  x   1   0%
+TIME   MK          rr: post-WPR2 sec2 ready    316643 us  x   2   0%
+TIME   MK   pro: early-path to render entry   1107945 us  x   1   2%
+TIME   MK     render: preamble BEFORE reads        12 us  x   1   0%
+TIME   MK                render: FLR settle   3194013 us  x   8   6%
+TIME   MK         render: early_unlock_path  29566488 us  x   8  63%
+TIME   MK             rr: booter SEC2 reset     79867 us  x   8   0%
+TIME   MK               booter: reset+scrub    585660 us  x   8   1%
+TIME   MK                booter: wpr2+setup     79877 us  x   8   0%
+TIME   MK                 booter: dma image      2492 us  x   8   0%
+TIME   MK                booter: start+wait     11441 us  x   8   0%
+TIME   MK        render: booter_load_v67 #2    748513 us  x   8   1%
+TIME   MK          render: ROP write + poll   2249405 us  x   8   4%
+TIME   MK        SUM of marks (not a total)  46519730 us
+TIME   RESETREADY calls=32 skipped=22 early=0 budgetout=10 total=561020us avg=56102us last_hwcfg2=0x000047F7 (slow_iters=500 x 100us)
+TIME   QUIESCE calls=32 fast=22 slow=10 total=2826807us max=260925us last_cpuctl=0xBADF5620 (budget=250000us)
+TIME   FLRREADY calls=9 fast=9 waited=0 never=0 total=3us max=0us last_id=0x10DE last_raw=0x248A10DE (budget=200000us)
+TIME   NOTE: SUM is NOT a phase total and may EXCEED elapsed, because marks are nested. For ONE duration use the difference of two adjacent 'TIME t=' lines.
+TIME  I/O: Print n=1305 measured=17012us/call est_if_unbuffered=22200ms | ulogf n=1715 cost=19962us sectors=317
+TIME  render masks: fast=0 fast_miss=0 direct=0 booter=0
+TIME   diag experiments: ran=1 skipped=3 (every 24) - the skipped runs repeated an answer that does not depend on the mask; full data is in the runs that did execute
+END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF WPR2=0x1FFFFE00/0x00000000 dbg=0x007E0009 cpuctl=0x00000010 scratch0e=0x00000000
+END   ---- end of log ----
+
+=================== КОНЕЦ ЛОГА ===================
+
+--- ключевые строки ---
+  TIME  t=0ms - start of count (tsc=2405 ticks/us; NBPTIMER not readable yet, BAR0 not mapped)
+  FIND  target 10de:248A bus=2 dev=0 fn=0 rb=0 card#0 fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+  FIND  target 10de:248A bus=16 dev=0 fn=0 rb=0 card#1 fb=0x200000000 frts=0x1F7E00000 wpr2=0x01F7E000/0x01F7EE00
+  FIND  total targets=2 (MC_MAX=16)
+  BARSCN card BAR0=0xF6000000 type=0 size=0x1000000
+  BARSCN card BAR1=0xF800000C type=C size=0x4000000
+  BARSCN card BAR2=0x0000002F (I/O BAR, skipping)
+  BARSCN card BAR3=0xFC00000C type=C size=0x2000000
+  BARSCN card BAR4=0x0000002F (I/O BAR, skipping)
+  BARSCN card BAR5=0x0000E001 (I/O BAR, skipping)
+  VROM  expBAR(0x30)=0x00000000
+  VROM  found @0xF6300000
+  VROM  hdr: 55 aa 7f eb 4b 37 34 30 30 e9 4c 19 77 cc 56 49
+  VROM  CRC32 first 4KB = 0x31F7E28C (compare with GA104.rom)
+  PROBE card#0 bus=2 dev=0 fn=0 id=10de:248A class=030200 bar0=0xF6000000
+  PROBE   chip=0xB74000A1 gfw=0xBADF5040 fbsz=0xBADF1100 plm=0xFFFFFF8F wpr2=0x1FFFFE00/0x00000000
+  BARSCN card BAR0=0xF6000000 type=0 size=0x1000000
+  BARSCN card BAR1=0xF800000C type=C size=0x4000000
+  BARSCN card BAR2=0x0000002F (I/O BAR, skipping)
+  BARSCN card BAR3=0xFC00000C type=C size=0x2000000
+  BARSCN card BAR4=0x0000002F (I/O BAR, skipping)
+  BARSCN card BAR5=0x0000E001 (I/O BAR, skipping)
+  VROM  expBAR(0x30)=0x00000000
+  VROM  found @0xF6300000
+  VROM  hdr: 55 aa 7f eb 4b 37 34 30 30 e9 4c 19 77 cc 56 49
+  VROM  CRC32 first 4KB = 0x31F7E28C (compare with GA104.rom)
+  PROBE card#1 bus=16 dev=0 fn=0 id=10de:248A class=030200 bar0=0xF6000000
+  PROBE   chip=0xB74000A1 gfw=0xBADF5040 fbsz=0xBADF1100 plm=0xFFFFFF8F wpr2=0x1FFFFE00/0x00000000
+  MC     g_mcIndex=0 g_mcCount=2 g_mcAdvance=1 SINGLE_CARD_ONLY=1 SKIP_FLR=0
+  PICK  card#0 of 2 -> bus=2 dev=0 fn=0
+  G2NVR  CMP90G2=37 present, but sweep disabled -> fire mode NOT enabling, the normal selector path will run
+  TIME  t=354ms  after preload_bootmgfw
+  TIME  t=355ms  after probe_preload
+  TIME  t=356ms  after sweep_all(POST)
+  TIME  t=357ms  after set_gpu_time (incl. GFW wait)
+  TIME  ptimer zero = 1790823928001028896ns (TSC count already running since efi_main entry)
+  MEM   v67 addr=0x110000000 W/R DEAD (bad 1)
+  MEM   v67 CRC32 blob=0x2C6B1DB2 buffer=0x2C6B1DB2 OK | tail blob=0x34A67FE9 buffer=0x34A67FE9 OK
+  MEM   v67 words: 0x0000:0000019C/0000019C 0x1F40:0000019C/0000019C 0x3E80:0000019C/0000019C 0x5DC0:0000019C/0000019C 0x7D00:0000019C/0000019C 0x9C40:0000019C/0000019C 0xBB80:0000019C/0000019C 0xDAC0:0000019C/0000019C
+  TIME  t=362ms  pro: alloc+selftest v67
+  MEM   ucode addr=0x111010000 W/R DEAD (bad 1)
+  MEM   ucode CRC32 blob=0xF920DD5E buffer=0xF920DD5E OK | tail blob=0x98B2714A buffer=0x98B2714A OK
+  MEM   ucode words: 0x0000:00000000/00000000 0x1D80:9F21FDFD/9F21FDFD 0x3B00:D24B5B98/D24B5B98 0x5880:84D0E702/84D0E702 0x7600:52D0F90A/52D0F90A 0x9380:00000000/00000000 0xB100:00000000/00000000 0xCE80:00000000/00000000
+  TIME  t=365ms  pro: alloc+selftest ucode
+  MEM   gsp_rm_boot addr=0x11201F000 W/R DEAD (bad 1)
+  MEM   gsp_rm_boot CRC32 blob=0x1C751EB7 buffer=0x1C751EB7 OK | tail blob=0x2565B982 buffer=0x2565B982 OK
+  MEM   gsp_rm_boot words: 0x0000:34F9AA8A/34F9AA8A 0x0C00:424D162A/424D162A 0x1800:BC82ED91/BC82ED91 0x2400:9D7C85D1/9D7C85D1 0x3000:1C3B7D4B/1C3B7D4B 0x3C00:DEE8FDD3/DEE8FDD3 0x4800:00000000/00000000 0x5400:C3986705/C3986705
+  TIME  t=368ms  pro: alloc+selftest gsp_rm_boot
+  MEM   fwsec addr=0xC1051000 W/R DEAD (bad 1)
+  MEM   fwsec CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK | tail blob=0x9C78069E buffer=0x9C78069E OK
+  MEM   fwsec words: 0x0000:EC547D23/EC547D23 0x1D40:1B7EF0D4/1B7EF0D4 0x3A80:2A689492/2A689492 0x57C0:A254B0C6/A254B0C6 0x7500:A1EA14D0/A1EA14D0 0x9240:5E340DB4/5E340DB4 0xAF80:57DEF6F6/57DEF6F6 0xCCC0:82F5A975/82F5A975
+  TIME  t=371ms  pro: alloc+copy+selftest fwsec
+  TIME  t=3511ms  pro: radtab SetMem
+  TIME  t=3558ms  pro: radtab CopyMem 81MB
+  BUF   radtab addr=0x11F103000 size=0x5053000 src0=0x00000000 buf0=0x00000000 src4=0x00000000 buf4=0x00000000 OK
+  TIME  t=3559ms  pro: radtab buf_check
+  FBIOS fbreg_0x440=0xBADF1100 profile_fb=0x200000000 READABLE
+  META  meta@0x125156000 radix@0x11F0D8000 ucode@0x111010000 v67@0xC1041000 fbSize=0x200000000 frtsOffset=0x1F7E00000 frtsSize=0x100000 wprEnd=0x1F7F00000 vgaWS=0x1FFF00000 bootBin=0x1F7DFA000 bootCount=0x0
+  GEOM  margin=0x8000000 (128 MB)  wprEnd=0x1F7F00000  frts=0x1F7E00000  frtsPG=0x1F7E00  expectWPR2=0x01F7E000/0x01F7EE00
+  GEOM  profile and wpr meta agree
+  PRE   WPR2=0x1FFFFE00/0x00000000 PLM=0xFFFFFE8E SS0=0x00000000 SS1=0x00000000 GFW=0xBADF5040
+  TIME  t=3562ms  framebuffer access probe
+  FBP    SKIPPED: FX_DIAG_FBPROBE=0 (read-only diagnostic, measured 4.40s)
+  TIME  t=3563ms  FB probe done
+  TIME  t=3564ms  before gsp_engine_reset (kill GFW)
+  TIME  t=3565ms  gsp_engine_reset + scrub wait
+  TIME  t=3576ms  before early path (allocs done)
+  TIME  t=3588ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 22920us of budget 1000000us
+  PROBE  E1-after-BL[1] WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+  TIME  t=3664ms  [E1] BL load+settle
+  PROBE  E2-pre-fwsec[2] WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+  TIME  t=3678ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   *** WPR2 ESTABLISHED lo=0x01F7E000 hi=0x01F7EE00 after 11 ms ***
+  OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+  OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+  OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+  OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+  OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+  OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+  OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+  OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+  TIME  t=3745ms  fwsec: reset+STARTCPU
+  PROBE  after-0x10..0x1F-scan[3] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  TIME  t=4450ms  fwsec: v2.43+v2.45 diagnostics
+  PROBE  before-return-TRUE[4] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  TIME  t=4452ms  [E2] fwsec_boot_gsp_sig
+  TIME  t=4714ms  rr: [E3] ResetIntoRiscv ready
+  TIME  t=4772ms  rr: [E3] ResetIntoRiscv ready
+  TIME  t=4911ms  [E3] ResetIntoRiscv
+  FLRX   WPR2 restored after V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** DID NOT HOLD ***
+  PROBE  after-early-path[8] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0xBADF5620
+  TIME  t=4963ms  early path finished
+  TIME  t=4975ms  rr: gsp engine reset GFW kill
+  TIME  t=5808ms  rr: post-WPR2 sec2 ready
+  TIME  t=5866ms  rr: post-WPR2 sec2 ready
+  GEN2  switch: fire=0 have2=1 enable=0 -> sweep SKIPPED
+  STG   enter gen2 block fire=0 have2=1 enable=0
+  STG   gen2: no branch taken (have2=1 success=0 direct=0 early=0) - falling through
+  TIME  t=6073ms  pro: early-path to render entry
+  TIME  t=6075ms  render: preamble BEFORE reads
+  TIME  t=6475ms  render: FLR settle
+  TIME  t=6487ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 19637us of budget 1000000us
+  TIME  t=6559ms  [E1] BL load+settle
+  TIME  t=6824ms  rr: fwsec kflcnReset GSP
+  TIME  t=6881ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   *** WPR2 ESTABLISHED lo=0x01F7E000 hi=0x01F7EE00 after 11 ms ***
+  OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+  OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+  OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+  OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+  OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+  OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+  OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+  OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+  TIME  t=6946ms  fwsec: reset+STARTCPU
+  TIME  t=6947ms  [E2] fwsec_boot_gsp_sig
+  TIME  t=6958ms  rr: [E3] ResetIntoRiscv ready
+  TIME  t=7106ms  [E3] ResetIntoRiscv
+  FLRX   WPR2 restored after V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** DID NOT HOLD ***
+  TIME  t=7157ms  render masks: booter#1 done (early path)
+  TIME  t=7159ms  render: early_unlock_path
+  TIME  t=7171ms  rr: booter SEC2 reset
+  TIME  t=7232ms  booter: reset+scrub
+  TIME  t=7243ms  booter: wpr2+setup
+  TIME  t=7245ms  booter: dma image
+  BOOTER iters=5 in 0.049ms PLM-OPEN
+  TIME  t=7248ms  booter: start+wait
+  TIME  t=7249ms  render masks: booter#2 done (ROP write)
+  TIME  t=7250ms  render: booter_load_v67 #2
+  TIME  t=7329ms  render: ROP write + poll
+  TIME  t=7730ms  render: FLR settle
+  TIME  t=7741ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 21060us of budget 1000000us
+  TIME  t=7814ms  [E1] BL load+settle
+  PROBE  E2-pre-fwsec[16] WPR2=0x1FFFFE00/0x00000000 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  TIME  t=8076ms  rr: fwsec kflcnReset GSP
+  TIME  t=8133ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+  FWSEC   DMEM dump after run (all non-zero):
+  FWSEC   dmem[0x000]=0xDEAD5EC2
+  FWSEC   dmem[0x004]=0xDEAD5EC2
+  FWSEC   dmem[0x008]=0xDEAD5EC2
+  FWSEC   dmem[0x00C]=0xDEAD5EC2
+  FWSEC   dmem[0x010]=0xDEAD5EC2
+  FWSEC   dmem[0x014]=0xDEAD5EC2
+  FWSEC   dmem[0x018]=0xDEAD5EC2
+  FWSEC   dmem[0x01C]=0xDEAD5EC2
+  FWSEC   dmem[0x020]=0xDEAD5EC2
+  FWSEC   dmem[0x024]=0xDEAD5EC2
+  FWSEC   dmem[0x028]=0xDEAD5EC2
+  FWSEC   dmem[0x02C]=0xDEAD5EC2
+  FWSEC   dmem[0x030]=0xDEAD5EC2
+  FWSEC   dmem[0x034]=0xDEAD5EC2
+  FWSEC   dmem[0x038]=0xDEAD5EC2
+  FWSEC   dmem[0x03C]=0xDEAD5EC2
+  FWSEC   dmem[0x040]=0xDEAD5EC2
+  FWSEC   dmem[0x044]=0xDEAD5EC2
+  FWSEC   dmem[0x048]=0xDEAD5EC2
+  FWSEC   dmem[0x04C]=0xDEAD5EC2
+  FWSEC   dmem[0x050]=0xDEAD5EC2
+  FWSEC   dmem[0x054]=0xDEAD5EC2
+  FWSEC   dmem[0x058]=0xDEAD5EC2
+  FWSEC   dmem[0x05C]=0xDEAD5EC2
+  FWSEC   dmem[0x060]=0xDEAD5EC2
+  FWSEC   dmem[0x064]=0xDEAD5EC2
+  FWSEC   dmem[0x068]=0xDEAD5EC2
+  FWSEC   dmem[0x06C]=0xDEAD5EC2
+  FWSEC   dmem[0x070]=0xDEAD5EC2
+  FWSEC   dmem[0x074]=0xDEAD5EC2
+  FWSEC   dmem[0x078]=0xDEAD5EC2
+  FWSEC   dmem[0x07C]=0xDEAD5EC2
+  FWSEC   dmem[0x080]=0xDEAD5EC2
+  FWSEC   dmem[0x084]=0xDEAD5EC2
+  FWSEC   dmem[0x088]=0xDEAD5EC2
+  FWSEC   dmem[0x08C]=0xDEAD5EC2
+  FWSEC   dmem[0x090]=0xDEAD5EC2
+  FWSEC   dmem[0x094]=0xDEAD5EC2
+  FWSEC   dmem[0x098]=0xDEAD5EC2
+  FWSEC   dmem[0x09C]=0xDEAD5EC2
+  FWSEC   dmem[0x0A0]=0xDEAD5EC2
+  FWSEC   dmem[0x0A4]=0xDEAD5EC2
+  FWSEC   dmem[0x0A8]=0xDEAD5EC2
+  FWSEC   dmem[0x0AC]=0xDEAD5EC2
+  FWSEC   dmem[0x0B0]=0xDEAD5EC2
+  FWSEC   dmem[0x0B4]=0xDEAD5EC2
+  FWSEC   dmem[0x0B8]=0xDEAD5EC2
+  FWSEC   dmem[0x0BC]=0xDEAD5EC2
+  FWSEC   dmem[0x0C0]=0xDEAD5EC2
+  FWSEC   dmem[0x0C4]=0xDEAD5EC2
+  FWSEC   dmem[0x0C8]=0xDEAD5EC2
+  FWSEC   dmem[0x0CC]=0xDEAD5EC2
+  FWSEC   dmem[0x0D0]=0xDEAD5EC2
+  FWSEC   dmem[0x0D4]=0xDEAD5EC2
+  FWSEC   dmem[0x0D8]=0xDEAD5EC2
+  FWSEC   dmem[0x0DC]=0xDEAD5EC2
+  FWSEC   dmem[0x0E0]=0xDEAD5EC2
+  FWSEC   dmem[0x0E4]=0xDEAD5EC2
+  FWSEC   dmem[0x0E8]=0xDEAD5EC2
+  FWSEC   dmem[0x0EC]=0xDEAD5EC2
+  FWSEC   dmem[0x0F0]=0xDEAD5EC2
+  FWSEC   dmem[0x0F4]=0xDEAD5EC2
+  FWSEC   dmem[0x0F8]=0xDEAD5EC2
+  FWSEC   dmem[0x0FC]=0xDEAD5EC2
+  FWSEC   dmem[0x100]=0xDEAD5EC2
+  FWSEC   dmem[0x104]=0xDEAD5EC2
+  FWSEC   dmem[0x108]=0xDEAD5EC2
+  FWSEC   dmem[0x10C]=0xDEAD5EC2
+  FWSEC   dmem[0x110]=0xDEAD5EC2
+  FWSEC   dmem[0x114]=0xDEAD5EC2
+  FWSEC   dmem[0x118]=0xDEAD5EC2
+  FWSEC   dmem[0x11C]=0xDEAD5EC2
+  FWSEC   dmem[0x120]=0xDEAD5EC2
+  FWSEC   dmem[0x124]=0xDEAD5EC2
+  FWSEC   dmem[0x128]=0xDEAD5EC2
+  FWSEC   dmem[0x12C]=0xDEAD5EC2
+  FWSEC   dmem[0x130]=0xDEAD5EC2
+  FWSEC   dmem[0x134]=0xDEAD5EC2
+  FWSEC   dmem[0x138]=0xDEAD5EC2
+  FWSEC   dmem[0x13C]=0xDEAD5EC2
+  FWSEC   dmem[0x140]=0xDEAD5EC2
+  FWSEC   dmem[0x144]=0xDEAD5EC2
+  FWSEC   dmem[0x148]=0xDEAD5EC2
+  FWSEC   dmem[0x14C]=0xDEAD5EC2
+  FWSEC   dmem[0x150]=0xDEAD5EC2
+  FWSEC   dmem[0x154]=0xDEAD5EC2
+  FWSEC   dmem[0x158]=0xDEAD5EC2
+  FWSEC   dmem[0x15C]=0xDEAD5EC2
+  FWSEC   dmem[0x160]=0xDEAD5EC2
+  FWSEC   dmem[0x164]=0xDEAD5EC2
+  FWSEC   dmem[0x168]=0xDEAD5EC2
+  FWSEC   dmem[0x16C]=0xDEAD5EC2
+  FWSEC   dmem[0x170]=0xDEAD5EC2
+  FWSEC   dmem[0x174]=0xDEAD5EC2
+  FWSEC   dmem[0x178]=0xDEAD5EC2
+  FWSEC   dmem[0x17C]=0xDEAD5EC2
+  FWSEC   dmem[0x180]=0xDEAD5EC2
+  FWSEC   dmem[0x184]=0xDEAD5EC2
+  FWSEC   dmem[0x188]=0xDEAD5EC2
+  FWSEC   dmem[0x18C]=0xDEAD5EC2
+  FWSEC   dmem[0x190]=0xDEAD5EC2
+  FWSEC   dmem[0x194]=0xDEAD5EC2
+  FWSEC   dmem[0x198]=0xDEAD5EC2
+  FWSEC   dmem[0x19C]=0xDEAD5EC2
+  FWSEC   dmem[0x1A0]=0xDEAD5EC2
+  FWSEC   dmem[0x1A4]=0xDEAD5EC2
+  FWSEC   dmem[0x1A8]=0xDEAD5EC2
+  FWSEC   dmem[0x1AC]=0xDEAD5EC2
+  FWSEC   dmem[0x1B0]=0xDEAD5EC2
+  FWSEC   dmem[0x1B4]=0xDEAD5EC2
+  FWSEC   ... (dump truncated at 110 lines)
+  FWSEC   end of DMEM dump (non-empty words: 512)
+  TIME  t=13233ms  render masks: booter#1 done (early path)
+  TIME  t=13235ms  render: early_unlock_path
+  TIME  t=13247ms  rr: booter SEC2 reset
+  TIME  t=13309ms  booter: reset+scrub
+  TIME  t=13321ms  booter: wpr2+setup
+  TIME  t=13323ms  booter: dma image
+  BOOTER iters=5 in 0.050ms PLM-OPEN
+  TIME  t=13326ms  booter: start+wait
+  TIME  t=13327ms  render masks: booter#2 done (ROP write)
+  TIME  t=13328ms  render: booter_load_v67 #2
+  TIME  t=13731ms  render: ROP write + poll
+  TIME  t=14132ms  render: FLR settle
+  TIME  t=14145ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 19506us of budget 1000000us
+  TIME  t=14217ms  [E1] BL load+settle
+  TIME  t=14480ms  rr: fwsec kflcnReset GSP
+  TIME  t=14538ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+  FWSEC   DMEM dump after run (all non-zero):
+  FWSEC   dmem[0x000]=0xDEAD5EC2
+  FWSEC   dmem[0x004]=0xDEAD5EC2
+  FWSEC   dmem[0x008]=0xDEAD5EC2
+  FWSEC   dmem[0x00C]=0xDEAD5EC2
+  FWSEC   dmem[0x010]=0xDEAD5EC2
+  FWSEC   dmem[0x014]=0xDEAD5EC2
+  FWSEC   dmem[0x018]=0xDEAD5EC2
+  FWSEC   dmem[0x01C]=0xDEAD5EC2
+  FWSEC   dmem[0x020]=0xDEAD5EC2
+  FWSEC   dmem[0x024]=0xDEAD5EC2
+  FWSEC   dmem[0x028]=0xDEAD5EC2
+  FWSEC   dmem[0x02C]=0xDEAD5EC2
+  FWSEC   dmem[0x030]=0xDEAD5EC2
+  FWSEC   dmem[0x034]=0xDEAD5EC2
+  FWSEC   dmem[0x038]=0xDEAD5EC2
+  FWSEC   dmem[0x03C]=0xDEAD5EC2
+  FWSEC   dmem[0x040]=0xDEAD5EC2
+  FWSEC   dmem[0x044]=0xDEAD5EC2
+  FWSEC   dmem[0x048]=0xDEAD5EC2
+  FWSEC   dmem[0x04C]=0xDEAD5EC2
+  FWSEC   dmem[0x050]=0xDEAD5EC2
+  FWSEC   dmem[0x054]=0xDEAD5EC2
+  FWSEC   dmem[0x058]=0xDEAD5EC2
+  FWSEC   dmem[0x05C]=0xDEAD5EC2
+  FWSEC   dmem[0x060]=0xDEAD5EC2
+  FWSEC   dmem[0x064]=0xDEAD5EC2
+  FWSEC   dmem[0x068]=0xDEAD5EC2
+  FWSEC   dmem[0x06C]=0xDEAD5EC2
+  FWSEC   dmem[0x070]=0xDEAD5EC2
+  FWSEC   dmem[0x074]=0xDEAD5EC2
+  FWSEC   dmem[0x078]=0xDEAD5EC2
+  FWSEC   dmem[0x07C]=0xDEAD5EC2
+  FWSEC   dmem[0x080]=0xDEAD5EC2
+  FWSEC   dmem[0x084]=0xDEAD5EC2
+  FWSEC   dmem[0x088]=0xDEAD5EC2
+  FWSEC   dmem[0x08C]=0xDEAD5EC2
+  FWSEC   dmem[0x090]=0xDEAD5EC2
+  FWSEC   dmem[0x094]=0xDEAD5EC2
+  FWSEC   dmem[0x098]=0xDEAD5EC2
+  FWSEC   dmem[0x09C]=0xDEAD5EC2
+  FWSEC   dmem[0x0A0]=0xDEAD5EC2
+  FWSEC   dmem[0x0A4]=0xDEAD5EC2
+  FWSEC   dmem[0x0A8]=0xDEAD5EC2
+  FWSEC   dmem[0x0AC]=0xDEAD5EC2
+  FWSEC   dmem[0x0B0]=0xDEAD5EC2
+  FWSEC   dmem[0x0B4]=0xDEAD5EC2
+  FWSEC   dmem[0x0B8]=0xDEAD5EC2
+  FWSEC   dmem[0x0BC]=0xDEAD5EC2
+  FWSEC   dmem[0x0C0]=0xDEAD5EC2
+  FWSEC   dmem[0x0C4]=0xDEAD5EC2
+  FWSEC   dmem[0x0C8]=0xDEAD5EC2
+  FWSEC   dmem[0x0CC]=0xDEAD5EC2
+  FWSEC   dmem[0x0D0]=0xDEAD5EC2
+  FWSEC   dmem[0x0D4]=0xDEAD5EC2
+  FWSEC   dmem[0x0D8]=0xDEAD5EC2
+  FWSEC   dmem[0x0DC]=0xDEAD5EC2
+  FWSEC   dmem[0x0E0]=0xDEAD5EC2
+  FWSEC   dmem[0x0E4]=0xDEAD5EC2
+  FWSEC   dmem[0x0E8]=0xDEAD5EC2
+  FWSEC   dmem[0x0EC]=0xDEAD5EC2
+  FWSEC   dmem[0x0F0]=0xDEAD5EC2
+  FWSEC   dmem[0x0F4]=0xDEAD5EC2
+  FWSEC   dmem[0x0F8]=0xDEAD5EC2
+  FWSEC   dmem[0x0FC]=0xDEAD5EC2
+  FWSEC   dmem[0x100]=0xDEAD5EC2
+  FWSEC   dmem[0x104]=0xDEAD5EC2
+  FWSEC   dmem[0x108]=0xDEAD5EC2
+  FWSEC   dmem[0x10C]=0xDEAD5EC2
+  FWSEC   dmem[0x110]=0xDEAD5EC2
+  FWSEC   dmem[0x114]=0xDEAD5EC2
+  FWSEC   dmem[0x118]=0xDEAD5EC2
+  FWSEC   dmem[0x11C]=0xDEAD5EC2
+  FWSEC   dmem[0x120]=0xDEAD5EC2
+  FWSEC   dmem[0x124]=0xDEAD5EC2
+  FWSEC   dmem[0x128]=0xDEAD5EC2
+  FWSEC   dmem[0x12C]=0xDEAD5EC2
+  FWSEC   dmem[0x130]=0xDEAD5EC2
+  FWSEC   dmem[0x134]=0xDEAD5EC2
+  FWSEC   dmem[0x138]=0xDEAD5EC2
+  FWSEC   dmem[0x13C]=0xDEAD5EC2
+  FWSEC   dmem[0x140]=0xDEAD5EC2
+  FWSEC   dmem[0x144]=0xDEAD5EC2
+  FWSEC   dmem[0x148]=0xDEAD5EC2
+  FWSEC   dmem[0x14C]=0xDEAD5EC2
+  FWSEC   dmem[0x150]=0xDEAD5EC2
+  FWSEC   dmem[0x154]=0xDEAD5EC2
+  FWSEC   dmem[0x158]=0xDEAD5EC2
+  FWSEC   dmem[0x15C]=0xDEAD5EC2
+  FWSEC   dmem[0x160]=0xDEAD5EC2
+  FWSEC   dmem[0x164]=0xDEAD5EC2
+  FWSEC   dmem[0x168]=0xDEAD5EC2
+  FWSEC   dmem[0x16C]=0xDEAD5EC2
+  FWSEC   dmem[0x170]=0xDEAD5EC2
+  FWSEC   dmem[0x174]=0xDEAD5EC2
+  FWSEC   dmem[0x178]=0xDEAD5EC2
+  FWSEC   dmem[0x17C]=0xDEAD5EC2
+  FWSEC   dmem[0x180]=0xDEAD5EC2
+  FWSEC   dmem[0x184]=0xDEAD5EC2
+  FWSEC   dmem[0x188]=0xDEAD5EC2
+  FWSEC   dmem[0x18C]=0xDEAD5EC2
+  FWSEC   dmem[0x190]=0xDEAD5EC2
+  FWSEC   dmem[0x194]=0xDEAD5EC2
+  FWSEC   dmem[0x198]=0xDEAD5EC2
+  FWSEC   dmem[0x19C]=0xDEAD5EC2
+  FWSEC   dmem[0x1A0]=0xDEAD5EC2
+  FWSEC   dmem[0x1A4]=0xDEAD5EC2
+  FWSEC   dmem[0x1A8]=0xDEAD5EC2
+  FWSEC   dmem[0x1AC]=0xDEAD5EC2
+  FWSEC   dmem[0x1B0]=0xDEAD5EC2
+  FWSEC   dmem[0x1B4]=0xDEAD5EC2
+  FWSEC   ... (dump truncated at 110 lines)
+  FWSEC   end of DMEM dump (non-empty words: 512)
+  TIME  t=19637ms  render masks: booter#1 done (early path)
+  TIME  t=19638ms  render: early_unlock_path
+  TIME  t=19650ms  rr: booter SEC2 reset
+  TIME  t=19713ms  booter: reset+scrub
+  TIME  t=19724ms  booter: wpr2+setup
+  TIME  t=19726ms  booter: dma image
+  BOOTER iters=5 in 0.049ms PLM-OPEN
+  TIME  t=19730ms  booter: start+wait
+  TIME  t=19731ms  render masks: booter#2 done (ROP write)
+  TIME  t=19732ms  render: booter_load_v67 #2
+  TIME  t=20136ms  render: ROP write + poll
+  TIME  t=20536ms  render: FLR settle
+  TIME  t=20548ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 20851us of budget 1000000us
+  TIME  t=20621ms  [E1] BL load+settle
+  TIME  t=20883ms  rr: fwsec kflcnReset GSP
+  TIME  t=20940ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   *** WPR2 ESTABLISHED lo=0x01F7E000 hi=0x01F7EE00 after 11 ms ***
+  OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+  OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+  OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+  OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+  OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+  OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+  OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+  OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+  TIME  t=21005ms  fwsec: reset+STARTCPU
+  TIME  t=21007ms  [E2] fwsec_boot_gsp_sig
+  TIME  t=21018ms  rr: [E3] ResetIntoRiscv ready
+  TIME  t=21166ms  [E3] ResetIntoRiscv
+  PROBE  E5-after-restore[24] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000010
+  FLRX   WPR2 restored after V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** DID NOT HOLD ***
+  TIME  t=21218ms  render masks: booter#1 done (early path)
+  TIME  t=21220ms  render: early_unlock_path
+  TIME  t=21232ms  rr: booter SEC2 reset
+  TIME  t=21294ms  booter: reset+scrub
+  TIME  t=21306ms  booter: wpr2+setup
+  TIME  t=21308ms  booter: dma image
+  BOOTER iters=5 in 0.050ms PLM-OPEN
+  TIME  t=21311ms  booter: start+wait
+  TIME  t=21312ms  render masks: booter#2 done (ROP write)
+  TIME  t=21313ms  render: booter_load_v67 #2
+  TIME  t=21393ms  render: ROP write + poll
+  TIME  t=21794ms  render: FLR settle
+  TIME  t=21806ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 19819us of budget 1000000us
+  TIME  t=21879ms  [E1] BL load+settle
+  TIME  t=22142ms  rr: fwsec kflcnReset GSP
+  TIME  t=22200ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+  FWSEC   DMEM dump after run (all non-zero):
+  FWSEC   dmem[0x000]=0xDEAD5EC2
+  FWSEC   dmem[0x004]=0xDEAD5EC2
+  FWSEC   dmem[0x008]=0xDEAD5EC2
+  FWSEC   dmem[0x00C]=0xDEAD5EC2
+  FWSEC   dmem[0x010]=0xDEAD5EC2
+  FWSEC   dmem[0x014]=0xDEAD5EC2
+  FWSEC   dmem[0x018]=0xDEAD5EC2
+  FWSEC   dmem[0x01C]=0xDEAD5EC2
+  FWSEC   dmem[0x020]=0xDEAD5EC2
+  FWSEC   dmem[0x024]=0xDEAD5EC2
+  FWSEC   dmem[0x028]=0xDEAD5EC2
+  FWSEC   dmem[0x02C]=0xDEAD5EC2
+  FWSEC   dmem[0x030]=0xDEAD5EC2
+  FWSEC   dmem[0x034]=0xDEAD5EC2
+  FWSEC   dmem[0x038]=0xDEAD5EC2
+  FWSEC   dmem[0x03C]=0xDEAD5EC2
+  FWSEC   dmem[0x040]=0xDEAD5EC2
+  FWSEC   dmem[0x044]=0xDEAD5EC2
+  FWSEC   dmem[0x048]=0xDEAD5EC2
+  FWSEC   dmem[0x04C]=0xDEAD5EC2
+  FWSEC   dmem[0x050]=0xDEAD5EC2
+  FWSEC   dmem[0x054]=0xDEAD5EC2
+  FWSEC   dmem[0x058]=0xDEAD5EC2
+  FWSEC   dmem[0x05C]=0xDEAD5EC2
+  FWSEC   dmem[0x060]=0xDEAD5EC2
+  FWSEC   dmem[0x064]=0xDEAD5EC2
+  FWSEC   dmem[0x068]=0xDEAD5EC2
+  FWSEC   dmem[0x06C]=0xDEAD5EC2
+  FWSEC   dmem[0x070]=0xDEAD5EC2
+  FWSEC   dmem[0x074]=0xDEAD5EC2
+  FWSEC   dmem[0x078]=0xDEAD5EC2
+  FWSEC   dmem[0x07C]=0xDEAD5EC2
+  FWSEC   dmem[0x080]=0xDEAD5EC2
+  FWSEC   dmem[0x084]=0xDEAD5EC2
+  FWSEC   dmem[0x088]=0xDEAD5EC2
+  FWSEC   dmem[0x08C]=0xDEAD5EC2
+  FWSEC   dmem[0x090]=0xDEAD5EC2
+  FWSEC   dmem[0x094]=0xDEAD5EC2
+  FWSEC   dmem[0x098]=0xDEAD5EC2
+  FWSEC   dmem[0x09C]=0xDEAD5EC2
+  FWSEC   dmem[0x0A0]=0xDEAD5EC2
+  FWSEC   dmem[0x0A4]=0xDEAD5EC2
+  FWSEC   dmem[0x0A8]=0xDEAD5EC2
+  FWSEC   dmem[0x0AC]=0xDEAD5EC2
+  FWSEC   dmem[0x0B0]=0xDEAD5EC2
+  FWSEC   dmem[0x0B4]=0xDEAD5EC2
+  FWSEC   dmem[0x0B8]=0xDEAD5EC2
+  FWSEC   dmem[0x0BC]=0xDEAD5EC2
+  FWSEC   dmem[0x0C0]=0xDEAD5EC2
+  FWSEC   dmem[0x0C4]=0xDEAD5EC2
+  FWSEC   dmem[0x0C8]=0xDEAD5EC2
+  FWSEC   dmem[0x0CC]=0xDEAD5EC2
+  FWSEC   dmem[0x0D0]=0xDEAD5EC2
+  FWSEC   dmem[0x0D4]=0xDEAD5EC2
+  FWSEC   dmem[0x0D8]=0xDEAD5EC2
+  FWSEC   dmem[0x0DC]=0xDEAD5EC2
+  FWSEC   dmem[0x0E0]=0xDEAD5EC2
+  FWSEC   dmem[0x0E4]=0xDEAD5EC2
+  FWSEC   dmem[0x0E8]=0xDEAD5EC2
+  FWSEC   dmem[0x0EC]=0xDEAD5EC2
+  FWSEC   dmem[0x0F0]=0xDEAD5EC2
+  FWSEC   dmem[0x0F4]=0xDEAD5EC2
+  FWSEC   dmem[0x0F8]=0xDEAD5EC2
+  FWSEC   dmem[0x0FC]=0xDEAD5EC2
+  FWSEC   dmem[0x100]=0xDEAD5EC2
+  FWSEC   dmem[0x104]=0xDEAD5EC2
+  FWSEC   dmem[0x108]=0xDEAD5EC2
+  FWSEC   dmem[0x10C]=0xDEAD5EC2
+  FWSEC   dmem[0x110]=0xDEAD5EC2
+  FWSEC   dmem[0x114]=0xDEAD5EC2
+  FWSEC   dmem[0x118]=0xDEAD5EC2
+  FWSEC   dmem[0x11C]=0xDEAD5EC2
+  FWSEC   dmem[0x120]=0xDEAD5EC2
+  FWSEC   dmem[0x124]=0xDEAD5EC2
+  FWSEC   dmem[0x128]=0xDEAD5EC2
+  FWSEC   dmem[0x12C]=0xDEAD5EC2
+  FWSEC   dmem[0x130]=0xDEAD5EC2
+  FWSEC   dmem[0x134]=0xDEAD5EC2
+  FWSEC   dmem[0x138]=0xDEAD5EC2
+  FWSEC   dmem[0x13C]=0xDEAD5EC2
+  FWSEC   dmem[0x140]=0xDEAD5EC2
+  FWSEC   dmem[0x144]=0xDEAD5EC2
+  FWSEC   dmem[0x148]=0xDEAD5EC2
+  FWSEC   dmem[0x14C]=0xDEAD5EC2
+  FWSEC   dmem[0x150]=0xDEAD5EC2
+  FWSEC   dmem[0x154]=0xDEAD5EC2
+  FWSEC   dmem[0x158]=0xDEAD5EC2
+  FWSEC   dmem[0x15C]=0xDEAD5EC2
+  FWSEC   dmem[0x160]=0xDEAD5EC2
+  FWSEC   dmem[0x164]=0xDEAD5EC2
+  FWSEC   dmem[0x168]=0xDEAD5EC2
+  FWSEC   dmem[0x16C]=0xDEAD5EC2
+  FWSEC   dmem[0x170]=0xDEAD5EC2
+  FWSEC   dmem[0x174]=0xDEAD5EC2
+  FWSEC   dmem[0x178]=0xDEAD5EC2
+  FWSEC   dmem[0x17C]=0xDEAD5EC2
+  FWSEC   dmem[0x180]=0xDEAD5EC2
+  FWSEC   dmem[0x184]=0xDEAD5EC2
+  FWSEC   dmem[0x188]=0xDEAD5EC2
+  FWSEC   dmem[0x18C]=0xDEAD5EC2
+  FWSEC   dmem[0x190]=0xDEAD5EC2
+  FWSEC   dmem[0x194]=0xDEAD5EC2
+  FWSEC   dmem[0x198]=0xDEAD5EC2
+  FWSEC   dmem[0x19C]=0xDEAD5EC2
+  FWSEC   dmem[0x1A0]=0xDEAD5EC2
+  FWSEC   dmem[0x1A4]=0xDEAD5EC2
+  FWSEC   dmem[0x1A8]=0xDEAD5EC2
+  FWSEC   dmem[0x1AC]=0xDEAD5EC2
+  FWSEC   dmem[0x1B0]=0xDEAD5EC2
+  FWSEC   dmem[0x1B4]=0xDEAD5EC2
+  FWSEC   ... (dump truncated at 110 lines)
+  FWSEC   end of DMEM dump (non-empty words: 512)
+  TIME  t=27299ms  render masks: booter#1 done (early path)
+  TIME  t=27302ms  render: early_unlock_path
+  TIME  t=27314ms  rr: booter SEC2 reset
+  TIME  t=27377ms  booter: reset+scrub
+  TIME  t=27388ms  booter: wpr2+setup
+  TIME  t=27399ms  booter: dma image
+  BOOTER iters=5 in 0.049ms PLM-OPEN
+  TIME  t=27402ms  booter: start+wait
+  TIME  t=27403ms  render masks: booter#2 done (ROP write)
+  TIME  t=27404ms  render: booter_load_v67 #2
+  TIME  t=27807ms  render: ROP write + poll
+  TIME  t=28208ms  render: FLR settle
+  TIME  t=28242ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 0us of budget 1000000us
+  TIME  t=28293ms  [E1] BL load+settle
+  TIME  t=28555ms  rr: fwsec kflcnReset GSP
+  TIME  t=28613ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+  FWSEC   DMEM dump after run (all non-zero):
+  FWSEC   dmem[0x000]=0xDEAD5EC2
+  FWSEC   dmem[0x004]=0xDEAD5EC2
+  FWSEC   dmem[0x008]=0xDEAD5EC2
+  FWSEC   dmem[0x00C]=0xDEAD5EC2
+  FWSEC   dmem[0x010]=0xDEAD5EC2
+  FWSEC   dmem[0x014]=0xDEAD5EC2
+  FWSEC   dmem[0x018]=0xDEAD5EC2
+  FWSEC   dmem[0x01C]=0xDEAD5EC2
+  FWSEC   dmem[0x020]=0xDEAD5EC2
+  FWSEC   dmem[0x024]=0xDEAD5EC2
+  FWSEC   dmem[0x028]=0xDEAD5EC2
+  FWSEC   dmem[0x02C]=0xDEAD5EC2
+  FWSEC   dmem[0x030]=0xDEAD5EC2
+  FWSEC   dmem[0x034]=0xDEAD5EC2
+  FWSEC   dmem[0x038]=0xDEAD5EC2
+  FWSEC   dmem[0x03C]=0xDEAD5EC2
+  FWSEC   dmem[0x040]=0xDEAD5EC2
+  FWSEC   dmem[0x044]=0xDEAD5EC2
+  FWSEC   dmem[0x048]=0xDEAD5EC2
+  FWSEC   dmem[0x04C]=0xDEAD5EC2
+  FWSEC   dmem[0x050]=0xDEAD5EC2
+  FWSEC   dmem[0x054]=0xDEAD5EC2
+  FWSEC   dmem[0x058]=0xDEAD5EC2
+  FWSEC   dmem[0x05C]=0xDEAD5EC2
+  FWSEC   dmem[0x060]=0xDEAD5EC2
+  FWSEC   dmem[0x064]=0xDEAD5EC2
+  FWSEC   dmem[0x068]=0xDEAD5EC2
+  FWSEC   dmem[0x06C]=0xDEAD5EC2
+  FWSEC   dmem[0x070]=0xDEAD5EC2
+  FWSEC   dmem[0x074]=0xDEAD5EC2
+  FWSEC   dmem[0x078]=0xDEAD5EC2
+  FWSEC   dmem[0x07C]=0xDEAD5EC2
+  FWSEC   dmem[0x080]=0xDEAD5EC2
+  FWSEC   dmem[0x084]=0xDEAD5EC2
+  FWSEC   dmem[0x088]=0xDEAD5EC2
+  FWSEC   dmem[0x08C]=0xDEAD5EC2
+  FWSEC   dmem[0x090]=0xDEAD5EC2
+  FWSEC   dmem[0x094]=0xDEAD5EC2
+  FWSEC   dmem[0x098]=0xDEAD5EC2
+  FWSEC   dmem[0x09C]=0xDEAD5EC2
+  FWSEC   dmem[0x0A0]=0xDEAD5EC2
+  FWSEC   dmem[0x0A4]=0xDEAD5EC2
+  FWSEC   dmem[0x0A8]=0xDEAD5EC2
+  FWSEC   dmem[0x0AC]=0xDEAD5EC2
+  FWSEC   dmem[0x0B0]=0xDEAD5EC2
+  FWSEC   dmem[0x0B4]=0xDEAD5EC2
+  FWSEC   dmem[0x0B8]=0xDEAD5EC2
+  FWSEC   dmem[0x0BC]=0xDEAD5EC2
+  FWSEC   dmem[0x0C0]=0xDEAD5EC2
+  FWSEC   dmem[0x0C4]=0xDEAD5EC2
+  FWSEC   dmem[0x0C8]=0xDEAD5EC2
+  FWSEC   dmem[0x0CC]=0xDEAD5EC2
+  FWSEC   dmem[0x0D0]=0xDEAD5EC2
+  FWSEC   dmem[0x0D4]=0xDEAD5EC2
+  FWSEC   dmem[0x0D8]=0xDEAD5EC2
+  FWSEC   dmem[0x0DC]=0xDEAD5EC2
+  FWSEC   dmem[0x0E0]=0xDEAD5EC2
+  FWSEC   dmem[0x0E4]=0xDEAD5EC2
+  FWSEC   dmem[0x0E8]=0xDEAD5EC2
+  FWSEC   dmem[0x0EC]=0xDEAD5EC2
+  FWSEC   dmem[0x0F0]=0xDEAD5EC2
+  FWSEC   dmem[0x0F4]=0xDEAD5EC2
+  FWSEC   dmem[0x0F8]=0xDEAD5EC2
+  FWSEC   dmem[0x0FC]=0xDEAD5EC2
+  FWSEC   dmem[0x100]=0xDEAD5EC2
+  FWSEC   dmem[0x104]=0xDEAD5EC2
+  FWSEC   dmem[0x108]=0xDEAD5EC2
+  FWSEC   dmem[0x10C]=0xDEAD5EC2
+  FWSEC   dmem[0x110]=0xDEAD5EC2
+  FWSEC   dmem[0x114]=0xDEAD5EC2
+  FWSEC   dmem[0x118]=0xDEAD5EC2
+  FWSEC   dmem[0x11C]=0xDEAD5EC2
+  FWSEC   dmem[0x120]=0xDEAD5EC2
+  FWSEC   dmem[0x124]=0xDEAD5EC2
+  FWSEC   dmem[0x128]=0xDEAD5EC2
+  FWSEC   dmem[0x12C]=0xDEAD5EC2
+  FWSEC   dmem[0x130]=0xDEAD5EC2
+  FWSEC   dmem[0x134]=0xDEAD5EC2
+  FWSEC   dmem[0x138]=0xDEAD5EC2
+  FWSEC   dmem[0x13C]=0xDEAD5EC2
+  FWSEC   dmem[0x140]=0xDEAD5EC2
+  FWSEC   dmem[0x144]=0xDEAD5EC2
+  FWSEC   dmem[0x148]=0xDEAD5EC2
+  FWSEC   dmem[0x14C]=0xDEAD5EC2
+  FWSEC   dmem[0x150]=0xDEAD5EC2
+  FWSEC   dmem[0x154]=0xDEAD5EC2
+  FWSEC   dmem[0x158]=0xDEAD5EC2
+  FWSEC   dmem[0x15C]=0xDEAD5EC2
+  FWSEC   dmem[0x160]=0xDEAD5EC2
+  FWSEC   dmem[0x164]=0xDEAD5EC2
+  FWSEC   dmem[0x168]=0xDEAD5EC2
+  FWSEC   dmem[0x16C]=0xDEAD5EC2
+  FWSEC   dmem[0x170]=0xDEAD5EC2
+  FWSEC   dmem[0x174]=0xDEAD5EC2
+  FWSEC   dmem[0x178]=0xDEAD5EC2
+  FWSEC   dmem[0x17C]=0xDEAD5EC2
+  FWSEC   dmem[0x180]=0xDEAD5EC2
+  FWSEC   dmem[0x184]=0xDEAD5EC2
+  FWSEC   dmem[0x188]=0xDEAD5EC2
+  FWSEC   dmem[0x18C]=0xDEAD5EC2
+  FWSEC   dmem[0x190]=0xDEAD5EC2
+  FWSEC   dmem[0x194]=0xDEAD5EC2
+  FWSEC   dmem[0x198]=0xDEAD5EC2
+  FWSEC   dmem[0x19C]=0xDEAD5EC2
+  FWSEC   dmem[0x1A0]=0xDEAD5EC2
+  FWSEC   dmem[0x1A4]=0xDEAD5EC2
+  FWSEC   dmem[0x1A8]=0xDEAD5EC2
+  FWSEC   dmem[0x1AC]=0xDEAD5EC2
+  FWSEC   dmem[0x1B0]=0xDEAD5EC2
+  FWSEC   dmem[0x1B4]=0xDEAD5EC2
+  FWSEC   ... (dump truncated at 110 lines)
+  FWSEC   end of DMEM dump (non-empty words: 512)
+  TIME  t=33708ms  render masks: booter#1 done (early path)
+  TIME  t=33710ms  render: early_unlock_path
+  TIME  t=33722ms  rr: booter SEC2 reset
+  TIME  t=33784ms  booter: reset+scrub
+  TIME  t=33797ms  booter: wpr2+setup
+  TIME  t=33799ms  booter: dma image
+  BOOTER iters=5 in 0.049ms PLM-OPEN
+  TIME  t=33802ms  booter: start+wait
+  TIME  t=33803ms  render masks: booter#2 done (ROP write)
+  TIME  t=33804ms  render: booter_load_v67 #2
+  TIME  t=34207ms  render: ROP write + poll
+  TIME  t=34609ms  render: FLR settle
+  TIME  t=34621ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 19443us of budget 1000000us
+  TIME  t=34693ms  [E1] BL load+settle
+  TIME  t=34956ms  rr: fwsec kflcnReset GSP
+  TIME  t=35014ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   *** WPR2 ESTABLISHED lo=0x01F7E000 hi=0x01F7EE00 after 11 ms ***
+  OKCHK  frtsErrCode=0x00000000 (want 0x00000000) NONE
+  OKCHK  wpr2Hi=0x01F7EE00 (driver needs != 0) OK
+  OKCHK  wpr2Lo=0x01F7E000 expected=0x01F7E000 OK
+  OKCHK  privLevelMask=0x0004CB8F/0x0045CB8F *** STILL MASKED - see FBP mask note ***
+  OKCHK  dmem[0]=0xDEAD5EC2 dmem[0x560]=0xDEAD5EC2 (DMAP) *** DMAP damaged/refused ***
+  OKCHK  cmdInBufferOffset(dmem[0x568])=0xDEAD5EC2 (want 0x7C0) UNEXPECTED
+  OKCHK  dbg=0xDA550000 cpuctl=0x00000000 (dbg not checked by driver)
+  OKCHK  NOTE: if dmem[0]=0xDEAD5EC2 the DMEM read port itself is refused; dmem values above are not data.
+  TIME  t=35081ms  fwsec: reset+STARTCPU
+  PROBE  E2-post-fwsec[32] WPR2=0x01F7E000/0x01F7EE00 GFWok=0x000003FF b100=0xBADF1100 cpuctl=0x00000000
+  TIME  t=35083ms  [E2] fwsec_boot_gsp_sig
+  TIME  t=35094ms  rr: [E3] ResetIntoRiscv ready
+  TIME  t=35242ms  [E3] ResetIntoRiscv
+  FLRX   WPR2 restored after V67: lo 0x00000000->0x01F7E000 hi 0x00000000->0x01F7EE00 *** DID NOT HOLD ***
+  TIME  t=35294ms  render masks: booter#1 done (early path)
+  TIME  t=35298ms  render: early_unlock_path
+  TIME  t=35312ms  rr: booter SEC2 reset
+  TIME  t=35376ms  booter: reset+scrub
+  TIME  t=35387ms  booter: wpr2+setup
+  TIME  t=35390ms  booter: dma image
+  BOOTER iters=5 in 0.049ms PLM-OPEN
+  TIME  t=35393ms  booter: start+wait
+  TIME  t=35394ms  render masks: booter#2 done (ROP write)
+  TIME  t=35395ms  render: booter_load_v67 #2
+  TIME  t=35475ms  render: ROP write + poll
+  TIME  t=35875ms  render: FLR settle
+  TIME  t=35887ms  rr: [E1] BL reset-ready
+  TIME   [E1] BL settle 20797us of budget 1000000us
+  TIME  t=35960ms  [E1] BL load+settle
+  TIME  t=36222ms  rr: fwsec kflcnReset GSP
+  TIME  t=36279ms  rr: fwsec kflcnReset GSP
+  FWSEC   image reflashed: CRC32 blob=0xE735DD44 buffer=0xE735DD44 OK
+  FWSEC   sig=2 sig0=0000DD2500000745... (patched into DMEM@0x5a4)
+  DMA2  cmd IMEM=0x00000614 (IMEM=1 SEC=1 SIZE=256B)  cmd DMEM=0x00000600 (IMEM=0 SEC=0 SIZE=256B)  was=0x00000604 (IMEM=0 - the bug)
+  DMA2  done  imem 0x0<-phys+0x0  dmem 0x0<-phys+0xE200
+  IVER   imem[0x00000] want=0xEC547D23  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00100] want=0xFE5FAED7  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00400] want=0x3539F1BC  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x00800] want=0xD8ACFD32  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x01000] want=0x445C819F  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x04000] want=0x492BB411  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x08000] want=0xB95B17B8  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0C000] want=0xD5D2C326  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   imem[0x0E000] want=0x8CC8A635  ns=0xDEAD5EC1  sec=0xDEAD5EC1  occupied-but-unreadable
+  IVER   empty=0 matched=0 occupied=9  *** IMEM OCCUPIED - the IMEM bit fix works ***
+  BUF   phys=0xC1051000 blobIMEM0=0xEC547D23 bufIMEM0=0xEC547D23 blobDMEM0=0x00100001 bufDMEM0=0x00100001
+  BUF   blobE204=0x00200540 bufE204=0x00200540 blobE5A4=0x00000000 bufE5A4=0x0745DD25
+  DMA   imem_ns=0xDEAD5EC1 want=0xEC547D23 MISMATCH
+  DMA   imem_sec=0xDEAD5EC1 MISMATCH
+  DMA   imem_sec_0x100=0xDEAD5EC1
+  DMA   dmem_hdr=0x00100001 want=0x00100001 OK
+  DMA   dmem_sig=0x0745DD25 want=0x0745DD25 OK
+  DMA   dmem_cmd=0x00000001 want=0x00000001 OK
+  DMA   dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2
+  BROM  paraaddr=0x5A4 engmask=0x400 ucodeid=9 modsel=0x1 bootvec=0x0 imemLoad=0xE200 dmemLoad=0x800
+  BROM  readback para=0x000005A4 engmask=0x00000400 ucodeid=0x00000009 modsel=0x00000001 bootvec=0x00000000
+  BROM  cpuctl=0x00000000 (STARTCPU) dmatrfcmd=0x00000602 dmatrfbase=0x00C105F2 fbifctl=0x00000190 dmactl=0x00000080
+  WAIT   t=0ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000000 dbg=0x00000001 expect=0x01F7E000/0x01F7EE00
+  WAIT   t=1000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=2000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=3000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  WAIT   t=4000ms wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009
+  FWSEC ours FAIL wpr2=0x1FFFFE00/0x00000000 cpuctl=0x00000010 dbg=0x007E0009 scratch0e=0x00000000 imem_ours=0xEC547D23
+  FWSEC   DMEM dump after run (all non-zero):
+  FWSEC   dmem[0x000]=0xDEAD5EC2
+  FWSEC   dmem[0x004]=0xDEAD5EC2
+  FWSEC   dmem[0x008]=0xDEAD5EC2
+  FWSEC   dmem[0x00C]=0xDEAD5EC2
+  FWSEC   dmem[0x010]=0xDEAD5EC2
+  FWSEC   dmem[0x014]=0xDEAD5EC2
+  FWSEC   dmem[0x018]=0xDEAD5EC2
+  FWSEC   dmem[0x01C]=0xDEAD5EC2
+  FWSEC   dmem[0x020]=0xDEAD5EC2
+  FWSEC   dmem[0x024]=0xDEAD5EC2
+  FWSEC   dmem[0x028]=0xDEAD5EC2
+  FWSEC   dmem[0x02C]=0xDEAD5EC2
+  FWSEC   dmem[0x030]=0xDEAD5EC2
+  FWSEC   dmem[0x034]=0xDEAD5EC2
+  FWSEC   dmem[0x038]=0xDEAD5EC2
+  FWSEC   dmem[0x03C]=0xDEAD5EC2
+  FWSEC   dmem[0x040]=0xDEAD5EC2
+  FWSEC   dmem[0x044]=0xDEAD5EC2
+  FWSEC   dmem[0x048]=0xDEAD5EC2
+  FWSEC   dmem[0x04C]=0xDEAD5EC2
+  FWSEC   dmem[0x050]=0xDEAD5EC2
+  FWSEC   dmem[0x054]=0xDEAD5EC2
+  FWSEC   dmem[0x058]=0xDEAD5EC2
+  FWSEC   dmem[0x05C]=0xDEAD5EC2
+  FWSEC   dmem[0x060]=0xDEAD5EC2
+  FWSEC   dmem[0x064]=0xDEAD5EC2
+  FWSEC   dmem[0x068]=0xDEAD5EC2
+  FWSEC   dmem[0x06C]=0xDEAD5EC2
+  FWSEC   dmem[0x070]=0xDEAD5EC2
+  FWSEC   dmem[0x074]=0xDEAD5EC2
+  FWSEC   dmem[0x078]=0xDEAD5EC2
+  FWSEC   dmem[0x07C]=0xDEAD5EC2
+  FWSEC   dmem[0x080]=0xDEAD5EC2
+  FWSEC   dmem[0x084]=0xDEAD5EC2
+  FWSEC   dmem[0x088]=0xDEAD5EC2
+  FWSEC   dmem[0x08C]=0xDEAD5EC2
+  FWSEC   dmem[0x090]=0xDEAD5EC2
+  FWSEC   dmem[0x094]=0xDEAD5EC2
+  FWSEC   dmem[0x098]=0xDEAD5EC2
+  FWSEC   dmem[0x09C]=0xDEAD5EC2
+  FWSEC   dmem[0x0A0]=0xDEAD5EC2
+  FWSEC   dmem[0x0A4]=0xDEAD5EC2
+  FWSEC   dmem[0x0A8]=0xDEAD5EC2
+  FWSEC   dmem[0x0AC]=0xDEAD5EC2
+  FWSEC   dmem[0x0B0]=0xDEAD5EC2
+  FWSEC   dmem[0x0B4]=0xDEAD5EC2
+  FWSEC   dmem[0x0B8]=0xDEAD5EC2
+  FWSEC   dmem[0x0BC]=0xDEAD5EC2
+  FWSEC   dmem[0x0C0]=0xDEAD5EC2
+  FWSEC   dmem[0x0C4]=0xDEAD5EC2
+  FWSEC   dmem[0x0C8]=0xDEAD5EC2
+  FWSEC   dmem[0x0CC]=0xDEAD5EC2
+  FWSEC   dmem[0x0D0]=0xDEAD5EC2
+  FWSEC   dmem[0x0D4]=0xDEAD5EC2
+  FWSEC   dmem[0x0D8]=0xDEAD5EC2
+  FWSEC   dmem[0x0DC]=0xDEAD5EC2
+  FWSEC   dmem[0x0E0]=0xDEAD5EC2
+  FWSEC   dmem[0x0E4]=0xDEAD5EC2
+  FWSEC   dmem[0x0E8]=0xDEAD5EC2
+  FWSEC   dmem[0x0EC]=0xDEAD5EC2
+  FWSEC   dmem[0x0F0]=0xDEAD5EC2
+  FWSEC   dmem[0x0F4]=0xDEAD5EC2
+  FWSEC   dmem[0x0F8]=0xDEAD5EC2
+  FWSEC   dmem[0x0FC]=0xDEAD5EC2
+  FWSEC   dmem[0x100]=0xDEAD5EC2
+  FWSEC   dmem[0x104]=0xDEAD5EC2
+  FWSEC   dmem[0x108]=0xDEAD5EC2
+  FWSEC   dmem[0x10C]=0xDEAD5EC2
+  FWSEC   dmem[0x110]=0xDEAD5EC2
+  FWSEC   dmem[0x114]=0xDEAD5EC2
+  FWSEC   dmem[0x118]=0xDEAD5EC2
+  FWSEC   dmem[0x11C]=0xDEAD5EC2
+  FWSEC   dmem[0x120]=0xDEAD5EC2
+  FWSEC   dmem[0x124]=0xDEAD5EC2
+  FWSEC   dmem[0x128]=0xDEAD5EC2
+  FWSEC   dmem[0x12C]=0xDEAD5EC2
+  FWSEC   dmem[0x130]=0xDEAD5EC2
+  FWSEC   dmem[0x134]=0xDEAD5EC2
+  FWSEC   dmem[0x138]=0xDEAD5EC2
+  FWSEC   dmem[0x13C]=0xDEAD5EC2
+  FWSEC   dmem[0x140]=0xDEAD5EC2
+  FWSEC   dmem[0x144]=0xDEAD5EC2
+  FWSEC   dmem[0x148]=0xDEAD5EC2
+  FWSEC   dmem[0x14C]=0xDEAD5EC2
+  FWSEC   dmem[0x150]=0xDEAD5EC2
+  FWSEC   dmem[0x154]=0xDEAD5EC2
+  FWSEC   dmem[0x158]=0xDEAD5EC2
+  FWSEC   dmem[0x15C]=0xDEAD5EC2
+  FWSEC   dmem[0x160]=0xDEAD5EC2
+  FWSEC   dmem[0x164]=0xDEAD5EC2
+  FWSEC   dmem[0x168]=0xDEAD5EC2
+  FWSEC   dmem[0x16C]=0xDEAD5EC2
+  FWSEC   dmem[0x170]=0xDEAD5EC2
+  FWSEC   dmem[0x174]=0xDEAD5EC2
+  FWSEC   dmem[0x178]=0xDEAD5EC2
+  FWSEC   dmem[0x17C]=0xDEAD5EC2
+  FWSEC   dmem[0x180]=0xDEAD5EC2
+  FWSEC   dmem[0x184]=0xDEAD5EC2
+  FWSEC   dmem[0x188]=0xDEAD5EC2
+  FWSEC   dmem[0x18C]=0xDEAD5EC2
+  FWSEC   dmem[0x190]=0xDEAD5EC2
+  FWSEC   dmem[0x194]=0xDEAD5EC2
+  FWSEC   dmem[0x198]=0xDEAD5EC2
+  FWSEC   dmem[0x19C]=0xDEAD5EC2
+  FWSEC   dmem[0x1A0]=0xDEAD5EC2
+  FWSEC   dmem[0x1A4]=0xDEAD5EC2
+  FWSEC   dmem[0x1A8]=0xDEAD5EC2
+  FWSEC   dmem[0x1AC]=0xDEAD5EC2
+  FWSEC   dmem[0x1B0]=0xDEAD5EC2
+  FWSEC   dmem[0x1B4]=0xDEAD5EC2
+  FWSEC   ... (dump truncated at 110 lines)
+  FWSEC   end of DMEM dump (non-empty words: 512)
+  TIME  t=41375ms  render masks: booter#1 done (early path)
+  TIME  t=41376ms  render: early_unlock_path
+  TIME  t=41388ms  rr: booter SEC2 reset
+  TIME  t=41452ms  booter: reset+scrub
+  TIME  t=41465ms  booter: wpr2+setup
+  TIME  t=41468ms  booter: dma image
+  BOOTER iters=5 in 0.049ms PLM-OPEN
+  TIME  t=41470ms  booter: start+wait
+  TIME  t=41471ms  render masks: booter#2 done (ROP write)
+  TIME  t=41472ms  render: booter_load_v67 #2
+  TIME  t=41876ms  render: ROP write + poll
+  TIME  t=41898ms  render masks: sweep finished
+  STG   reached selector block success=0 direct=0 early=0 gen2Fire=0
+  FUSE   before 0x00823780 = 0xBADF5040
+  FUSE   before 0x00823784 = 0xBADF5040
+  FUSE   before 0x00823788 = 0xBADF5040
+  FUSE   before 0x0082378C = 0xBADF5040
+  FUSE   before 0x00823790 = 0xBADF5040
+  FUSE   before 0x00823794 = 0xBADF5040
+  FUSE   before 0x00823798 = 0xBADF5040
+  FUSE   before 0x0082379C = 0xBADF5040
+  FUSE   before 0x008237A0 = 0xBADF5040
+  FUSE   before 0x008237A4 = 0xBADF5040
+  FUSE   before 0x008237A8 = 0xBADF5040
+  FUSE   before 0x008237AC = 0xBADF5040
+  FUSE   before 0x008237B0 = 0xBADF5040
+  FUSE   before 0x008237B4 = 0xBADF5040
+  FUSE   before 0x008237B8 = 0xBADF5040
+  FUSE   before 0x008237BC = 0xBADF5040
+  FUSE   before 0x008237C0 = 0xBADF5040
+  FUSE   before 0x008237C4 = 0xBADF5040
+  FUSE   before 0x008237C8 = 0xBADF5040
+  FUSE   before 0x008237CC = 0xBADF5040
+  FUSE   before 0x008237D0 = 0xBADF5040
+  FUSE   before 0x008237D4 = 0xBADF5040
+  FUSE   before 0x008237D8 = 0xBADF5040
+  FUSE   before 0x008237DC = 0xBADF5040
+  FUSE   before 0x008237E0 = 0xBADF5040
+  FUSE   before 0x008237E4 = 0xBADF5040
+  FUSE   before 0x008237E8 = 0xBADF5040
+  FUSE   before 0x008237EC = 0xBADF5040
+  FUSE   before 0x008237F0 = 0xBADF5040
+  FUSE   before 0x008237F4 = 0xBADF5040
+  FUSE   before 0x008237F8 = 0xBADF5040
+  FUSE   before 0x008237FC = 0xBADF5040
+  FUSE   before 0x00823800 = 0xFFFFFFFF
+  FUSE   before 0x00823804 = 0xFFFFFFFF
+  FUSE   before 0x00823808 = 0x01000380
+  FUSE   before 0x0082380C = 0x00888888
+  FUSE   before 0x00823810 = 0x002AAAAA
+  FUSE   before 0x00823814 = 0x00000033  <- NV_FUSE_FEATURE_READOUT (only ECC_DRAM doc'd)
+  FUSE   before 0x00823818 = 0x016DB6ED
+  FUSE   before 0x0082381C = 0x00000000  <- SS0 (we write here)
+  FUSE   before 0x00823820 = 0x00000000  <- SS1 (we write here)
+  FUSE   before 0x00823824 = 0x00000001
+  FUSE   before 0x00823828 = 0x00000000
+  FUSE   before 0x0082382C = 0x00000008
+  FUSE   before 0x00823830 = 0x00000000
+  FUSE   before 0x00823834 = 0x00000003
+  FUSE   before 0x00823838 = 0x00000001
+  FUSE   before 0x0082383C = 0xBADF5040
+  STG   PLM 0xFFFFFFFF -> 0xFFFFFFFF readback 0xFFFFFFFF OPEN
+  STG   selectors: want SS0=0x88888888 SS1=0x00000008 | got SS0=0x88888888 SS1=0x00000008 written OK
+  STG   is_selectors_written()=1  (THIS IS A TAUTOLOGY: it re-reads what was just written; does not prove unlock)
+  FUSE   CHANGED 0x00823818: 0x016DB6ED -> 0x00000000 (xor 0x016DB6ED)  <- UNREQUESTED SIDE EFFECT
+  FUSE   CHANGED 0x0082381C: 0x00000000 -> 0x88888888 (xor 0x88888888)
+  FUSE   CHANGED 0x00823820: 0x00000000 -> 0x00000008 (xor 0x00000008)
+  FUSE   3 of 48 changed; FEATURE_READOUT=0x00000033->0x00000033 UNCHANGED (but the field is documented only as ECC_DRAM bit 16 - that is NOT a sign of unlock)
+  PROBE  0x0082380C = 0x00888888 (selector candidate), 0x00823810 = 0x002AAAAA
+  PROBE  WRITING -> writing 0x88888888 (fill in high byte)
+  PROBE  readback 0x0082380C = 0x00888888 NOT STUCK (probably just reporting) | 0x00823810 = 0x002AAAAA (unchanged)
+  PREFLR PLM=0xFFFFFFFF SS0=0x88888888 SS1=0x00000008 WPR2=0x1FFFFE00/0x00000000 GFW=0xBADF1100 dbg=0x007E0009 cpuctl=0x00000010 scratch0e=0x00000000
+  PREFLR want SS0=0x88888888 SS1=0x00000008 -> written OK
+  FLRX   do_flr() done, no further MMIO reads
+  MC     g_mcIndex=0 g_mcCount=2 g_mcAdvance=1 -> BootNext=self SKIPPED (SINGLE_CARD_ONLY=1): reboot from USB = POST = fuse-shadow erase
+  STG   reached 'done' label
+  STG   post-FLR: MMIO unavailable, summary takes a snapshot from the moment up to FLR
+  TIME   DMA queue: full timeouts=79 idle timeouts=17
+  TIME  t=43993ms  final: before return to firmware
+  TIME  t=43994ms  final: before return to firmware
+  TIME   === accumulated marks (order: see 'TIME t=' lines) ===
+  TIME   MK           pro: alloc+selftest v67      3204 us  x   1   0%
+  TIME   MK         pro: alloc+selftest ucode      2727 us  x   1   0%
+  TIME   MK   pro: alloc+selftest gsp_rm_boot      1216 us  x   1   0%
+  TIME   MK    pro: alloc+copy+selftest fwsec      2707 us  x   1   0%
+  TIME   MK                pro: radtab SetMem         0 us  x   1   0%
+  TIME   MK          pro: radtab CopyMem 81MB     45935 us  x   1   0%
+  TIME   MK             pro: radtab buf_check         3 us  x   1   0%
+  TIME   MK     gsp_engine_reset + scrub wait      1164 us  x   1   0%
+  TIME   MK           rr: [E1] BL reset-ready     89892 us  x   9   0%
+  TIME   MK               [E1] BL load+settle    725905 us  x   9   1%
+  TIME   MK          rr: fwsec kflcnReset GSP   2544160 us  x  17   5%
+  TIME   MK             fwsec: reset+STARTCPU   1228101 us  x   4   2%
+  TIME   MK    fwsec: v2.43+v2.45 diagnostics    702637 us  x   1   1%
+  TIME   MK           [E2] fwsec_boot_gsp_sig   1940655 us  x   4   4%
+  TIME   MK     rr: [E3] ResetIntoRiscv ready    347303 us  x   5   0%
+  TIME   MK               [E3] ResetIntoRiscv    931782 us  x   4   2%
+  TIME   MK     rr: gsp engine reset GFW kill      9983 us  x   1   0%
+  TIME   MK          rr: post-WPR2 sec2 ready    316643 us  x   2   0%
+  TIME   MK   pro: early-path to render entry   1107945 us  x   1   2%
+  TIME   MK     render: preamble BEFORE reads        12 us  x   1   0%
+  TIME   MK                render: FLR settle   3194013 us  x   8   6%
+  TIME   MK         render: early_unlock_path  29566488 us  x   8  63%
+  TIME   MK             rr: booter SEC2 reset     79867 us  x   8   0%
+  TIME   MK               booter: reset+scrub    585660 us  x   8   1%
+  TIME   MK                booter: wpr2+setup     79877 us  x   8   0%
+  TIME   MK                 booter: dma image      2492 us  x   8   0%
+  TIME   MK                booter: start+wait     11441 us  x   8   0%
+  TIME   MK        render: booter_load_v67 #2    748513 us  x   8   1%
+  TIME   MK          render: ROP write + poll   2249405 us  x   8   4%
+  TIME   MK        SUM of marks (not a total)  46519730 us
+  TIME   RESETREADY calls=32 skipped=22 early=0 budgetout=10 total=561020us avg=56102us last_hwcfg2=0x000047F7 (slow_iters=500 x 100us)
+  TIME   QUIESCE calls=32 fast=22 slow=10 total=2826807us max=260925us last_cpuctl=0xBADF5620 (budget=250000us)
+  TIME   FLRREADY calls=9 fast=9 waited=0 never=0 total=3us max=0us last_id=0x10DE last_raw=0x248A10DE (budget=200000us)
+  TIME   NOTE: SUM is NOT a phase total and may EXCEED elapsed, because marks are nested. For ONE duration use the difference of two adjacent 'TIME t=' lines.
+  TIME  I/O: Print n=1305 measured=17012us/call est_if_unbuffered=22200ms | ulogf n=1715 cost=19962us sectors=317
+  TIME  render masks: fast=0 fast_miss=0 direct=0 booter=0
+  TIME   diag experiments: ran=1 skipped=3 (every 24) - the skipped runs repeated an answer that does not depend on the mask; full data is in the runs that did execute
+  END   ss0=0x88888888 ss1=0x00000008 PLM=0xFFFFFFFF WPR2=0x1FFFFE00/0x00000000 dbg=0x007E0009 cpuctl=0x00000010 scratch0e=0x00000000
+  END   ---- end of log ----
+
+--- что делать дальше ---
