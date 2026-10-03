@@ -1,4 +1,4 @@
-<#
+﻿<#
     flash-build.ps1 — one command for the whole "build -> flash -> verify" cycle.
 
     Usage:
@@ -314,16 +314,16 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "    6. 'TIME  t=NNNms' marks - duration of ONE section = delta of two" -ForegroundColor Yellow
     Write-Host "       adjacent marks. The MK SUM may exceed elapsed (marks nest) -" -ForegroundColor Yellow
     Write-Host "       do not read it as a total." -ForegroundColor Yellow
-    Write-Host "    7. STAGE 20: THIRD blind stall cut - the last one inside early_unlock_path." -ForegroundColor Yellow
+    Write-Host "    7. STAGE 21: first stall cut OUTSIDE early_unlock_path - line 7403." -ForegroundColor Yellow
     Write-Host "" -ForegroundColor Cyan
-    Write-Host "       One line changed (src/unlock_v2.c:6880). All three blind 50 ms stalls" -ForegroundColor Cyan
-    Write-Host "       inside early_unlock_path are now 10 ms:" -ForegroundColor Cyan
+    Write-Host "       One line changed (src/unlock_v2.c:7403). The three inside early_unlock_path" -ForegroundColor Cyan
+    Write-Host "       were already cut in v3.35-37. This one sits right AFTER the doomed" -ForegroundColor Cyan
     Write-Host "         6689 [E1]  v3.35 PASS, 40.0 ms/call" -ForegroundColor Cyan
     Write-Host "         6772 [E3]  v3.36 PASS, 40.0 ms/call, prediction off by 1 ms" -ForegroundColor Cyan
-    Write-Host "         6880       THIS RUN" -ForegroundColor Cyan
+    Write-Host "         7403       THIS RUN - after rr: gsp engine reset GFW kill" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
     Write-Host "         9 calls x 40 ms = 360 ms" -ForegroundColor Cyan
-    Write-Host "         16 679 - 360 = 16 319 ms   -> expect ~16.3 s" -ForegroundColor Cyan
+    Write-Host "         16 021 - 360 = 15 661 ms   -> expect ~15.7 s" -ForegroundColor Cyan
     Write-Host "" -ForegroundColor Cyan
     Write-Host "       NEW FINDING, and it corrects something I said. The pattern" -ForegroundColor Cyan
     Write-Host "         falcon_wait_scrub_done(...)  followed by  Stall(50000)" -ForegroundColor Cyan
@@ -331,17 +331,17 @@ if ($outMd5 -ne $REF_MD5) {
     Write-Host "       least 8 of them still carry a 50 ms stall:" -ForegroundColor Cyan
     Write-Host "         3593 pre-reset | 3818 fbp-reset | 5247 gsp-reset | 6242 sec2-reset" -ForegroundColor Cyan
     Write-Host "         6942 gsp-reset | 7402 gsp-reset | 7489 sec2-reset | 7707 sec2-reset" -ForegroundColor Cyan
-    Write-Host "       I only ever considered the 3 inside early_unlock_path, so my claim" -ForegroundColor Cyan
-    Write-Host "       'the lever is exhausted' was too narrow. From the log the scrub wait" -ForegroundColor Cyan
-    Write-Host "       'gsp-reset' runs 19 times and 'sec2-reset' 9 times, so some of those" -ForegroundColor Cyan
+    Write-Host "       Attribution was obtained FREE from the log itself: repeated SCRUB tags are" -ForegroundColor Cyan
+    Write-Host "       split by the line that follows them. gsp-reset -> DMAQ x9 is 6689 (cut);" -ForegroundColor Cyan
+    Write-Host "       gsp-reset -> FWSEC reflashed x9 is THIS site; sec2-reset -> TIME x8 is 7490." -ForegroundColor Cyan
     Write-Host "       sites are hot. NEXT STAGE is to count calls per site BEFORE touching" -ForegroundColor Cyan
     Write-Host "       anything - the tags repeat, so the log cannot attribute them." -ForegroundColor Cyan
     Write-Host "       Batching was measured impossible in v3.34, so 14 s is off the table." -ForegroundColor Yellow
     Write-Host "  ==== AFTER REBOOT, MANDATORY - NOT OPTIONAL ====" -ForegroundColor Cyan
     Write-Host "  1. powershell -ExecutionPolicy Bypass -File out\pull-log.ps1" -ForegroundColor Cyan
     Write-Host "  2. powershell -ExecutionPolicy Bypass -File out\verify-log.ps1 out\usb-log-XXXX.txt" -ForegroundColor Cyan
-    Write-Host "  3. powershell -ExecutionPolicy Bypass -File out\cmp-marks.ps1 -A out\usb-log-v336.txt -B out\usb-log-XXXX.txt" -ForegroundColor Cyan
+    Write-Host "  3. powershell -ExecutionPolicy Bypass -File out\cmp-marks.ps1 -A out\usb-log-v337.txt -B out\usb-log-XXXX.txt" -ForegroundColor Cyan
     Write-Host "  Only a PASS from verify-log.ps1 allows 'VERIFIED' in out\BUILDS.md." -ForegroundColor Cyan
-    Write-Host "  Baseline: out\usb-log-v336.txt (16.7 s, 8 of 8)." -ForegroundColor Cyan
+    Write-Host "  Baseline: out\usb-log-v337.txt (16.0 s, 8 of 8)." -ForegroundColor Cyan
 }
 exit 0
