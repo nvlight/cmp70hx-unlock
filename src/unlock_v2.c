@@ -463,7 +463,9 @@ fx_io_report(void)
           g_prCalls, g_prUsPerCall, g_prUsMeasured ? L"measured" : L"assumed",
           (INT64)(est / 1000ULL),
           uc, (INT64)uu, ls);
-    ulogf(L"TIME  SCREEN raw console lines=%d (frame+card+unlocking)\n",
+    ulogf(L"TIME  SCREEN raw console lines=%d BEFORE verdict frame "
+          L"(это число НЕ включает рамку - она печатается ниже; "
+          L"итоговое считается сразу после неё)\n",
           (INTN)g_rawCalls);
     ulogf(L"TIME  render masks: fast=%d fast_miss=%d direct=%d booter=%d\n",
           fx_rmFast, fx_rmFastMiss, fx_rmDirect, fx_rmNeedBooter);
@@ -12629,6 +12631,23 @@ done:
      * Порядок именно такой: после fx_pr_console_dump() и после «Конец.», иначе
      * рамку вытеснил бы финальный дамп. */
     unlock_verdict_print_screen();
+    /* v3.48: ИТОГОВЫЙ СЧЁТ ЭКРАНА - ПОСЛЕ РАМКИ, А НЕ ДО НЕЁ.
+     *
+     * На прогоне 1004-161157 отчёт показал «SCREEN raw console lines=2», и
+     * это была не ошибка прошивки, а ошибка самого измерения: fx_io_report()
+     * вызывается выше по потоку, чем unlock_verdict_print_screen(), то есть
+     * счётчик снимался за пять прямых вызовов до того, как они произошли.
+     * Проверка 2c ругалась на неполное число, и ругалась правильно.
+     *
+     * Порядок важен и потому, что счётчик единственный: прямой вывод в консоль
+     * не оставляет следа нигде, и по логу нельзя доказать, что рамка дошла до
+     * экрана. Значит число обязано сниматься в последний момент, когда рамка
+     * уже напечатана.
+     *
+     * Сброса здесь не нужно: log_flush_sector(FALSE) в конце efi_main идёт
+     * после этой точки и уносит строку на флешку. */
+    ulogf(L"TIME  SCREEN raw console lines=%d FINAL "
+          L"(2 верхние + рамка из 5 = 7)\n", (INTN)g_rawCalls);
 #if !defined(EFI_AUTOTEST) && !defined(RELEASE_BUILD)
     WaitForSingleEvent(SystemTable->ConIn->WaitForKey, 0);
 #endif
