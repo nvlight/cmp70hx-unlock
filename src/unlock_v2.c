@@ -10502,7 +10502,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     { UINT64 tq = fx_now_us(); log_mem_selftest(L"fwsec", fwsec_ga104_bin, fwsecPhys, FWSEC_SIZE); fx_mk_acc(tq, L"pro: alloc+copy+selftest fwsec"); }
     g_fwsecPhys = fwsecPhys;
 
-    /* --- ЭКСПЕРИМЕНТ v2.4: БЕЗ чтения gsp_ga10x.bin ---
+    /* v3.42: LBA файла gsp_ga10x.bin в разделе FAT. 0 = читать нечего, чтение
+ * выключено. См. большой комментарий у вызова ReadBlocks ниже: LBA 0 — это
+ * загрузочный сектор, а не файл. */
+#define GSP_FW_LBA 0
+
+/* --- ЭКСПЕРИМЕНТ v2.4: БЕЗ чтения gsp_ga10x.bin ---
      * USB-чтение 84МБ через EFI-файловый протокол ЖЁСТКО фризит прошивку
      * (AMI 2012). Гипотеза: V67-переполнение происходит при обработке
      * СИГНАТУРЫ (64КБ пейлоад), а не образа → реальный .fwimage не нужен.
@@ -10550,9 +10555,39 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                 Print(L"fw-read: BlkIo[%d] blk=%d last=%lx dev=0x%lx\n",
                       h, bio->Media->BlockSize, bio->Media->LastBlock, devSz);
                 if (devSz < fwSize) continue;
+                /* v3.42: ЧТЕНИЕ ОТКЛЮЧЕНО — ОНО НИКОГДА НЕ ЧИТАЛО ФАЙЛ.
+                 *
+                 * Замер v3.41 (out/usb-log-1004-120314.txt, 8 471 мс):
+                 *     t=370ms   fw-read: handles located   (7 устройств BlockIo)
+                 *     t=3498ms  fw-read: done              <- 3 128 мс
+                 *     FWRD  loaded=0 off=0x0 sz=0x5053000
+                 *
+                 * loaded=0 — ELF не распознан. И sz=0x5053000 — это ровно
+                 * константа DummySize из ветки ниже, то есть отработал
+                 * fallback на нули.
+                 *
+                 * ПОЧЕМУ НЕ ЧИТАЛОСЬ. Вызов ниже читает с LBA 0 УСТРОЙСТВА:
+                 * это загрузочный сектор FAT/MBR. Файл gsp_ga10x.bin лежит
+                 * ВНУТРИ файловой системы, а не в начале устройства, поэтому
+                 * вызов физически не может вернуть файл — он возвращает
+                 * мусор, который проверка ELF-магии честно отвергает. Комментарий
+                 * выше про «FAT boot sector тоже ненулевой» описывал защиту от
+                 * МБР, но не тот факт, что читать там нечего.
+                 *
+                 * ПОЧЕМУ УБРАТЬ БЕЗОПАСНО. При fwLoaded==FALSE буфер в любом
+                 * случае заканчивается SetMem(...,0) — ровно те же нули.
+                 * Итоговое состояние памяти побайтово то же, минус ~3,1 с и
+                 * минус 84 МБ чтения с USB на каждой загрузке. Это не гипотеза
+                 * «нужен ли образ»: данные УЖЕ выбрасывались, каждый прогон.
+                 *
+                 * ЕСЛИ НАСТОЯЩИЙ ОБРАЗ ДЕЙСТВИТЕЛЬНО НУЖЕН: сначала найти
+                 * LBA файла в FAT (SFS LocateHandleBuffer либо свой разбор
+                 * каталога) и читать оттуда. До этого GSP_FW_LBA обязан
+                 * быть 0, иначе вернётся MBR. */
+#if GSP_FW_LBA
                 Status = uefi_call_wrapper(bio->ReadBlocks, 5,
                                            bio, bio->Media->MediaId,
-                                           0, fwSize, (VOID*)(UINTN)radixPhys);
+                                           GSP_FW_LBA, fwSize, (VOID*)(UINTN)radixPhys);
                 if (!EFI_ERROR(Status)) {
                     UINT32 *p = (UINT32*)(UINTN)radixPhys;
                     UINT32 nz = 0;
@@ -10573,6 +10608,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                         Print(L"fw-read: не gsp ELF (.fwimage нет) — пропуск\n");
                     }
                 }
+#else
+                (VOID)devSz;
+                ulogf(L"FWRD  READ SKIPPED (GSP_FW_LBA=0): чтение шло с LBA 0 "
+                      L"устройства, то есть из FAT/MBR, а не из gsp_ga10x.bin. "
+                      L"Проверка ELF отвергала этот мусор и fallback всё равно "
+                      L"заполнял буфер нулями. Снято ~3.1 с и 84 МБ USB-чтения "
+                      L"за прогон.\n");
+#endif
             }
             uefi_call_wrapper(BS->FreePool, 1, Handles);
         }
