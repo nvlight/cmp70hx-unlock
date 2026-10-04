@@ -11819,6 +11819,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         }
 #endif
         }
+        /* v3.43, этап 24: 588 мс этого блока НЕ РАЗЛОЖЕНЫ. Две паузы доказаны:
+         * 100 мс после записи SS0/SS1 и 100 мс после пробной записи в
+         * 0x0082380C. Остальные три не срабатывают (PLM уже открыт,
+         * PROBE_ISSUE_RATE_MOD=0, строки PLMZ в логе нет). Итого 200 мс из
+         * 588, остальные ~389 мс unexplained. Три марки ниже режут блок. */
+        log_ms(L"sel: FUSE+selectors+PROBE done");
         dump_regs(L"[unlock]");
         snapshot_state();   /* до FLR — потом MMIO уже мёртв */
         /* v3n: вторая половина A/B по Gen2. Ставим ЗДЕСЬ — после селекторов,
@@ -11831,6 +11837,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         chip_size_scan(L"after-unlock");
 #endif
 #ifdef GEN2_LINK_TRY
+/* v3.43, этап 24: граница перед собственно записью GFX_SPEED_SELECT. */
+        log_ms(L"sel: dump_regs+snapshot+gen2+chip done");
         /* v3.07 ШАГ 1: GFX_SPEED_SELECT = 4, рендер-селектор. Ставим ЗДЕСЬ —
          * после снимка состояния и блока селекторов, до do_flr() ниже: после
          * FLR функция мертва и readback невозможен. Линком не управляем, маски
@@ -11866,6 +11874,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         }
 #endif
         gen2_gfx_try(L"step1-GFX_SEL");
+        /* v3.43, этап 24: замыкает разрез блока селекторов. */
+        log_ms(L"sel: GFX_SPEED_SELECT write done");
 #endif
 
         /* v2.88: БЕЗ FLR! На реальном железе (X570 F37d) FLR обнуляет BARs/
