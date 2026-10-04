@@ -1710,6 +1710,16 @@ static UINT32  g_gfxVal = 0xFFFFFFFFU;   /* фактическое readback */
  * заблуждение шесть дней подряд, потому что сравнивала два разных числа и
  * ничего не сообщала о том, каким должно быть второе. */
 static UINT32  g_expGspWprLo = 0;
+/* v3.52: геометрия окна печатается ОДИН раз за прогон.
+ *
+ * Промежуточная проверка в v3.51 печатала её из cmp90_meta_low(), который
+ * вызывается 16 раз за прогон, - и строка вышла 32 раза, раздув дамп кольца.
+ * Значение одно, печать и нужна одна. Проверка же САМОЙ меты в
+ * cmp90_meta_low() остаётся на каждом вызове: она по-прежнему проверяет
+ * копию, просто подробная строка печатается при первом успехе, а при любой
+ * неудаче - всегда. */
+static BOOLEAN g_metaGeomPrinted = FALSE;
+static BOOLEAN g_metaLowPrinted = FALSE;
 static BOOLEAN g_gfxOk  = FALSE;          /* 0x4 реально залип */
 
 static void
@@ -6445,21 +6455,29 @@ cmp90_meta_low(UINT64 wprMetaPhys)
         UINT64 *m = (UINT64*)(UINTN)cmp90_metaLowPhys;
         /* поля: [9]=sigAddr [10]=sigSize [15]=heapOff [16]=heapSize
          * [17]=gspFwOffset [19]=frtsOff [20]=frtsSize; flags @байт 0xB4 */
-        Print(L"meta-low @0x%lx: magic ok=%d sig@0x%llx sz=0x%llx "
-              L"heapOff=0x%llx heapSz=0x%llx fwOff=0x%llx flags=0x%x\n",
-              cmp90_metaLowPhys,
-              (m[0] == 0xDC3AAE21371A60B3ULL),
-              m[9], m[10], m[15], m[16], m[17],
-              *(UINT32*)((UINT8*)cmp90_metaLowPhys + 0xB4));
+        /* v3.52: подробная строка - ОДИН раз, при первой удачной проверке.
+         * Сама проверка выполняется на КАЖДОМ вызове (функция зовётся 16 раз
+         * за прогон), но 32 одинаковые строки ничего не добавляли и раздували
+         * дамп кольца. При любой неудаче строка печатается ВСЕГДА: молчание
+         * здесь опаснее повтора. */
+        if ((m[0] == 0xDC3AAE21371A60B3ULL) && !g_metaLowPrinted) {
+            g_metaLowPrinted = TRUE;
+            Print(L"meta-low @0x%lx: magic ok=1 sig@0x%llx sz=0x%llx "
+                  L"heapOff=0x%llx heapSz=0x%llx fwOff=0x%llx flags=0x%x\n",
+                  cmp90_metaLowPhys, m[9], m[10], m[15], m[16], m[17],
+                  *(UINT32*)((UINT8*)cmp90_metaLowPhys + 0xB4));
+        } else if (m[0] != 0xDC3AAE21371A60B3ULL) {
+            Print(L"meta-low @0x%lx: *** MAGIC BAD *** got 0x%016llx "
+                  L"want 0xDC3AAE21371A60B3\n",
+                  cmp90_metaLowPhys, m[0]);
+        }
         /* v3.51: верхняя граница окна, которое поставит GSP. Раньше в логе не
          * было НИ ОДНОЙ строки о том, каким должно быть WPR2_LO, и именно
          * поэтому чтение 0x01EAD000 вместо 0x01F7E000 шесть дней выглядело
-         * аномалией, а не следствием нашей же формулы. */
-        Print(L"meta GSP window: wprStart=0x%08x (== heapOff-1MB, WPR2_LO "
-              L"поставит GSP), FRTS window lo=0x%08x hi=0x%08x "
-              L"(ставим мы) - окно GSP содержит окно FRTS\n",
-              (UINT32)g_expGspWprLo, (UINT32)TARGET_WPR2_LO,
-              (UINT32)TARGET_WPR2_HI);
+         * аномалией, а не следствием нашей же формулы.
+         *
+         * v3.52: отсюда строка УБРАНА и печатается в build_wpr_meta(), где
+         * значение вычисляется. Здесь функция зовётся 16 раз за прогон. */
     }
     return cmp90_metaLowPhys;
 }
@@ -9131,6 +9149,24 @@ build_wpr_meta(GspFwWprMeta *m, UINT64 elfPhys, UINT64 elfSize,
      * единственное место в коде, где записано ожидаемое значение окна GSP, -
      * это лог, и сравнивать с ним нечем. */
     g_expGspWprLo      = (UINT32)(m->gspFwWprStart >> 8);
+    /* v3.52: строка с ожидаемым окном печатается ЗДЕСЬ, а не в
+     * cmp90_meta_low(). В v3.51 она была там, а cmp90_meta_low() вызывается
+     * 16 раз за прогон (по два на загрузку - mailbox0 и mailbox1), и строка
+     * вышла 32 раза, попутно раздув дамп кольца, потому что печать шла через
+     * Print. Здесь значение вычисляется один раз, здесь же и печатается,
+     * вплотную к формуле.
+     *
+     * Через ulogf, а не Print: это единственное объяснение, почему WPR2_LO не
+     * равен FRTS>>8, и оно обязано попасть в файловый лог надёжно, а не в
+     * расходуемое кольцо. */
+    if (!g_metaGeomPrinted) {
+        g_metaGeomPrinted = TRUE;
+        ulogf(L"META   GSP window: wprStart=0x%llx = heapOff-1MB -> "
+              L"WPR2_LO=0x%08x (поставит GSP); FRTS window lo=0x%08x "
+              L"hi=0x%08x (ставим мы); окно GSP содержит окно FRTS\n",
+              m->gspFwWprStart, (UINT32)g_expGspWprLo,
+              (UINT32)TARGET_WPR2_LO, (UINT32)TARGET_WPR2_HI);
+    }
     m->nonWprHeapSize  = MB;
     m->nonWprHeapOffset = m->gspFwWprStart - MB;
     m->gspFwRsvdStart  = m->nonWprHeapOffset;
