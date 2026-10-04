@@ -70,14 +70,15 @@ $gspRef = Join-Path $outDir 'gsp_ga10x.bin'
 # pass that flag on reflex and defeats the check. Same bug the build.sh banner
 # had. Now it points at the current verified state instead.
 #
-# 67f7b5a8... = v3.39, 8 render masks, 15 964 ms on 2026-10-03, then 15 958 ms
-# on the same binary (out/usb-log-v340.txt) - two runs of one build, 6 ms apart.
-# Markers in that log: 'GFX_SPEED_SELECT=0x00000004 SET', 'END' present.
-# Pinned by commit 0fb8ab6, not by a tag: the rollback is 'git revert', and
-# 0fb8ab6 rebuilds byte-identically.
-$REF_MD5       = '67F7B5A84F8EFEBA5A4718004B0589ED'
+# 2abf59a8... = v3.40, 2 render masks (0x823800, 0x823B04), the current release.
+# Two runs on metal: 8 470 ms (out/usb-log-1004-021327.txt) and 8 451 ms
+# (out/usb-log-1004-110443.txt). Markers in both: 'GFX_SPEED_SELECT=0x00000004 SET',
+# 'G2RMS ... GFX gates open 2 of 2', 'END' present, verify-log.ps1 PASS.
+# Pinned by commit 100f03b. The previous reference 67f7b5a8 (v3.39, 8 masks) is
+# what 'git revert 100f03b' brings back.
+$REF_MD5       = '2ABF59A0D147B9D5744CFBEC5D58EC65'
 $REF_SIZE      = 671744
-$ROLLBACK_TAG  = 'rollback-2026-10-01'   # v3.15, the older independent image
+$ROLLBACK_TAG  = 'rollback-2026-10-04'   # v3.40; 'rollback-2026-10-01' is the older v3.15 image
 $GSP_MD5       = 'EB9BEB5D062CCBF3295391C926A2D7AD'
 
 # Strings that must survive into the binary. gfx/rmask are the graphics markers:
