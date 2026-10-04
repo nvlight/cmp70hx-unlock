@@ -2,8 +2,13 @@
 # Логика записи: LBA 4000000, ASCII-текст, каждый сектор 512 байт,
 # хвост сектора добит нулями. Сектор 0 — заголовок с профилем.
 #
-# Сектор 4000000 — это ~2 ГБ от начала флешки; занято под файлы ~85 МБ,
-# так что область лога FAT32 не использует и ничего не портит.
+# Сектор 4000000 — это ~2 ГБ от начала флешки; занято под файлы менее 1 МБ
+# (только загрузчик: gsp_ga10x.bin с v3.42 не нужен), так что область лога
+# FAT32 не использует и ничего не портит.
+#
+# Флешка ищется ПО ГЕОМЕТРИИ (out\find-stick.ps1), а не по букве тома: у
+# образа тип раздела 0xEF, а такие тома Windows автоматически не монтирует.
+# В комментарии выше это разобрано; здесь важно, что поиск не зависит от буквы.
 #
 # Механика формата на диске и всего пути записи в unlock_v2.c описана в
 # docs/LOGGING.md. Здесь — только ридер: как добраться до флешки, как
@@ -31,6 +36,31 @@ $MAGIC  = 'CMPUNLOG'
 $MARKER_END = 'END   ---- end of log ----'
 
 function Get-StickDisk {
+    # СНАЧАЛА ПО ГЕОМЕТРИИ, а не по букве тома. После записи релизного образа
+    # (тип раздела 0xEF = ESP) Windows не назначает том букву — Get-Partition
+    # показывает Type='Unknown', и старый поиск по DriveLetter возвращал
+    # «флешка не найдена» при полностью рабочей разблокировке. Критерии взяты
+    # из log_stick_ok() — это те же проверки, что делает само EFI-приложение,
+    # и ниже мы тоже ищем область лога, куда оно писало. См. out\find-stick.ps1.
+    if (-not $script:haveFinder) {
+        $finder = Join-Path $PSScriptRoot 'find-stick.ps1'
+        if (Test-Path -LiteralPath $finder) { . $finder; $script:haveFinder = $true }
+    }
+    if ($script:haveFinder) {
+        $hit = Find-StickDisk
+        if ($hit) {
+            $size = $hit.TotalSectors * 512
+            Write-Host ("Флешка: PhysicalDrive{0}  {1}  {2:N2} ГБ  {3} секторов  (ESP {4} секторов с LBA 2048, найдено по геометрии)" -f `
+                        $hit.DiskNumber, $hit.Label, ($size/1GB), $hit.TotalSectors, $hit.EspSectors)
+            if (-not $hit.LogFits) {
+                Write-Warning ("Флешка меньше 4 002 048 секторов ({0}). Анлок сработает, но лог сюда НЕ пишется —" -f $hit.TotalSectors)
+                Write-Warning 'на экране вместо этого будет строка «лог только на экран».'
+            }
+            return [pscustomobject]@{ Number = $hit.DiskNumber; Size = $size }
+        }
+    }
+
+    # Запасной путь для носителей с нестандартной разметкой: по букве тома.
     $vol = Get-Volume | Where-Object { $_.FileSystem -eq 'FAT32' -and
                                        $_.DriveLetter -and
                                        $_.DriveType -eq 'Removable' }
@@ -39,10 +69,15 @@ function Get-StickDisk {
                                            $_.DriveLetter -and
                                            $_.SizeRemaining -gt 0 }
     }
-    if (-not $vol) { throw "Флешка не найдена — вставьте её и повторите." }
+    if (-not $vol) {
+        Write-Host ''
+        Show-StickScan
+        throw "Флешка не найдена ни по геометрии, ни по букве тома."
+    }
     $letter = $vol[0].DriveLetter
     $part   = Get-Partition -DriveLetter $letter
     $disk   = Get-Disk -Number $part.DiskNumber
+    Write-Warning "Флешка найдена по букве тома ($letter), а не по геометрии. Проверьте, что это она."
     Write-Host ("Флешка: {0}:  метка '{1}'  {2}  {3:N2} ГБ  {4} секторов" -f `
                 $letter, $vol[0].FileSystemLabel, "PhysicalDrive$($disk.Number)",
                 ($disk.Size/1GB), ($disk.Size/512))

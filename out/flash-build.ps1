@@ -70,15 +70,22 @@ $gspRef = Join-Path $outDir 'gsp_ga10x.bin'
 # pass that flag on reflex and defeats the check. Same bug the build.sh banner
 # had. Now it points at the current verified state instead.
 #
-# 2abf59a8... = v3.40, 2 render masks (0x823800, 0x823B04), the current release.
-# Two runs on metal: 8 470 ms (out/usb-log-1004-021327.txt) and 8 451 ms
-# (out/usb-log-1004-110443.txt). Markers in both: 'GFX_SPEED_SELECT=0x00000004 SET',
-# 'G2RMS ... GFX gates open 2 of 2', 'END' present, verify-log.ps1 PASS.
-# Pinned by commit 100f03b. The previous reference 67f7b5a8 (v3.39, 8 masks) is
-# what 'git revert 100f03b' brings back.
-$REF_MD5       = '2ABF59A0D147B9D5744CFBEC5D58EC65'
-$REF_SIZE      = 671744
-$ROLLBACK_TAG  = 'rollback-2026-10-04'   # v3.40; 'rollback-2026-10-01' is the older v3.15 image
+# c68878af... = v3.52 (commit ef0977e), the build shipped as release 1.0.0.
+# One verified run on metal: 4 894 ms (out/usb-log-1004-183613.txt, i.e. t=4880ms
+# before return to firmware). Markers: 'GFX_SPEED_SELECT=0x00000004 SET',
+# 'G2RMK render-masks pass1 0x00823800 became 0xFFFFFFFF OPEN',
+# 'G2RMC render-masks top of iter 1: already open 1 of 2', 'END' present.
+# What got it from v3.40's 8 451 ms: v3.42 dropped the 84 MB gsp_ga10x.bin read
+# from the stick (GSP_FW_LBA=0) — it was ~3.1 s of pure USB 2.0 traffic for an
+# image the code never actually loaded.
+# The previous reference 2abf59a8 (v3.40, 671744 B) is what
+# 'git checkout rollback-2026-10-04' brings back.
+$REF_MD5       = 'C68878AFAFD0D2D246D2E25C5ACBD888'
+$REF_SIZE      = 680960
+$ROLLBACK_TAG  = 'rollback-2026-10-04'   # v3.40 image (2abf59a8)
+# GSP blob is no longer part of the payload: since v3.42 the app never reads it
+# off the stick. Kept only so that a stick which still carries a copy is not
+# reported as tampered with.
 $GSP_MD5       = 'EB9BEB5D062CCBF3295391C926A2D7AD'
 
 # Strings that must survive into the binary. gfx/rmask are the graphics markers:
@@ -244,12 +251,15 @@ if ($outMd5 -eq $REF_MD5) {
 }
 
 # ------------------------------------------------------------------- 3. GSP
+# Since v3.42 the loader does not read gsp_ga10x.bin off the stick at all, so
+# its absence is CORRECT and must not fail or even warn. A copy that is still
+# lying on the stick is only checked for tampering — it is not our payload.
 if (-not $SkipGspCheck) {
     Say ""
-    Say "[3/5] GSP firmware on the stick must be untouched ..."
+    Say "[3/5] gsp_ga10x.bin on the stick (not required since v3.42) ..."
     $gspOnStick = "$Stick\gsp_ga10x.bin"
     if (-not (Test-Path $gspOnStick)) {
-        Warn "no gsp_ga10x.bin on $Stick - the app may not find its firmware."
+        Good "not present - correct, the app never reads it (GSP_FW_LBA=0)"
     } else {
         $g1 = Get-MD5 $gspRef
         $g2 = Get-MD5 $gspOnStick

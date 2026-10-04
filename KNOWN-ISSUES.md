@@ -30,9 +30,10 @@ An honest list of what does **not** work or remains unverified, as of
 > оставлены как есть: они обозначают прогон, а не ссылку.** Реестр
 > md5 → коммит → результат — [out/BUILDS.md](out/BUILDS.md).
 >
-> **Время прогона — ≈8,5 с** (диапазон 8 451…8 470 мс, два прогона v3.40).
-> До v3.40 было ≈16 с (8 масок рендера). Оценки вида «прогон ≈2,2 минуты»
-> ниже относятся к старым ревизиям флоу.
+> **Время прогона — ≈4,9 с** (релиз 1.0.0, v3.52, один подтверждённый
+> прогон `out/usb-log-1004-183613.txt`). До этого ≈8,5 с (v3.40), ещё раньше
+> ≈16 с (8 масок рендера). Оценки вида «прогон ≈2,2 минуты» ниже относятся
+> к старым ревизиям флоу.
 
 ## Fundamental
 
@@ -131,12 +132,19 @@ An honest list of what does **not** work or remains unverified, as of
     `0x1FFE00000` / `lo = frtsOffset>>8, hi = lo+0xE00` figures belong to the
     pre-margin formula and are **retired** — see §35d and README's banner note.
 
-15. **The GSP firmware blob still has to come from the right package.** The
-    app reads `gsp_ga10x.bin` off the stick; the chip is picked inside that
-    image, so the same file serves GA102 and GA104. The `.fwimage` offset and
-    size are now parsed out of its ELF instead of being hardcoded, so a
-    differently-sized firmware from another driver package also works as long
-    as it fits the 0x5060000 read window.
+15. **~~The GSP firmware blob still has to come from the right package.~~
+    **RESOLVED in v3.42, no longer an issue.** The app *used* to read
+    `gsp_ga10x.bin` off the stick (84 MB over USB 2.0 ≈ 3.1 s per boot), but
+    the read was broken by construction: `GSP_FW_LBA = 0` means it read LBA 0
+    of the device — the MBR/FAT boot sector, not the file inside the
+    filesystem — so the ELF check rejected it and the buffer fell back to
+    zeros every single run. v3.42 compiled the read out (`#if GSP_FW_LBA`);
+    the app now works with **no GSP blob on the stick at all**, at zero cost.
+    The log states it directly: `FWRD  READ SKIPPED (GSP_FW_LBA=0)`.
+
+    If GSP firmware is ever needed again, it has to be located *inside* the
+    FAT32 partition first (own directory parser or `LocateHandleBuffer`) —
+    reading it from LBA 0 can only ever return garbage.
 
 16. **`.rodata` must survive the final objcopy.** gcc puts every `Print()`
     literal in `.rodata`; if the PE is built without it the app runs but

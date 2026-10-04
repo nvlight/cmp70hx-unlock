@@ -1,4 +1,4 @@
-<#
+﻿<#
     make-usb-stick.ps1 — rebuilds the CMP 70HX boot stick from scratch.
 
     Replaces the hand-rolled FAT32 images: this lets WINDOWS make the
@@ -23,10 +23,21 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 # попавший сюда по инерции, однажды уводил свежую флешку в состояние без графики
 # при полностью рабочем compute.
 $efi  = Join-Path $here 'unlock_v3r_CMP70HX.efi'
-$fw   = Join-Path $here 'gsp_ga10x.bin'
 
-foreach ($f in @($efi, $fw)) {
-    if (-not (Test-Path $f)) { throw "missing payload: $f" }
+# gsp_ga10x.bin больше НЕ обязателен. С v3.42 чтение GSP с флешки отключено
+# (GSP_FW_LBA = 0 в src/unlock_v2.c), в логе видно «FWRD READ SKIPPED», а
+# fw-read занимает 3 мс вместо 3128 мс. Раньше файл был обязателен, и копирование
+# 84 МБ входило в проверку; теперь кладём его только с -WithGsp.
+$fw = Join-Path $here 'gsp_ga10x.bin'
+$withGsp = $false
+foreach ($a in $args) {
+    if ($a -eq '-WithGsp' -or $a -eq '--with-gsp') { $withGsp = $true }
+}
+
+if (-not (Test-Path $efi)) { throw "missing payload: $efi" }
+if ($withGsp -and -not (Test-Path $fw)) { throw "-WithGsp, but missing: $fw" }
+if (-not $withGsp) {
+    Write-Host 'gsp_ga10x.bin not needed since v3.42 (GSP_FW_LBA=0, never read from the stick).' -ForegroundColor DarkGray
 }
 
 # The stick must carry the graphics build: without these two strings in the
@@ -127,12 +138,14 @@ Update-HostStorageCache
 Write-Host "[5/5] copying the payload..." -ForegroundColor Cyan
 $root = "$($vol.DriveLetter):\"
 New-Item -ItemType Directory -Path "$root\EFI\BOOT" -Force | Out-Null
-Copy-Item $fw  "$root\gsp_ga10x.bin"        -Force
 Copy-Item $efi "$root\EFI\BOOT\BOOTX64.EFI" -Force
+if ($withGsp) { Copy-Item $fw "$root\gsp_ga10x.bin" -Force }
 
 # ---- verify ---------------------------------------------------------------
 $ok = $true
-foreach ($pair in @(@("$root\EFI\BOOT\BOOTX64.EFI", $efi), @("$root\gsp_ga10x.bin", $fw))) {
+$pairs = @(,@("$root\EFI\BOOT\BOOTX64.EFI", $efi))
+if ($withGsp) { $pairs += ,@("$root\gsp_ga10x.bin", $fw) }
+foreach ($pair in $pairs) {
     $a = (Get-FileHash $pair[0] -Algorithm MD5).Hash
     $b = (Get-FileHash $pair[1] -Algorithm MD5).Hash
     Write-Host ("      {0,-24} md5 {1} {2}" -f (Split-Path $pair[0] -Leaf), $a, $(if ($a -eq $b) { 'OK' } else { { $ok = $false; 'MISMATCH' } }))

@@ -12,3 +12,13 @@ blobs/
 # Local scratch
 *.log
 build/
+
+# Release artifacts. The image is a build product, not source: it is published
+# as a GitHub Release asset together with dist\SHA256SUMS, and its own md5
+# changes on every rebuild (FAT32 volume serial + timestamps).
+dist/
+
+# IDE / agent local state
+.idea/
+.mcp.json
+.claude/
