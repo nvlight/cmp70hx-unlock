@@ -156,13 +156,37 @@ if ($vfmt.Success -and $vm.Success -and $gfxSet) {
 # печать рамки, и поэтому по построению не может её учитывать. На прогоне
 # 1004-161017 она дала 2 вместо 7 - и была права: измерялось не то, что
 # объявлялось проверенным.
-$sm = [regex]::Match($text, 'SCREEN raw console lines=(\d+) FINAL')
+# Считается в ЛЮБОЙ форме: и старая 'SCREEN raw console lines=N
+# (frame+card+unlocking)' из v3.47, и новая '... N FINAL' из v3.48.
+$sm = [regex]::Match($text, 'SCREEN raw console lines=(\d+)')
+$isFinal = [regex]::Match($text, 'SCREEN raw console lines=\d+ FINAL')
+# v3.48: СТРОГОСТЬ ПО СБОРКЕ, А НЕ ПО ФОРМАТЕ СТРОКИ.
+#
+# Число требуется ВСЕГДА, где счётчик есть, - иначе прогоны v3.47 с 18
+# прямыми строками снова начали бы проходить, а это ровно тот дефект, который
+# приёмка поймала.
+#
+# Отдельно проверяется FINAL, и только для v3.48+: строка 'RET   returning to
+# firmware' печатается начиная с v3.48, и наличие FINAL после неё обязательно.
+# Раньше отсутствие SCREEN было всегда Note - «старый формат», и на прогонах
+# 1004-151011 и -163842, где лог рвался на маркере 'END ---- end of log ----',
+# приёмка молча соглашалась с потерей данных. Отчёт «не знаю» на повреждённом
+# входе снаружи неотличим от согласия - это худший вид проверки.
+$isNew = ($text -match 'RET   returning to firmware')
 if (-not $sm.Success) {
-    Note "нет строки SCREEN ... FINAL - лог без счётчика прямых выводов (старый формат)"
+    if (-not $isNew) {
+        Note "лог без счётчика SCREEN - в этой сборке он ещё не печатался (старый формат)"
+    } else {
+        Bad "сборка v3.48+ (есть RET), а счётчика SCREEN нет - лог оборвался раньше отчёта"
+    }
 } else {
     $sc = [int]$sm.Groups[1].Value
     if ($sc -eq 7) { Ok "на консоль ушло 7 прямых строк (карта, Unlocking, рамка из 5)" }
     else { Bad ("на консоль ушло " + $sc + " прямых строк вместо 7 - на экране либо лишний шум, либо не напечаталась часть рамки") }
+
+    if ($isNew -and -not $isFinal.Success) {
+        Bad "сборка v3.48+, есть счётчик SCREEN, но нет FINAL - лог оборвался между рамкой вердикта и её счётчиком"
+    }
 }
 
 # --- 2d. ВЫГРУЗКА КОЛЬЦА КОНСОЛИ В ЛОГ (v3.47) -----------------------------
@@ -183,7 +207,11 @@ $prB = [regex]::Match($text, 'PRND  BEFORE ring dump: entered=(\d+)')
 $prA = [regex]::Match($text, 'PRND  AFTER  ring dump: entered=(\d+)')
 $prH = [regex]::Match($text, 'PRN   ==== console ring:')
 if (-not $prB.Success -and -not $prA.Success) {
-    Note "лог без маркеров PRND - выгрузка кольца не измерялась (старый формат)"
+    if (-not $isNew) {
+        Note "лог без маркеров PRND - выгрузка кольца не измерялась (старый формат)"
+    } else {
+        Bad "сборка v3.48+ (есть RET), но маркеров PRND нет - лог оборвался на выгрузке кольца"
+    }
 } elseif (-not $prB.Success) {
     Bad "есть AFTER, но нет BEFORE - код вызова fx_pr_dump не выполняется вовсе"
 } elseif (-not $prA.Success) {
