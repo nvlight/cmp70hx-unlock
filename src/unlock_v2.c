@@ -265,10 +265,49 @@ static UINTN   g_logSectors = 0;
 /* v3.19: сколько раз реально дошло до выгрузки кольца, и сколько секторов
  * при этом записано. Без этого выгрузка неотличима от «функция не вызвана».
  * См. комментарий у fx_pr_dump. */
+/* v3.47: СЧЁТЧИК ВХОДОВ, а не успешных выгрузок.
+ *
+ * Изначально g_prDumpCalls++ стоял ПОСЛЕ трёх ранних выходов, то есть
+ * показывал «выгрузка прошла», а не «выгрузку вызвали». Для диагностики
+ * «вызвали или нет» это бесполезно: ранний выход даёт 0 точно так же, как
+ * отсутствие вызова. Счётчик входов эти два случая различает. */
 static UINTN   g_prDumpCalls = 0;
 static UINTN   g_prDumpSecBefore = 0;
 /* v3.18: сколько раз запись на флешку сорвалась. Ноль в норме. */
 static UINTN   g_logFlushFails = 0;
+
+/* ============ v3.47: ВЫВОД ДО ВЫДЕЛЕНИЯ КОЛЬЦА ============
+ *
+ * БЫЛО (fx_print): «если кольца нет - пиши прямо в консоль». Из этого
+ * следовало, что на экране всегда есть ~11 строк, которые нигде больше не
+ * существуют: баннер профиля и весь разбор device path из log_init идут
+ * ДО выделения кольца, попадают на консоль напрямую и в файловый лог не
+ * попадают ВООБЩЕ (проверено на прогоне 1004-151011: строк '[log] device
+ * path' в логе нет ни одной). То есть на экране шум, а в логе пусто.
+ *
+ * ПОЧЕМУ НЕ «ПРОСТО ЗАГЛУШИТЬ». Заглушить — значит выбросить единственную
+ * копию этих строк. Выбор флешки подробно не записан больше никуда, а по
+ * нему видно, куда уехал лог.
+ *
+ * ПОЧЕМУ НЕ «ПЕРЕНЕСТИ ВЫДЕЛЕНИЕ КОЛЬЦА В НАЧАЛО efi_main». Тогда эти
+ * строки попадут в кольцо, а кольцо не выгружается в лог: fx_pr_dump не
+ * даёт ни байта ни в одном прогоне начиная с v3.17. То есть они просто
+ * перестанут существовать. Тише, но потеряно.
+ *
+ * СТОРОНА РЕШЕНИЯ. Маленький буфер на 2 КБ, который копится до кольца и
+ * как только лог на флешке - СРАЗУ выгружается в файл через log_write.
+ * Тот же путь записи, что у всех работающих строк лога, поэтому он не
+ * зависит от починенности fx_pr_dump.
+ *
+ * Что с буфером, если он переполнится: строки отбрасываются, и это
+ * СЧИТАЕТСЯ (g_prPreDropped печатается в лог). Молчаливая потеря -
+ * худший вариант, потому что её не видно. */
+#define FX_PR_PRE_CHARS 2048
+static CHAR16  g_prPre[FX_PR_PRE_CHARS];
+static UINTN   g_prPreLen = 0;      /* сколько символов занято */
+static UINTN   g_prPreDropped = 0;  /* сколько символов НЕ влезло */
+static BOOLEAN g_prPreFlushed = FALSE; /* буфер уже выгружен в лог */
+static BOOLEAN g_prNoRing = FALSE;  /* AllocatePool не удался - прямой вывод */
 
 static VOID fx_print(CHAR16 *fmt, ...);
 static BOOLEAN g_logOn;        /* лог на флешку; определён ниже */
@@ -279,6 +318,8 @@ static VOID fx_pr_dump(void);
 static VOID fx_pr_console_dump(void);
 static VOID fx_io_report(void);
 static VOID fx_console_cost_probe(void);
+static VOID fx_pr_pre_flush(void);
+static VOID fx_pr_pre_put(CHAR16 *s);
 #define Print(...) fx_print(__VA_ARGS__)
 
 /* Настоящий вызов в консоль мимо буфера. Используется и пробой, и пульсом.
@@ -298,6 +339,17 @@ fx_console_raw(CHAR16 *s)
     fx_print_real(s);
 }
 
+/* v3.47: накопление вывода, произошедшего ДО выделения кольца. */
+static VOID
+fx_pr_pre_put(CHAR16 *s)
+{
+    UINTN i;
+    for (i = 0; s[i]; i++) {
+        if (g_prPreLen >= FX_PR_PRE_CHARS) { g_prPreDropped++; continue; }
+        g_prPre[g_prPreLen++] = s[i];
+    }
+}
+
 static VOID
 fx_print(CHAR16 *fmt, ...)
 {
@@ -311,8 +363,16 @@ fx_print(CHAR16 *fmt, ...)
     UnicodeVSPrint(tmp, sizeof(tmp), fmt, ap);
     va_end(ap);
 
-    if (!g_prRing) {            /* кольцо ещё не выделено - прямо в консоль */
-        fx_console_raw(tmp);
+    if (!g_prRing) {
+        /* v3.47: НЕ НА КОНСОЛЬ. Раньше здесь был прямой вывод, и он давал
+         * ~11 строк шума на экране без единой копии в логе.
+         *
+         * Исключение - случай, когда кольцо не выделилось: тогда прямой
+         * вывод это единственный путь, куда вообще может пойти текст, и
+         * терять его нельзя (плюс об этом предупреждает сообщение
+         * «allocation FAILED»). */
+        if (g_prNoRing) { fx_console_raw(tmp); return; }
+        fx_pr_pre_put(tmp);
         return;
     }
     g_prCalls++;
@@ -416,6 +476,13 @@ static VOID
 fx_pr_dump(void)
 {
     UINTN i;
+    /* v3.47: счётчик ВХОДОВ, до всех ранних выходов.
+     *
+     * Стоял ниже трёх проверок, то есть показывал «выгрузка прошла», а не
+     * «выгрузку вызвали». Для вопроса «вызвали или нет» это ровно то же
+     * самое число, что и отсутствие вызова: оба дают 0. Различает их
+     * только счётчик входов. */
+    g_prDumpCalls++;
     /* v3.19: ПОЧЕМУ ПРОШЛЫЕ ВЫГРУЗКИ НЕ ДОШЛИ. Кламп в log_flush_sector
      * починен в v3.18, но заголовка PRN в логе всё равно нет ни в одном из
      * двух прогонов. Значит причина не в размере пакета, и угадывать её
@@ -454,7 +521,6 @@ fx_pr_dump(void)
           L"measured %dus/call, dump starts at sec=%d fill=%d/4096 ====\r\n",
           g_prCalls, g_prFilled, g_prUsPerCall, (INTN)g_logSec,
           (INTN)g_logFill);
-    g_prDumpCalls++;
 
     for (i = 0; i < g_prFilled; i++) {
         CHAR16 c = g_prRing[(g_prFilled < g_prCap) ? i
@@ -9161,6 +9227,51 @@ log_write(const CHAR8 *s)
     while (*s) log_putc(*s++);
 }
 
+/* v3.47: выгрузка накопленного ДО кольца вывода в файловый лог.
+ *
+ * Вызывается сразу после успешного выделения кольца, то есть когда лог на
+ * флешке уже есть и работает. Пишем через log_write - тот же путь, что и
+ * все работающие строки лога (ulogf в итоге тоже приходит в log_putc).
+ *
+ * Правило перевода в ASCII то же, что у ulogf и у fx_pr_dump: непечатные
+ * и не-ASCII символы, включая кириллицу, становятся '?'. Это делает файл
+ * лога пригодным для поиска, ценой читаемости русских слов - но русские
+ * слова в логе и так не несут смысла, которого нет в английских.
+ *
+ * Пропуск не молчит: если буфер переполнился и часть строк отброшена,
+ * это печатается числом, а не остаётся неизвестным. */
+static VOID
+fx_pr_pre_flush(void)
+{
+    UINTN i;
+
+    if (g_prPreFlushed) return;
+    g_prPreFlushed = TRUE;      /* даже если писать некуда - второй раз не пробуем */
+
+    if (!g_logOn) {
+        /* Лога нет - сохраняем хотя бы это сведение, иначе потеря и этого
+         * факта останется незамеченной. */
+        ulogf(L"PRE   console pre-ring buffer DISCARDED: log was off, "
+              L"%d chars lost\r\n", (INTN)g_prPreLen);
+        return;
+    }
+    if (g_prPreLen == 0) return;
+
+    log_write("\nPRE ==== console output before the ring existed "
+              "(banner + log_init device path walk) ====\n");
+    for (i = 0; i < g_prPreLen; i++) {
+        CHAR16 c = g_prPre[i];
+        log_putc((c == L'\n' || c == L'\r') ? '\n'
+                 : ((c < 0x20 || c > 0x7E) ? '?' : (CHAR8)c));
+    }
+    log_write("\nPRE ==== end pre-ring output ====\n");
+    /* Счётчик потерь - сразу сюда, а не в fx_io_report: тот вызывается
+     * сильно позже, и если между этой точкой и ним что-то пойдёт не так,
+     * число потерь потеряется вместе с причиной. */
+    ulogf(L"PRE   pre-ring buffer: %d chars, capacity %d, DROPPED %d\r\n",
+          (INTN)g_prPreLen, (INTN)FX_PR_PRE_CHARS, (INTN)g_prPreDropped);
+}
+
 /* Проверка, что образ действительно лежит по адресу, который мы отдаём DMA.
  * Адрес используется и как VA (CopyMem), и как PA (DMA GSP); если VA != PA,
  * CPU пишет в чужую страницу, а DMA читает пустую. На 70HX так и было:
@@ -10334,7 +10445,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
             g_prRing = (CHAR16 *)ring;
             g_prCap  = FX_PR_RING_CHARS;
             fx_console_cost_probe();
+            /* v3.47: всё, что напечатано до кольца (баннер профиля и весь
+             * разбор device path из log_init), уходит в файл. Раньше эти
+             * строки были ТОЛЬКО на экране: кольца ещё не было, а в лог они
+             * не попадали. Теперь экран начинается чисто, а диагностика
+             * выбора флешки не пропадает. */
+            fx_pr_pre_flush();
         } else {
+            g_prNoRing = TRUE;   /* fx_print вернётся к прямому выводу */
             Print(L"[io] console ring allocation FAILED - "
                   L"console output stays direct (no speedup)\n");
         }
@@ -12340,7 +12458,18 @@ done:
         Print(L" profile      %s  10de:%04x  bus=%d dev=%d fn=%d\n",
               TARGET_NAME, (INTN)TARGET_PCI_DEV, (INTN)gBus, (INTN)gDev, (INTN)gFn);
         Print(L" PLM          0x%08x\n", g_snapPlm);
-        Print(L" SS0/SS1      0x%08x / 0x%08x\n", g_snapSs0, g_snapSs1);
+        /* v3.47: строка SS0/SS1 из этого блока УДАЛЕНА.
+         *
+         * Её печатал и дамп в кольцо (здесь), и баннер вердикта в файл
+         * (строки VRC). Одно и то же число в двух местах - а при правке
+         * одного из них они разойдутся, и человек увидит «разблокировано»
+         * там, где графика не поднялась. Именно это уже случилось в
+         * прогоне 1004-135604, где вердикт врал из-за устаревшего
+         * значения; проверка 2b в verify-log.ps1 теперь это ловит.
+         *
+         * Оставляем там, где переживает: в логе. В кольцо эти строки всё
+         * равно не попадают - fx_pr_dump не даёт ни байта с v3.17, а
+         * RELEASE_BUILD на консоль кольцо не выгружает вовсе. */
         Print(L" WPR2         0x%08x/0x%08x  (ожидалось 0x%08x/0x%08x)\n",
               g_snapWLo, g_snapWHi, TARGET_WPR2_LO, TARGET_WPR2_HI);
         Print(L" dbg(0x94)    0x%08x   scratch0e 0x%08x   cpuctl 0x%08x\n",
@@ -12451,7 +12580,35 @@ done:
          * записи, и виноват log_flush_sector. */
         {
             UINT64 pm = fx_now_us();
+            /* v3.47: ДВА МАРКЕРА ВОКРУГ ВЫГРУЗКИ, чтобы локализовать
+             * потерю, а не гадать о ней.
+             *
+             * Уже установлено: этот блок выполняется (строки END после него
+             * в логе есть), но между ними не появляется НИ ОДНОЙ строки
+             * PRN - хотя каждая ветка fx_pr_dump пишет заголовок перед
+             * выходом. Разбирать это по структуре скобок бесполезно: в
+             * этом проекте на этом уже потратили заход (v3.19, v3.20), и
+             * комментарий там же прямо говорит, что угадывать нельзя.
+             *
+             * Теперь исход однозначен:
+             *   нет BEFORE              -> код сюда не дошёл;
+             *   есть BEFORE, нет AFTER  -> запись сломалась внутри выгрузки;
+             *   оба есть, нет PRN       -> fx_pr_dump вышел раньше, не
+             *                             написав причину (тогда отсутствует
+             *                             и строка NOT DUMPED);
+             *   оба есть, PRN есть      -> выгрузка идёт, вопрос к pull-log.
+             *
+             * Счётчик входов вызывается в fx_pr_dump, а не здесь, чтобы он
+             * показывал реальные входы в функцию. */
+            ulogf(L"PRND  BEFORE ring dump: entered=%d calls=%d filled=%d "
+                  L"logOn=%d sec=%d\r\n",
+                  (INTN)g_prDumpCalls, (INTN)g_prCalls, (INTN)g_prFilled,
+                  (INTN)g_logOn, (INTN)g_logSec);
             fx_pr_dump();
+            ulogf(L"PRND  AFTER  ring dump: entered=%d filled=%d logOn=%d "
+                  L"sectors_written=%d\r\n",
+                  (INTN)g_prDumpCalls, (INTN)g_prFilled, (INTN)g_logOn,
+                  (INTN)g_logSectors);
             fx_mk_acc(pm, L"console ring dump to log");
         }
         log_flush_sector(TRUE);
