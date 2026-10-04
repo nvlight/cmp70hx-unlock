@@ -258,6 +258,7 @@ static UINTN   g_prHead   = 0;     /* куда писать дальше */
 static UINTN   g_prFilled = 0;     /* сколько символов занято всего */
 static UINTN   g_prCalls  = 0;
 static UINTN   g_prUsPerCall = 0;  /* измеренная цена одного вызова, мкс */
+static BOOLEAN g_prUsMeasured = FALSE; /* TRUE = проба выполнена, FALSE = взято из константы */
 static UINTN   g_ulogCalls = 0;
 static UINT64  g_ulogUs    = 0;
 static UINTN   g_logSectors = 0;
@@ -280,10 +281,20 @@ static VOID fx_io_report(void);
 static VOID fx_console_cost_probe(void);
 #define Print(...) fx_print(__VA_ARGS__)
 
-/* Настоящий вызов в консоль мимо буфера. Используется и пробой, и пульсом. */
+/* Настоящий вызов в консоль мимо буфера. Используется и пробой, и пульсом.
+ *
+ * v3.47: здесь же считаются ПРЯМЫЕ выводы. Раньше вывод в консоль не
+ * оставлял следа НИГДЕ - не в кольце, не в файловом логе, - поэтому по
+ * логу невозможно было доказать, что рамка вердикта вообще дошла до
+ * экрана. Счётчик пишется в лог строкой SCREEN, и verify-log.ps1 может
+ * потребовать ожидаемое число. Это не доказывает, что каждая строка
+ * дошла, но доказывает, что приложение их вызвало, - а это уже половина
+ * непроверяемого. */
+static UINTN g_rawCalls = 0;
 static VOID
 fx_console_raw(CHAR16 *s)
 {
+    g_rawCalls++;
     fx_print_real(s);
 }
 
@@ -311,20 +322,52 @@ fx_print(CHAR16 *fmt, ...)
         if (g_prFilled < g_prCap) g_prFilled++;
     }
     /* Пульс на настоящей консоли: пользователь должен видеть, что идёт
-     * процесс. Одна строка на 512 вызовов - при 3000 вызовах это 6 строк. */
+     * процесс. Одна строка на 512 вызовов - при 3000 вызовах это 6 строк.
+     *
+     * v3.47: В РЕЛИЗЕ ВЫКЛЮЧЕН. Строка '... console 512 calls buffered'
+     * говорит про буфер, а не про карту: человек, который ждёт анлок, должен
+     * видеть «Unlocking», а не счётчик вызовов. Плюс хвост экрана и так
+     * содержит вердикт. В dev-сборках пульс остаётся - там вывод идёт
+     * медленно и без индикации совсем нечем понять, что процесс жив. */
+#ifndef RELEASE_BUILD
     if ((g_prCalls % FX_PR_BEAT_EVERY) == 0) {
         CHAR16 beat[128];
         UnicodeSPrint(beat, sizeof(beat),
                       L"  ... console %d calls buffered\r\n", g_prCalls);
         fx_console_raw(beat);
     }
+#endif
 }
 
 /* Разовая проба цены одного вывода в консоль. Делается на НАСТОЯЩЕЙ
- * консоли, иначе она измеряла бы цену собственной буферизации. */
+ * консоли, иначе она измеряла бы цену собственной буферизации.
+ *
+ * ============ v3.47: В РЕЛИЗЕ ПРОБА НЕ ВЫПОЛНЯЕТСЯ ============
+ *
+ * Она печатает 20 строк на НАСТОЯЩУЮ консоль, то есть 20 x 16,83 мс =
+ * 337 мс внутри измеренного прогона - и двадцать строк '[probe] console cost
+ * measurement' на экране у человека, который ждёт анлок.
+ *
+ * Покупатель этого числа ровно один: строка 'est_if_unbuffered' в
+ * fx_io_report. Это справочная величина, а не элемент логики анлока, и она
+ * уже измерена - 16 830 мс/вызов, совпало до единицы на прогонах v3.17 и
+ * v3.18, то есть величина стабильная, а не случайная. Платить 337 мс за
+ * переизмерение стабильной справочной величины на каждом бут - расточительство.
+ *
+ * В РЕЛИЗЕ число НЕ МАРКЕТСЯ: g_prUsMeasured = FALSE, и отчёт прямо пишет
+ * 'assumed' вместо 'measured'. Иначе документированное измерение выдавалось бы
+ * за измеренное сегодня.
+ *
+ * Если кому-то понадобится проверить, что прошивка не замедлилась, -
+ * собрать без RELEASE_BUILD: проба выполнится, и в логе будет 'measured'. */
+#define FX_CONSOLE_US_ASSUMED 16830
 static VOID
 fx_console_cost_probe(void)
 {
+#ifdef RELEASE_BUILD
+    g_prUsPerCall   = FX_CONSOLE_US_ASSUMED;
+    g_prUsMeasured = FALSE;
+#else
     UINT64 t0, t1;
     UINTN i;
     if (!g_prRing || !fx_now_us()) return;   /* часы не откалиброваны - пропуск */
@@ -332,11 +375,21 @@ fx_console_cost_probe(void)
     for (i = 0; i < 20; i++)
         fx_console_raw(L"[probe] console cost measurement, dummy line\r\n");
     t1 = fx_now_us();
-    if (t1 > t0) g_prUsPerCall = (UINTN)((t1 - t0) / 20);
+    if (t1 > t0) { g_prUsPerCall = (UINTN)((t1 - t0) / 20); g_prUsMeasured = TRUE; }
+#endif
 }
 
 /* Итог по выводу. Печатается ПОСЛЕ ulogf-счётчиков снятых, иначе строка
- * сама себя учтёт. */
+ * сама себя учтёт.
+ *
+ * v3.47: добавлены две вещи, обе про честность отчёта.
+ *
+ * 1) 'measured' или 'assumed'. В релизе проба не выполняется (337 мс ради
+ *    справочной цифры), и без пометки документированное измерение
+ *    выдавалось бы за измеренное только что.
+ * 2) SCREEN: сколько строк ушло на НАСТОЯЩУЮ консоль в обход кольца.
+ *    Прямой вывод не оставляет следа нигде, и по логу нельзя было доказать,
+ *    что рамка вердикта дошла до экрана. Теперь можно. */
 static VOID
 fx_io_report(void)
 {
@@ -345,10 +398,13 @@ fx_io_report(void)
     UINTN ls = g_logSectors;
     UINT64 est = g_prUsPerCall ? (UINT64)g_prCalls * g_prUsPerCall : 0;
 
-    ulogf(L"TIME  I/O: Print n=%d measured=%dus/call "
+    ulogf(L"TIME  I/O: Print n=%d us/call=%d (%s) "
           L"est_if_unbuffered=%lldms | ulogf n=%d cost=%lldus sectors=%d\n",
-          g_prCalls, g_prUsPerCall, (INT64)(est / 1000ULL),
+          g_prCalls, g_prUsPerCall, g_prUsMeasured ? L"measured" : L"assumed",
+          (INT64)(est / 1000ULL),
           uc, (INT64)uu, ls);
+    ulogf(L"TIME  SCREEN raw console lines=%d (frame+card+unlocking)\n",
+          (INTN)g_rawCalls);
     ulogf(L"TIME  render masks: fast=%d fast_miss=%d direct=%d booter=%d\n",
           fx_rmFast, fx_rmFastMiss, fx_rmDirect, fx_rmNeedBooter);
 }
@@ -445,13 +501,30 @@ fx_pr_dump(void)
  *
  * ЧТО НЕ ДЕЛАЕМ: не печатаем «дамп последних N строк». Любое N здесь
  * означает оплату N x 16,8 мс, и никакого «немного дешевле» тут нет -
- * либо печатаем итог, либо не печатаем ничего.
+ * * либо печатаем итог, либо не печатаем ничего.
  */
-#define FX_SCREEN_LINES 12      /* строк на экране; 12 x 16,8 мс = 0,2 с */
-
 static VOID
 fx_pr_console_dump(void)
 {
+#ifdef RELEASE_BUILD
+/* v3.47: В РЕЛИЗЕ НА КОНСОЛЬ НИЧЕГО, КРОМЕ ТРЁХ СТРОК.
+ *
+ * Комментарий выше, на который этот дамп отвечает, гласит: «ЧТО НЕ ДЕЛАЕМ:
+ * не печатаем дамп последних N строк. Любое N здесь означает оплату
+ * N x 16,8 мс, и никакого «немного дешевле» тут нет - либо печатаем итог,
+ * либо не печатаем ничего». Код делал ровно то, от чего предостерегал:
+ * N = 12, то есть 202 мс и тринадцать строк диагностики перед вердиктом.
+ *
+ * Человек, который пришёл посмотреть, разблокировалась ли карта, получал
+ * 30 строк шума и одну нужную в самом низу. Заголовки 'unlock done' и
+ * 'last N lines' ушли в ulogf: они описывают механизм буферизации, а не
+ * карту, и на экране им не место.
+ *
+ * Диагностика никуда не делась - она в файловом логе, ради которого он и
+ * существует. Экран теперь отвечает на один вопрос: что с картой. */
+    ulogf(L"TIME  screen: console dump suppressed in RELEASE_BUILD "
+          L"(%d ring chars are in the file log)\n", (INTN)g_prFilled);
+#else
     UINTN i, n = 0, shown = 0;
     CHAR16 tmp[512];
     CHAR16 hdr[160];
@@ -496,6 +569,7 @@ fx_pr_console_dump(void)
         fx_console_raw(tmp);
         shown++;
     }
+#endif /* RELEASE_BUILD */
 }
 
 /* ==== TARGET PROFILE — the ONLY place that carries chip-specific numbers ====
@@ -1999,6 +2073,32 @@ static BOOLEAN mc_pick(UINTN idx)
     gFn  = g_mcCards[idx].fn;
     ulogf(L"PICK  card#%d of %d -> bus=%d dev=%d fn=%d\n",
           (INTN)idx, (INTN)g_mcCount, (INTN)gBus, (INTN)gDev, (INTN)gFn);
+    /* v3.47: ПЕРВЫЕ ДВЕ СТРОКИ ЭКРАНА - ЗДЕСЬ, И МИМО КОЛЬЦА.
+     *
+     * Человек выбрал флешку и смотрит на пустой экран около пяти секунд.
+     * Раньше за это время он не видел НИЧЕГО осмысленного: весь Print
+     * буферизуется в кольцо, в консоль уходят только проба и пульс, а если
+     * приложение зависнет на середине, кольцо не выгрузится и экран не
+     * покажет вообще ничего. То есть на экране нет ни единого признака, что
+     * процесс жив.
+     *
+     * Отсюда две строки: какая карта выбрана (если их две, человек должен
+     * знать, какая именно разблокируется) и что анлок пошёл. Второе -
+     * единственный индикатор зависания, который вообще возможен: после
+     * этой точки Print уже ничего не покажет.
+     *
+     * fx_console_raw, а не Print: прямой вывод переживает зависание, кольцо -
+     * нет. */
+    {
+        CHAR16 s[256];
+        UnicodeSPrint(s, sizeof(s), L"%s  PCI 10de:%04x  bus=%d dev=%d fn=%d\r\n",
+                      TARGET_NAME, (UINTN)TARGET_PCI_DEV,
+                      (INTN)gBus, (INTN)gDev, (INTN)gFn);
+        fx_console_raw(s);
+        UnicodeSPrint(s, sizeof(s),
+                      L"Unlocking (takes a few seconds)...\r\n");
+        fx_console_raw(s);
+    }
     return TRUE;
 }
 
@@ -10239,25 +10339,26 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                   L"console output stays direct (no speedup)\n");
         }
     }
-#ifdef RELEASE_BUILD
-#ifdef PCIE_GEN2_REJOIN
-# ifdef FULL_NOGEN2
-    Print(L"=== v3.04 FULL-NOGEN2 (render table, no pcie-gen2) ===\n");
-# else
-    Print(L"=== v3.02 FULL (render table + gen2) ===\n");
-# endif
-#else
-    Print(L"=== v3.04 compute-only (multi-card) ===\n");
-#endif
-#elif defined(EFI_AUTOTEST)
-# ifdef FULL_NOGEN2
-    Print(L"=== v3.04-nogen2 (render table) [AUTOTEST] ===\n");
-# else
-    Print(L"=== v2.101 (multipass + GFX/SS verify) [AUTOTEST] ===\n");
-# endif
-#else
-    Print(L"=== v2.101 (multipass + GFX/SS verify) ===\n");
-#endif
+/* v3.47: БАННЕР ВЕРСИИ УБРАН.
+ *
+ * Здесь стояло '=== v3.04 FULL-NOGEN2 (render table, no pcie-gen2) ==='.
+ * На момент v3.47 сборка - это v3.47, список масок рендера - две, а не
+ * «render table», так что надпись была просто неверной. Хуже: она уходила
+ * в кольцо, а кольцо не выгружается в файловый лог начиная с v3.17
+ * (fx_pr_dump() не пишет заголовок PRN ни в одном прогоне), то есть ложь
+ * оставалась только на экране и без единого следа.
+ *
+ * Версию сообщать незачем: имя карты и вердикт теперь печатаются напрямую на
+ * консоль, а версия видна в баннере build.sh и в тегах git.
+ *
+ * Удалён весь блок версионных баннеров, а не только строка FULL-NOGEN2.
+ * Оставшиеся варианты были столь же неверны - 'v3.04 compute-only',
+ * 'v3.02 FULL', 'v3.04-nogen2 (render table)', 'v2.101' - и ни один не
+ * соответствовал сборке, в которой все они печатались. Плюс все они уходят
+ * в кольцо, а кольцо не выгружается в файловый лог начиная с v3.17, то есть
+ * на экране не появлялось НИ ОДНОГО из них, а в логе их не было.
+ *
+ * Осталась строка профиля ниже - она верна и что-то сообщает. */
     Print(L"=== FRTS=0x%llX (0x%llX pages)  WPR2=0x%08X/0x%08X  FWSEC=%s ===\n",
           TARGET_FRTS_OFFSET, TARGET_FRTS_OFFSET_PG,
           TARGET_WPR2_LO, TARGET_WPR2_HI, FWSEC_BLOB_NAME);
