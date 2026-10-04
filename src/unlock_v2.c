@@ -1542,6 +1542,13 @@ dump_regs(const CHAR16 *Tag)
 static BOOLEAN g_snapOk = FALSE;
 static UINT32  g_snapPlm, g_snapSs0, g_snapSs1, g_snapWLo, g_snapWHi,
                 g_snapDbg, g_snapCpu, g_snapSc0;
+/* v3.45: GFX_SPEED_SELECT в снимке. Без него вердикт на экране после FLR
+ * не мог сказать ничего о графике: MMIO там уже мёртв, живут только g_snap*.
+ * Само значение и признак «селектор встал» вычисляет gen2_gfx_try() и кладёт
+ * в g_gfxVal / g_gfxOk, потому что он умеет проверять и ORDER B. */
+static UINT32  g_snapGfx;
+static UINT32  g_gfxVal = 0xFFFFFFFFU;   /* фактическое readback */
+static BOOLEAN g_gfxOk  = FALSE;          /* 0x4 реально залип */
 
 static void
 snapshot_state(void)
@@ -1554,6 +1561,10 @@ snapshot_state(void)
     g_snapDbg = mmio_read32(GSP_BASE + 0x94);
     g_snapCpu = mmio_read32(GSP_CPUCTL);
     g_snapSc0 = mmio_read32(0x001438);
+    /* Рендер-снимок НЕ перезаписывает g_gfxVal: если gen2_gfx_try() не
+     * дошёл (анлок раннего пути не прошёл), вердикт должен показать 0x4,
+     * полученный живым чтением, а не затирать его «неизвестно». */
+    g_snapGfx = g_gfxOk ? g_gfxVal : mmio_read32(0x00823830U);
     g_snapOk  = TRUE;
 }
 
@@ -1563,6 +1574,47 @@ is_unlocked(void)
     return (mmio_read32(REG_FEAT_OVR_SM_SPD) == VAL_SS0_UNLOCKED &&
             mmio_read32(REG_FEAT_OVR_SM_SPD_1) == VAL_SS1_UNLOCKED);
 }
+
+/* ==== ВЕРДИКТ ДЛЯ ЧЕЛОВЕКА (v3.45) ====
+ *
+ * ЧТО ЭТО ДЕЛАЕТ. Даёт один-единственный ответ о том, что реально получилось,
+ * и показывает его на экране в рамке — последним, что человек видит перед
+ * возвратом в прошивку. Отдельная строка со значениями идёт под вердиктом
+ * всегда, потому что вердикт без чисел невозможно оспорить: видно, ИМЕННО
+ * что не сошлось.
+ *
+ * ПОЧЕМУ ЧЕТЫРЕ СОСТОЯНИЯ, А НЕ ДВА. Пользователь различает «compute + render»
+ * и «только compute». Третье состояние теоретически невозможно: ORDER A пишет
+ * GFX_SPEED_SELECT после SS0/SS1, то есть селектор зависит от compute. Но если
+ * оно всё-таки случится, это факт о железе, и молчать о нём нельзя.
+ *
+ * ПОЧЕМУ ТОЛЬКО ASCII. ulogf переводит всё вне 0x20..0x7E в '?', поэтому
+ * кириллица в логе нечитаема. На экране UTF-16 и она безопасна, но тогда текст
+ * на экране и в логе будет разным, а лог читают как эталон. Одна ASCII-строка
+ * в обоих местах — единственный способ исключить расхождение.
+ *
+ * ПОЧЕМУ ЗНАЧЕНИЯ ИЗ СНИМКА, А НЕ ЖИВЫМ ЧТЕНИЕМ. Баннер печатается после
+ * done:, то есть в том числе после do_flr(), где MMIO мёртв и отдаёт мусор.
+ * Единственный честный источник — g_snap*, снятый до FLR. */
+#define VERDICT_RULE       L"----------------------------------------------------------------------"
+#define VERDICT_GFX_OK     0x00000004U
+
+static const CHAR16 *
+unlock_verdict_text(UINT32 ss0, UINT32 ss1, UINT32 gfx)
+{
+    BOOLEAN c = (ss0 == VAL_SS0_UNLOCKED && ss1 == VAL_SS1_UNLOCKED);
+    BOOLEAN r = (gfx == VERDICT_GFX_OK);
+    if (c && r) return L"UNLOCKED (compute + render)";
+    if (c && !r) return L"COMPUTE ONLY (render not unlocked)";
+    if (!c && r) return L"RENDER ONLY (compute not unlocked)";
+    return L"NOT UNLOCKED";
+}
+
+/* Определение unlock_verdict_banner() намеренно живёт НЕ здесь, а после
+ * блока логирования: ему нужны LOG_LBA/LOG_SECTORS и ulogf(), а они
+ * объявлены ниже по файлу. Здесь только прототип, чтобы порядок вызовов в
+ * efi_main не зависел от расположения определения. */
+static void unlock_verdict_banner(void);
 
 /* ==== Read-only diagnostics dump (dev builds pause between sections) ====
  * Never touches file protocols here (they hang some AMI firmwares);
@@ -4628,6 +4680,19 @@ gen2_gfx_try(const CHAR16 *tag)
         ulogf(L"G2GFX  %s ORDER B (GFX before SS): GFX_SPEED_SELECT=0x%08x %s\n",
               tag, v, okB ? L"SET" : L"NOT SET");
     }
+
+    /* v3.45: РЕЗУЛЬТАТ РЕНДЕРА БОЛЬШЕ НЕ ВЫБРАСЫВАЕТСЯ.
+     *
+     * До этого okA/okB были локальными: функция печатала SET/NOT SET в лог и
+     * отдавала наружу void. Экранный вердикт не мог сказать ничего о графике,
+     * потому что единственный носитель результата исчезал на выходе из
+     * функции, а повторное чтение после FLR невозможно - MMIO мёртв.
+     *
+     * ORDER B имеет смысл учитывать наравне с A: если когда-нибудь встанет
+     * B, это всё равно разблокированная графика, и вердикт обязан сказать
+     * UNLOCKED, а не NOT. */
+    g_gfxOk  = (BOOLEAN)(okA || okB);
+    g_gfxVal = v;
 
     /* Скан 0x0..0x7 УДАЛЁН (v3.14).
      *
@@ -9101,6 +9166,42 @@ ulogf(const CHAR16 *fmt, ...)
     if (u0) g_ulogUs += fx_now_us() - u0;
 }
 
+/* ==== ЭКРАННЫЙ БАННЕР ВЕРДИКТА (v3.45) ====
+ *
+ * Рамка на 70 символов. Ширина подобрана под самую длинную строку блока:
+ * '  SS0/SS1 = 0x........ / 0x........    GFX_SPEED_SELECT = 0x........'
+ * ровно 68 символов, и 70 помещаются в стандартные 80 колонок UEFI-консоли.
+ *
+ * Экран и лог получают ОДИН И ТОТ ЖЕ текст. Это не украшение: экран
+ * исчезает, если машина зависнет, и тогда единственным источником остаётся
+ * лог. Два независимо написанных текста рано или поздно разойдутся, и
+ * человек увидит «разблокировано» там, где графика не поднялась.
+ *
+ * VRCFMT 1 — маркер формата, а не данные. Он нужен проверяющему скрипту,
+ * чтобы отличить «лог старой сборки, где вердикта ещё не было» от «новой
+ * сборки, где баннер почему-то не напечатался». Без него проверка вердикта
+ * падала бы на всех исторических логах, то есть её отключили бы, и она
+ * перестала бы что-либо проверять. */
+static void
+unlock_verdict_banner(void)
+{
+    UINT32 ss0 = g_snapSs0, ss1 = g_snapSs1, gfx = g_snapGfx;
+    const CHAR16 *v = unlock_verdict_text(ss0, ss1, gfx);
+
+    Print(L"\n" VERDICT_RULE L"\n");
+    Print(L"  %s : %s\n", TARGET_NAME, v);
+    Print(L"  SS0/SS1 = 0x%08x / 0x%08x    GFX_SPEED_SELECT = 0x%08x\n",
+          ss0, ss1, gfx);
+    Print(L"  log: out\\pull-log.ps1    full log on stick LBA %d..%d\n",
+          (INTN)LOG_LBA, (INTN)(LOG_LBA + LOG_SECTORS - 1));
+    Print(L"" VERDICT_RULE L"\n");
+
+    ulogf(L"VRCFMT 1\n");
+    ulogf(L"VRC  %s : %s\n", TARGET_NAME, v);
+    ulogf(L"VRC  SS0/SS1 = 0x%08x / 0x%08x    GFX_SPEED_SELECT = 0x%08x\n",
+          ss0, ss1, gfx);
+}
+
 /* Есть ли на томе наш собственный загрузчик EFI/BOOT/BOOTX64.EFI?
  *
  * Отбор флешки по геометрии («первый MBR с разделом 0xEF и FAT32»)
@@ -12026,11 +12127,22 @@ chainload:
     ulogf(L"STG   is_unlocked()=%d (SS0=0x%08x SS1=0x%08x)\n",
           (INTN) is_unlocked(), mmio_read32(REG_FEAT_OVR_SM_SPD),
           mmio_read32(REG_FEAT_OVR_SM_SPD_1));
-    if (is_unlocked())
-        Print(L"*** NVIDIA %s РАЗБЛОКИРОВАН ***\n", TARGET_NAME);
-    else
-        Print(L"*** ВНИМАНИЕ: GPU НЕ разблокирован (SS0=0x%08x SS1=0x%08x) ***\n",
-              mmio_read32(REG_FEAT_OVR_SM_SPD), mmio_read32(REG_FEAT_OVR_SM_SPD_1));
+    /* v3.45: УДАЛЕНЫ ДВЕ СТРОКИ ВЕРДИКТА, БЫВШИЕ ЗДЕСЬ.
+     *
+     *     if (is_unlocked())
+     *         Print(L"*** NVIDIA %s РАЗБЛОКИРОВАН ***\n", TARGET_NAME);
+     *     else
+     *         Print(L"*** ВНИМАНИЕ: GPU НЕ разблокирован ... ***\n", ...);
+     *
+     * Они стояли ДО метки done:, а все четыре пути релизной сборки делают
+     * goto done и перепрыгивают их. То есть на экране не появлялось НИЧЕГО:
+     * подтверждено логами, где есть 'STG reached ''done'' label' и нет
+     * 'reached ''chainload'''. Мёртвый код в релизной сборке - хуже его
+     * отсутствия, потому что создаёт видимость работающей проверки.
+     *
+     * Вторая причина удалить, а не починить: обе строки судили только по
+     * SS0/SS1, то есть о графике не говорили ничего. Новый баннер стоит
+     * ПОСЛЕ done:, печатается на всех путях и различает compute и render. */
 
 done:
     /* v3n: метка входа в done — иначе 'лог оборвался' и 'приложение
@@ -12055,12 +12167,25 @@ done:
               g_snapWLo, g_snapWHi, TARGET_WPR2_LO, TARGET_WPR2_HI);
         Print(L" dbg(0x94)    0x%08x   scratch0e 0x%08x   cpuctl 0x%08x\n",
               g_snapDbg, g_snapSc0, g_snapCpu);
-        Print(L" ВЕРДИКТ      %s\n",
-              (g_snapSs0 == VAL_SS0_UNLOCKED && g_snapSs1 == VAL_SS1_UNLOCKED)
-                  ? L"РАЗБЛОКИРОВАН" : L"НЕ РАЗБЛОКИРОВАН");
+        /* v3.45: строка ВЕРДИКТ убрана из дампа. Она судила только по SS0/SS1,
+         * то есть молчала о графике, а рядом теперь стоит баннер, который
+         * различает все четыре состояния. Дублировать вывод в двух местах
+         * опасно: при правке одного они разойдутся, и человек увидит
+         * «разблокировано» там, где графика не поднялась. Вместо неё -
+         * значение селектора, на котором вердикт и построен. */
+        Print(L" GFX_SPEED_SEL 0x%08x\n", g_snapGfx);
         Print(L" лог          флешка, LBA %d..%d  ->  out\\read-log.ps1\n",
               (INTN)LOG_LBA, (INTN)(LOG_LBA + LOG_SECTORS - 1));
         Print(L"=======================================\n");
+        /* v3.45: БАННЕР ПОСЛЕ ДАМПА И ДО СБРОСА БУФЕРА. Порядок выбран по двум
+         * причинам, и обе существенные.
+         *
+         * 1) На экране это последнее, что человек видит перед возвратом в
+         *    прошивку: дамп длинный, а вердикт в его середине не читается.
+         * 2) До log_ms(...final), который сбрасывает буфер принудительно.
+         *    После него строки VRC остались бы в буфере и на флешку не
+         *    попали бы, а лог читают как эталон. */
+        unlock_verdict_banner();
         /* v3.41, этап 24:log_flush_sector(TRUE) — принудительный сброс буфера
          * на флешку. Главный подозреваемый в остатке хвоста после FLR. */
         log_ms(L"post: before log_flush_sector(TRUE)");
