@@ -10520,12 +10520,25 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         UINT64 elfOff = 0, elfLen = 0;
         BOOLEAN fwLoaded = FALSE;
 
+        /* v3.41, этап 24: ГРАНИЦЫ ДЫРЫ В 3,1 С. В логе между
+         * 'pro: alloc+copy+selftest fwsec' (t=367) и 'pro: radtab SetMem'
+         * (t=3488) не было НИ ОДНОЙ строки - 3 121 мс без attribution. Здесь
+         * единственный тяжёлый блок кода, и он печатает только через Print(),
+         * а Print в лог на флешке не попадает вообще (проверено: баннер,
+         * alloc_high:, alloc fwsec, fw-read: отсутствуют при 142 строках
+         * TIME). 84,4 МБ / 3,121 с = 27 МБ/с - практический потолок USB 2.0.
+         * Три марки разрезают дыру на аллокацию / поиск устройства / чтение. */
+        log_ms(L"fw-read: before alloc");
+        ulogf(L"FWRD  window=0x%llx bytes\n", fwSize);
         Status = alloc_fwsec_buffer((fwSize + 0xFFF) >> 12, &radixPhys);
         if (EFI_ERROR(Status)) { Print(L"alloc fw: %r\n", Status); goto done; }
         fwBase = radixPhys;
+        log_ms(L"fw-read: alloc done");
 
         Status = uefi_call_wrapper(BS->LocateHandleBuffer, 5,
                                    ByProtocol, &bioGuid, NULL, &HandleCount, &Handles);
+        log_ms(L"fw-read: handles located");
+        ulogf(L"FWRD  BlockIo handles=%d\n", (INTN)HandleCount);
         if (!EFI_ERROR(Status) && Handles) {
             for (h = 0; h < HandleCount && !fwLoaded; h++) {
                 EFI_BLOCK_IO *bio = NULL;
@@ -10590,6 +10603,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
                 fwimageSizeUsed = DummySize;
             }
         }
+        log_ms(L"fw-read: done");
+        ulogf(L"FWRD  loaded=%d off=0x%llx sz=0x%llx\n",
+              (INTN)fwLoaded, elfOff, fwimageSizeUsed);
     }
 
     /* --- WPR meta --- */
@@ -11543,6 +11559,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (Status == EFI_SUCCESS || directOk || earlyOk) {
 #endif
         /* --- Селекторы --- */
+        /* v3.41, этап 24: ВТОРАЯ ДЫРА, 1 091 мс. Между 'render masks: sweep
+         * finished' и 'final: before return to firmware' не было ни одной
+         * метки. Подозреваемые здесь по размеру: блок дампов FUSE/GEN2M/
+         * GEN2R/CHIP (~116 MMIO-чтений, то есть единицы мс) и - главное -
+         * log_flush_sector(TRUE) в хвосте, принудительный сброс буфера на
+         * флешку. Отметка входит в блок, дальше см. хвост перед 'final:'. */
+        log_ms(L"post: selector block entered");
         ulogf(L"STG   reached selector block success=%d direct=%d early=%d "
               L"gen2Fire=%d\n",
               (INTN)Status, (INTN)directOk, (INTN)earlyOk,
@@ -11859,6 +11882,10 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
               (mmio_read32(REG_FEAT_OVR_SM_SPD) == VAL_SS0_UNLOCKED &&
                mmio_read32(REG_FEAT_OVR_SM_SPD_1) == VAL_SS1_UNLOCKED)
                   ? L"written OK" : L"MISMATCH");
+        /* v3.41, этап 24: разрезаем хвост прогона. До этих меток участок от
+         * 'render masks: sweep finished' до 'final: before return to firmware'
+         * стоил 1 091 мс и не был атрибутирован ничем. */
+        log_ms(L"post: PREFLR snapshot done, before FLR");
 
 #if SKIP_FLR
         /* Эксперимент: FLR пропускаем, чтобы проверить, переживают ли
@@ -11873,6 +11900,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         g_postFlr = TRUE;
         /* После FLR MMIO не читаем принципиально — только запись в лог. */
         ulogf(L"FLRX   do_flr() done, no further MMIO reads\n");
+        log_ms(L"post: FLR + 300ms settle done");
 #endif
 
 #ifdef MULTI_CARD
@@ -11956,7 +11984,11 @@ done:
         Print(L" лог          флешка, LBA %d..%d  ->  out\\read-log.ps1\n",
               (INTN)LOG_LBA, (INTN)(LOG_LBA + LOG_SECTORS - 1));
         Print(L"=======================================\n");
+        /* v3.41, этап 24:log_flush_sector(TRUE) — принудительный сброс буфера
+         * на флешку. Главный подозреваемый в остатке хвоста после FLR. */
+        log_ms(L"post: before log_flush_sector(TRUE)");
         log_flush_sector(TRUE);
+        log_ms(L"post: after log_flush_sector(TRUE)");
         /* Финальный дамп окна SEC2: это последнее состояние перед уходом
          * в прошивку, то есть ровно то, что доживает до Windows. Именно
          * его и надо сравнивать между прогонами с флешкой и без. */
