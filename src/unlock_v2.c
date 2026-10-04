@@ -1690,6 +1690,26 @@ static UINT32  g_snapPlm, g_snapSs0, g_snapSs1, g_snapWLo, g_snapWHi,
  * в g_gfxVal / g_gfxOk, потому что он умеет проверять и ORDER B. */
 static UINT32  g_snapGfx;
 static UINT32  g_gfxVal = 0xFFFFFFFFU;   /* фактическое readback */
+
+/* v3.51: ОЖИДАЕМЫЙ WPR2_LO, КОТОРЫЙ ПОСТАВИТ GSP - ИЗ НАШЕЙ ЖЕ МЕТЫ.
+ *
+ * WPR2 имеет ДВА законных значения, и до v3.51 их путали:
+ *   TARGET_WPR2_LO/HI = FRTS>>8 … +0xE00   - окно FRTS, пишем МЫ;
+ *   g_expGspWprLo                            - окно GSP, ставит САМ GSP.
+ *
+ * GSP берёт нижнюю границу из поля gspFwWprStart нашей мета-структуры
+ * (gspFwWprStart = gspFwHeapOffset − 1 МБ, см. заполнение меты). Проверено
+ * на прогоне 1004-171751: heapOff=0x1EAE00000 -> wprStart=0x1EAD00000 ->
+ * WPR2_LO=0x01EAD000, что и наблюдалось, до единицы.
+ *
+ * Верхняя граница окна GSP эмпирически равна TARGET_WPR2_HI; её вывод внутри
+ * GSP не установлен, и он не нужен: для записи в FRTS важно лишь, чтобы окно
+ * СОДЕРЖАЛО окно FRTS, а не совпадало с ним.
+ *
+ * Зачем это отдельное значение: строка 'WPR2=… *** UNEXPECTED ***' вводила в
+ * заблуждение шесть дней подряд, потому что сравнивала два разных числа и
+ * ничего не сообщала о том, каким должно быть второе. */
+static UINT32  g_expGspWprLo = 0;
 static BOOLEAN g_gfxOk  = FALSE;          /* 0x4 реально залип */
 
 static void
@@ -5512,16 +5532,54 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     for (k = 0; k < NTGT; k++)
         if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) done++;
     v = mmio_read32(0x00823800U);
+    {
+    /* v3.51: УСЛОВИЕ ПРОВЕРКИ ИСПРАВЛЕНО - ТРЕБОВАЛОСЬ РАВЕНСТВО, А НУЖНО
+     * ВЛОЖЕНИЕ.
+     *
+     * Стояло: (WPR2_LO == TARGET_WPR2_LO && WPR2_HI == TARGET_WPR2_HI), иначе
+     * '*** UNEXPECTED ***'. Это ловило нормальную работу GSP: он ставит окно
+     * [gspFwWprStart, …], а не [FRTS, …]. На прогоне 1004-171751 читалось
+     * 0x01EAD000/0x01F7EE00, и подпись 'UNEXPECTED' шесть дней приглашала
+     * искать неисправность в прошивке.
+     *
+     * Что происходит на самом деле: gspFwWprStart = gspFwHeapOffset − 1 МБ
+     * (заполнение меты), то есть нижняя граница окна GSP идёт от его heap'а.
+     * Наблюдённое 0x01EAD000 есть gspFwWprStart>>8 ровно, а наш код не может
+     * записать это число - он пишет либо TARGET_WPR2_LO, либо значение,
+     * прочитанное строкой перед. Значит окно ставит GSP, по нашей же мете.
+     *
+     * Для записи в FRTS важно одно: чтобы окно СОДЕРЖАЛО окно FRTS. Тогда
+     * сверху точное равенство (общая верхняя граница), снизу - LO не больше
+     * нашего. Именно это и проверяется. */
+    UINT32 wlo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+    UINT32 whi = mmio_read32(REG_PFB_MMU_WPR2_HI);
     ulogf(L"G2RMS  %s TOTAL: GFX gates open %d of %d | 0x823800=0x%08x | "
-          L"0x823B04=0x%08x | WPR2=0x%08x/0x%08x %s | GFX-gate %s\n", tag,
-          (INTN)done, (INTN)NTGT, v, mmio_read32(0x00823B04U),
-          mmio_read32(REG_PFB_MMU_WPR2_LO),
-          mmio_read32(REG_PFB_MMU_WPR2_HI),
-          (mmio_read32(REG_PFB_MMU_WPR2_LO) == TARGET_WPR2_LO &&
-           mmio_read32(REG_PFB_MMU_WPR2_HI) == TARGET_WPR2_HI)
-              ? L"expected" : L"*** UNEXPECTED ***",
+          L"0x823B04=0x%08x | WPR2=0x%08x/0x%08x | GFX-gate %s\n", tag,
+          (INTN)done, (INTN)NTGT, v, mmio_read32(0x00823B04U), wlo, whi,
           (done > 0) ? L"open, GFX_SPEED_SELECT can engage"
                      : L"closed, GFX_SPEED_SELECT will not engage");
+    if (whi == TARGET_WPR2_HI && wlo <= TARGET_WPR2_LO) {
+        ulogf(L"G2RMS  WPR2 window contains the FRTS window - OK: "
+              L"0x%08x/0x%08x vs FRTS 0x%08x/0x%08x%s\n", wlo, whi,
+              (UINT32)TARGET_WPR2_LO, (UINT32)TARGET_WPR2_HI,
+              (wlo == TARGET_WPR2_LO) ? L" (exactly the FRTS window)"
+                                     : (g_expGspWprLo == wlo)
+                                       ? L" (GSP window from our meta wprStart)"
+                                       : L" (wider than FRTS)");
+    } else if (whi == TARGET_WPR2_HI && g_expGspWprLo != 0 && wlo == g_expGspWprLo) {
+        ulogf(L"G2RMS  WPR2 = 0x%08x/0x%08x is the GSP window from our meta "
+              L"wprStart (expected 0x%08x/0x%08x), but it is NOT a superset "
+              L"of the FRTS window 0x%08x/0x%08x - writes to FRTS are not "
+              L"guaranteed\n", wlo, whi, (UINT32)g_expGspWprLo,
+              (UINT32)TARGET_WPR2_HI, (UINT32)TARGET_WPR2_LO,
+              (UINT32)TARGET_WPR2_HI);
+    } else {
+        ulogf(L"G2RMS  *** WPR2 WINDOW WRONG *** got 0x%08x/0x%08x, want a "
+              L"superset of 0x%08x/0x%08x (GSP window from our meta would be "
+              L"lo=0x%08x)\n", wlo, whi, (UINT32)TARGET_WPR2_LO,
+              (UINT32)TARGET_WPR2_HI, (UINT32)g_expGspWprLo);
+    }
+    }
     log_ms(L"render masks: sweep finished");
 #undef NTGT
 }
@@ -6393,6 +6451,15 @@ cmp90_meta_low(UINT64 wprMetaPhys)
               (m[0] == 0xDC3AAE21371A60B3ULL),
               m[9], m[10], m[15], m[16], m[17],
               *(UINT32*)((UINT8*)cmp90_metaLowPhys + 0xB4));
+        /* v3.51: верхняя граница окна, которое поставит GSP. Раньше в логе не
+         * было НИ ОДНОЙ строки о том, каким должно быть WPR2_LO, и именно
+         * поэтому чтение 0x01EAD000 вместо 0x01F7E000 шесть дней выглядело
+         * аномалией, а не следствием нашей же формулы. */
+        Print(L"meta GSP window: wprStart=0x%08x (== heapOff-1MB, WPR2_LO "
+              L"поставит GSP), FRTS window lo=0x%08x hi=0x%08x "
+              L"(ставим мы) - окно GSP содержит окно FRTS\n",
+              (UINT32)g_expGspWprLo, (UINT32)TARGET_WPR2_LO,
+              (UINT32)TARGET_WPR2_HI);
     }
     return cmp90_metaLowPhys;
 }
@@ -7207,13 +7274,46 @@ early_unlock_path(UINT64 ucodePhys, UINT64 fwsecPhys, UINT64 wprMetaPhys)
          */
         uefi_call_wrapper(BS->Stall, 1, 10000);
         wpr2_probe(L"E5-after-restore");
-        ulogf(L"FLRX   WPR2 restored after V67: "
-              L"lo 0x%08x->0x%08x hi 0x%08x->0x%08x %s\n",
-              wLo, mmio_read32(REG_PFB_MMU_WPR2_LO),
-              wHi, mmio_read32(REG_PFB_MMU_WPR2_HI),
-              (mmio_read32(REG_PFB_MMU_WPR2_LO) == wLo &&
-               mmio_read32(REG_PFB_MMU_WPR2_HI) == wHi)
-                  ? L"OK" : L"*** DID NOT HOLD ***");
+        /* v3.51: ПОДПИСЬ 'DID NOT HOLD' УБРАНА, ВМЕСТО НЕЁ - ЧТО ИМЕННО
+         * ПРОИЗОШЛО.
+         *
+         * Здесь пишется обратно НЕ целевое значение, а то, что прочитано
+         * строкой выше (wLo), - то есть save/restore до загрузки V67. Проверка
+         * сравнивала чтение с записанным и рапортовала '*** DID NOT HOLD ***'.
+         *
+         * На прогоне 1004-171751 вышло: 'lo 0x00000000->0x01F7E000'. То есть
+         * мы записали 0x00000000, а прочитали 0x01F7E000 - и это РОВНО
+         * TARGET_WPR2_LO. Факт проверки верен: записанное не удержалось. Но
+         * подпись читается как поломка, тогда как вернулось именно то
+         * значение, которого мы добивались: ботер или GSP переустановили
+         * правильное окно.
+         *
+         * Это тот же класс, что и WPR2 UNEXPECTED: факт верный, вывод подписан
+         * не тот. Здесь сообщение вводило в заблуждение буквально на каждом
+         * прогоне, и оно ничего не сообщало о том, чего мы ждали.
+         *
+         * Теперь печатаются все три величины - записали, прочитали, ожидали -
+         * и вывод говорит, ЧТО ПРОИЗОШЛО, а не просто «не удержалось». */
+        {
+            UINT32 rLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+            UINT32 rHi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+            if (rLo == wLo && rHi == wHi) {
+                ulogf(L"FLRX   WPR2 after V67: wrote 0x%08x/0x%08x, read back "
+                      L"the same - value held\n", wLo, wHi);
+            } else if (rLo == (UINT32)TARGET_WPR2_LO &&
+                       rHi == (UINT32)TARGET_WPR2_HI) {
+                ulogf(L"FLRX   WPR2 after V67: wrote 0x%08x/0x%08x, read back "
+                      L"0x%08x/0x%08x = TARGET - booter/GSP re-established the "
+                      L"FRTS window, our value did not hold and we do not need "
+                      L"it to\n", wLo, wHi, rLo, rHi);
+            } else {
+                ulogf(L"FLRX   WPR2 after V67: wrote 0x%08x/0x%08x, read back "
+                      L"0x%08x/0x%08x (target 0x%08x/0x%08x) - neither what we "
+                      L"wrote nor what we wanted; window no longer contains "
+                      L"FRTS\n", wLo, wHi, rLo, rHi,
+                      (UINT32)TARGET_WPR2_LO, (UINT32)TARGET_WPR2_HI);
+            }
+        }
 
         return bst;
     }
@@ -9027,6 +9127,10 @@ build_wpr_meta(GspFwWprMeta *m, UINT64 elfPhys, UINT64 elfSize,
     m->gspFwHeapSize   = 0x7F00000ULL;   /* нижний кламп kgspGetFwHeapSize (GA10x) */
     m->gspFwHeapOffset = (m->gspFwOffset - m->gspFwHeapSize) & ~(MB - 1);
     m->gspFwWprStart   = m->gspFwHeapOffset - MB;     /* wprMetaSize = 1MB */
+    /* v3.51: запоминаем, что GSP поставит в WPR2_LO из этого поля. Иначе
+     * единственное место в коде, где записано ожидаемое значение окна GSP, -
+     * это лог, и сравнивать с ним нечем. */
+    g_expGspWprLo      = (UINT32)(m->gspFwWprStart >> 8);
     m->nonWprHeapSize  = MB;
     m->nonWprHeapOffset = m->gspFwWprStart - MB;
     m->gspFwRsvdStart  = m->nonWprHeapOffset;
