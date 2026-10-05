@@ -242,10 +242,14 @@ if [ -n "$RENDER_MATRIX" ]; then
 # unlock_v3r и за тегом rollback-*. Экспериментальные сборки делаются ради
 # одной прошивки флешки и одного замера; класть их в out/ не нужно.
 #
-# E3 - binselector GFX_SPEED_SELECT. Поле трёхбитное, проверены 0x2/0x4/0x5/
-#      0x7, не проверены 0x1 и 0x6. Отклик нелинеен (0x4 -> 50 fps при
-#      0x5 -> 26), поэтому 0x6 не обязан лежать между 0x5 и 0x7.
-for V in 0x1 0x6; do
+# E3 - binselector GFX_SPEED_SELECT. Поле трёхбитное. Измеренная лестница
+#      (Cyberpunk, High, без лучей, тот же пресет):
+#         0x2 ->  9 fps    0x4 -> 50 fps / 135 Вт   (единственный рабочий пик)
+#         0x5 -> 26 fps    0x6 -> 16 fps    0x7 ->  9 fps
+#      Проверено 6 значений из 8. Не проверены только 0x1 и 0x3.
+#      0x6 ОПРОВЕРГНУТ как «более высокий бин»: выше 0x4 отклик падает
+#      монотонно, пик единственный и лежит на 0x4.
+for V in 0x1 0x3 0x6; do
     build_one "gfxsel_$V"      -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                                   -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
                                   -DCHIP_SIZE_SCAN=1 -DGFX_SPEED_SEL_VALUE=$V
