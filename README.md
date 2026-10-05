@@ -272,6 +272,13 @@ powershell -ExecutionPolicy Bypass -File out\verify-image.ps1
 - `docs/70HX-NEXT-STEPS.md` — **план дальнейших шагов** с критериями успеха каждого эксперимента
   ⚠️ в основном исторический, написан до анлока compute и графики
 - `docs/70HX-DRIVER-ANALYSIS.md` — **разбор драйвера 610.43.03**: подтверждение формул и найденная `WPR_END_MARGIN`
+- `docs/MME-THROTTLE.md` — **тормоз MME на пути bind pipeline**: проверка, есть ли
+  в нашем драйвере 616.92 вызов `CALL_MME_MACRO` со счётчиком 240, найденный
+  авторами CMP 40HX. **Отрицательный результат**, с инструментами
+  `out/tools/mme_scan.py`, `out/tools/mme_patch.py` и `out/mme-swap.ps1`
+- `docs/RENDER-LIMITS.md` — **что ограничивает рендер**: разбор 50 fps / 135 Вт,
+  три незакрытые гипотезы (binselector, `GspFwWprMeta` без положительного
+  контроля, RT/Tensor) и три ручки в `src/build.sh` под них
 - `docs/GOTCHAS.md` — **грабли платформы**: MBR/ESP, vfio, EFI-подвески, PCIe Gen2
 - `docs/REGISTERS.md` — **карта регистров**: что открываем, чем, и что подтверждено на 70HX
 - `docs/FLASH-AND-LOG.md` — **процедура**: запись загрузчика на флешку, проверка, снятие лога

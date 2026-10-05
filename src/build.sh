@@ -228,6 +228,45 @@ build_one() {
 build_one unlock_v3r          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS -DCHIP_SIZE_SCAN=1
 
+# ---- ОПЦИОНАЛЬНАЯ МАТРИЦА (по умолчанию выключена, 2026-10-06) --------------
+if [ -n "$RENDER_MATRIX" ]; then
+#
+# Ничего из перечисленного не меняет релизную сборку выше: блок выполняется
+# только при RENDER_MATRIX=1 в окружении. Нужен для трёх экспериментов из
+# docs/RENDER-LIMITS.md, у каждого из которых ровно один измеряемый вопрос и
+# ровно один критерий.
+#
+#   RENDER_MATRIX=1 bash build.sh
+#
+# ВНИМАНИЕ О ТРАКТОВКЕ: каждый бинарь здесь - НЕ откат. Откат остаётся за
+# unlock_v3r и за тегом rollback-*. Экспериментальные сборки делаются ради
+# одной прошивки флешки и одного замера; класть их в out/ не нужно.
+#
+# E3 - binselector GFX_SPEED_SELECT. Поле трёхбитное, проверены 0x2/0x4/0x5/
+#      0x7, не проверены 0x1 и 0x6. Отклик нелинеен (0x4 -> 50 fps при
+#      0x5 -> 26), поэтому 0x6 не обязан лежать между 0x5 и 0x7.
+for V in 0x1 0x6; do
+    build_one "gfxsel_$V"      -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                                  -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                                  -DCHIP_SIZE_SCAN=1 -DGFX_SPEED_SEL_VALUE=$V
+done
+
+# E1 - положительный контроль над GspFwWprMeta.fbSize. Намеренно ЗАНИЖАЕМ
+#      размер кадра вдвое: если totalGlobalMem в Windows последует за полем,
+#      поле управляет тем, что видит драйвер, и рычаг "управлять чипом до
+#      BAR0" жив. Если нет - класс гипотез закрыт.
+build_one wprfb_4g            -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DWPR_META_FB_SIZE=0x100000000
+
+# E2 - обратный тест на байт flags: снимаем GSP_FW_FLAGS_CLOCK_BOOST. Часы
+#      падают -> поле живое, вопрос "можно ли им управлять" открыт. Часы те
+#      же -> поле мертво, класс закрыт.
+build_one wprflags_0           -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DWPR_META_FLAGS=0x0
+fi
+
 # Баннер печатает md5 и размер, посчитанные по только что собранному файлу.
 # Раньше здесь стоял зашитый DEE0BAAB — отпечаток тега rollback-2026-10-01, то
 # есть v3.15. Сборка не переставала быть правильной, но баннер объявлял её

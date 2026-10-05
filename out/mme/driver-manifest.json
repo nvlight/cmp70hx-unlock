@@ -1,0 +1,48 @@
+﻿{
+    "source":  "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvaci.inf_amd64_a67dee097fad6b1e",
+    "driver":  null,
+    "cat_sha256":  "2D16F26EDCEDBF7F7A23894E83150EB8D7B9684FFD0AD670DC70B5E4E401485A",
+    "captured":  "2026-10-06 00:42:15",
+    "files":  [
+                  {
+                      "file":  "libnvidia-gpucomp.so",
+                      "size":  117883752,
+                      "sha256":  "B1BEBAD2833FDA2ECD503ADE1D5149C59D48CD3F65F6A1EA702BF19D67D28F4E"
+                  },
+                  {
+                      "file":  "libnvwgf2umx.so",
+                      "size":  58435480,
+                      "sha256":  "D37C2D2C98AA3C5CD8E7836EEC090056445097E70D590D0EC92A7419B15D588D"
+                  },
+                  {
+                      "file":  "nvd3dumx.dll",
+                      "size":  43266176,
+                      "sha256":  "2E059A67D32204197105D4A1FC830E9768A79362DE77F7A4DEA9E17BC6F3D64A"
+                  },
+                  {
+                      "file":  "nvlddmkm.sys",
+                      "size":  113939360,
+                      "sha256":  "1F0D932DCE22CE14AB1ED22B7A1F28B616A654783688BEC57D52D8CA83DE7DC2"
+                  },
+                  {
+                      "file":  "nvoglv64.dll",
+                      "size":  48629880,
+                      "sha256":  "66BB4ECD1BE3BC4191FCB9BC37BDFAC45881971CE07AFD29C85F50C0F0E94633"
+                  },
+                  {
+                      "file":  "nvvkscv64.dll",
+                      "size":  11821696,
+                      "sha256":  "EA9E42ACB0BEE76664B2C24E630C996D696525850E6547FBE4F0B5C6DC4A40B9"
+                  },
+                  {
+                      "file":  "nvwgf2um.dll",
+                      "size":  60334712,
+                      "sha256":  "A4A6B18E020ABD051BD3D2786ED0DD09ABA0672BA02A9D009A842AB2C1AADB58"
+                  },
+                  {
+                      "file":  "nvwgf2umx.dll",
+                      "size":  89469568,
+                      "sha256":  "E0C6B69B7F48791823AA95C7B1ADA81F8C6954C5CC019C591FFA3E4B5FBCCE7F"
+                  }
+              ]
+}
