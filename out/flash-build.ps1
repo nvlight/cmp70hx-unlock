@@ -71,7 +71,7 @@ $gspRef = Join-Path $outDir 'gsp_ga10x.bin'
 # pass that flag on reflex and defeats the check. Same bug the build.sh banner
 # had. Now it points at the current verified state instead.
 #
-# c68878af... = v3.52 (commit ef0977e), the build shipped as release 1.0.0.
+# c68878af... = v3.52 (commit b88b4a1), the build shipped as release 1.0.0.
 # One verified run on metal: 4 894 ms (out/usb-log-1004-183613.txt, i.e. t=4880ms
 # before return to firmware). Markers: 'GFX_SPEED_SELECT=0x00000004 SET',
 # 'G2RMK render-masks pass1 0x00823800 became 0xFFFFFFFF OPEN',

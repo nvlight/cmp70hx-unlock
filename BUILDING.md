@@ -360,7 +360,7 @@ print('card profile embedded:', 'CMP 70HX (GA104)' if 'CMP 70HX (GA104)'.encode(
 
 | checkout | md5 | size | роль |
 |---|---|---|---|
-| HEAD (v3.52) | `C68878AFAFD0D2D246D2E25C5ACBD888` | 680960 | **релиз 1.0.0**, коммит `ef0977e`, 4 894 мс |
+| HEAD (v3.52) | `C68878AFAFD0D2D246D2E25C5ACBD888` | 680960 | **релиз 1.0.0**, коммит `b88b4a1`, 4 894 мс |
 | `rollback-2026-10-04` | `2ABF59A0D147B9D5744CFBEC5D58EC65` | 671744 | якорь отката: v3.40, 8 451 мс |
 | `rollback-2026-10-01` | `DEE0BAAB1B7C222399C091EAD15D071B` | 657408 | v3.15, исторический |
 

@@ -35,3 +35,9 @@ dist/
 .idea/
 .mcp.json
 .claude/
+
+# Local mailmap. It maps the real author address to the GitHub noreply one, so
+# the real address sits in it in plain text - committing it would publish the
+# very thing the history rewrite removed. The rewrite itself is done, this file
+# exists only to keep future commits on the noreply address.
+.mailmap

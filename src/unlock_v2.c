@@ -11557,7 +11557,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     /* v3.17: тот же read-only свип, что и POST. Стоимость не измерена
      * отдельно (здесь маркеров времени нет), но тот же код и тот же
      * приём: печать ненулевых регистров. Убран вместе с POST-свипом.
-     * Комментарий 4d635d8 «sweep_all ran twice, costing 11.9 s» относился
+     * Комментарий 21bb387 «sweep_all ran twice, costing 11.9 s» относился
      * именно к этим двум вызовам. */
 #if FX_DIAG_SWEEPS
     sweep_all(L"SEC2-unlocked");
