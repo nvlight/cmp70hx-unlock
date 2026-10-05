@@ -1,4 +1,5 @@
-﻿#Requires -Version 5.1
+﻿# SPDX-License-Identifier: GPL-2.0-only
+#Requires -Version 5.1
 <#
     verify-log.ps1 - ПРИЁМКА ПРОГОНА НА ЖЕЛЕЗЕ ПО ФАЙЛУ ЛОГА.
 

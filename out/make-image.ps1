@@ -1,4 +1,5 @@
-﻿<#
+﻿# SPDX-License-Identifier: GPL-2.0-only
+<#
     make-image.ps1 — собирает релизный .img для загрузки с флешки.
 
     Образ: classic MBR + одна primary FAT32 (тип 0xEF), полезная нагрузка

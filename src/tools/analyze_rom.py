@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 import struct
 data = open('/root/vbios_current_backup.rom','rb').read()
 def u16(o): return struct.unpack_from('<H', data, o)[0]

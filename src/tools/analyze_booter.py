@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
 # Анализ debug booter GA102 (RISC-V): поиск WPR-meta парсинга и сигнатурной обработки
 import sys
 from capstone import Cs, CS_ARCH_RISCV, CS_MODE_RISCV64

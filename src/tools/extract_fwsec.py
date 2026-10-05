@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
 """Извлечение FWSEC ucode из VBIOS ROM (репликация kgspParseFwsecUcodeFromVbiosImg).
 
 Раскладка ROM (из kernel_gsp_vbios_tu102.c / kernel_gsp_fwsec.c):

@@ -1,4 +1,5 @@
-﻿<#
+﻿# SPDX-License-Identifier: GPL-2.0-only
+<#
     flash-build.ps1 — one command for the whole "build -> flash -> verify" cycle.
 
     Usage:

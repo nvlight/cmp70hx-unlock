@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Что можно вытащить из .i64 без IDA.
 
 Контекст. Скачали gsp_tu10x_610.43.03.elf.i64 (217 774 732 байта, LFS-хеш

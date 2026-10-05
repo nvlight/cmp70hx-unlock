@@ -1,6 +1,18 @@
 /*
  * unlock_v2.c — NVIDIA CMP 70HX (GA104) full unlock — UEFI application
  *
+ * SPDX-License-Identifier: GPL-2.0-only
+ *
+ * ORIGIN AND LICENSE — read this before redistributing.
+ *
+ * This file is a PORT. Upstream it targeted the CMP 90HX and came from
+ * WildFlash1st/cmp90hx-unlock-for-windows, which carries NO license; the V67
+ * canary exploit it performs descends from bendy2/cmp90hx, also unlicensed.
+ * Absent a grant, "no license" means all rights reserved. The project ships this
+ * under GPL-2.0-only because porting from a GPL project (jdowning100/
+ * cmpunlocker, rejoin16 method) demands it - not because it makes the situation
+ * above go away. Full statement in NOTICE; full text in LICENSE.
+ *
  * PORT NOTE: upstream this file targeted the CMP 90HX (GA102, 10 GB). This
  * tree is the CMP 70HX (GA104, 8 GB GDDR6) port. Everything that depends on
  * the framebuffer size now comes from ONE place — the TARGET PROFILE block

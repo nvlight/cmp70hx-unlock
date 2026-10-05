@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Поиск device ID карты в GSP-образе.
 
 Зачем. Референс (WildFlash1st, docs/DIAG-REPORT-2026-08-25-CODE43.md, §D)

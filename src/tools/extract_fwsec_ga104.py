@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
 """Extract FWSEC ucode from GA104 VBIOS ROM (adapted from ga102 version).
 
 GA104 ROM: pciOffset=0x9200, expansionRomOffset=0x14800,

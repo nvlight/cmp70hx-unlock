@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
 # build.sh — build the CMP 70HX unlock EFI loader from unlock_v2.c (gnu-efi)
 #
 # Usage:

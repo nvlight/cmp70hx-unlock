@@ -1,4 +1,5 @@
-﻿<#
+﻿# SPDX-License-Identifier: GPL-2.0-only
+<#
     make-usb-stick.ps1 — rebuilds the CMP 70HX boot stick from scratch.
 
     Replaces the hand-rolled FAT32 images: this lets WINDOWS make the

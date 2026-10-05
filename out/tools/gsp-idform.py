@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Как вообще лежат device ID в GSP-образе.
 
 Контекст. Гипотеза «PGRAPH отключён whitelist'ом device ID в GSP» пришла из

@@ -1,4 +1,5 @@
-﻿<#
+﻿# SPDX-License-Identifier: GPL-2.0-only
+<#
     verify-image.ps1 — проверка релизного .img ДО записи на флешку.
 
     Это автоматизация BUILDING.md §5. Смысл: «обновлённый» образ однажды

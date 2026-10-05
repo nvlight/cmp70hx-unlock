@@ -1,4 +1,5 @@
-﻿<#
+﻿# SPDX-License-Identifier: GPL-2.0-only
+<#
     find-stick.ps1 — найти флешку ПО ГЕОМЕТРИИ, а не по букве тома.
 
     Общий модуль для out\read-log.ps1 и out\assign-stick-letter.ps1.

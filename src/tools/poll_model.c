@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * poll_model.c — проверка модели fx_poll32 на числах из реального лога.
  *

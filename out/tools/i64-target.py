@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 """Прицельный разбор вокруг двух находок из базы IDA.
 
 Находки из i64-mine.py:

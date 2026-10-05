@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
 """
 read-log.py — прочитать лог, который unlock_v2 пишет на флешку.
 

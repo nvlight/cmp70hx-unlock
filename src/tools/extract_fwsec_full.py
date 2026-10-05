@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
 """Извлечение FWSEC (V3, FROM_HS) из VBIOS ROM — точная реплика
 s_vbiosFillFlcnUcodeFromDescV3 (610.43.03). Параметры (драйвер V2-27):
 pciOffset=0x9200, expansionRomOffset=0x14800, FALCON_DATA ptr=0x72C61.

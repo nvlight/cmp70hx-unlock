@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
 # verify_v316.sh — приёмка оптимизации v3.16 (PLAN-SPEED.md (часть II, ретроспектива v3.16)).
 #
 # Запуск из корня репозитория (или из src/):

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * crc32_check.c — приёмка табличного CRC32 (v3.16).
  *

@@ -1,0 +1,120 @@
+cmp70hx-unlock
+Copyright (C) 2026 nvlight
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 2 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program; if not, write to the Free Software Foundation, Inc., 51 Franklin
+Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+The full text of the license is in the LICENSE file in the root of this
+repository.
+
+
+================================================================================
+ORIGIN OF THE CODE - READ THIS BEFORE REDISTRIBUTING
+================================================================================
+
+This project is a PORT. Its core, src/unlock_v2.c, is derived from other
+unlock projects and research. The details matter for licensing, so they are
+stated explicitly rather than left for a reader to discover.
+
+
+1. WildFlash1st/cmp90hx-unlock-for-windows  (PRIMARY UPSTREAM)
+   https://github.com/WildFlash1st/cmp90hx-unlock-for-windows
+
+   src/unlock_v2.c originated here as the CMP 90HX (GA102) unlock and was ported
+   to the CMP 70HX (GA104) in this tree. The port note at the top of the file
+   names the upstream explicitly.
+
+   LICENSE STATUS: upstream carries NO license. Absent an explicit grant, its
+   code is "all rights reserved" by default. This is the single most important
+   fact in this file. We did not receive a written permission to redistribute
+   it. It is published here in the belief that the work was put up publicly for
+   the community to build on, but that belief is not a license, and no warranty
+   of legal standing is given here.
+
+   If you are the author of that project and want this to stop, say so and it
+   will come down.
+
+
+2. bendy2/cmp90hx
+   https://github.com/bendy2/cmp90hx
+
+   Source of the V67 canary exploit research and the direct-compute patch for
+   driver 580.159.03 that opened PLM on the 90HX. That research is what the
+   unlock protocol in this tree actually does.
+
+   LICENSE STATUS: also NO license. Same problem as (1).
+
+
+3. Jon Pry, "A Canary in the Crypto Mine: Defeating Stack Protection in a GPU
+   Secure Coprocessor" (Zenodo, DOI 10.5281/zenodo.20916112)
+
+   The stack-canary overflow in the SEC2 booter that the V67 payload exploits is
+   documented by this paper. It is a research result, cited, not copied.
+   Quoted material is attributed at the point of use.
+
+
+4. jdowning100/cmpunlocker  (GPL-2.0)
+   https://github.com/jdowning100/cmpunlocker
+
+   Source of the rejoin16 method (PLM / render masks) and the PCIe Gen2
+   register work, ported into this project. This one IS GPL-2.0, which is
+   consistent with this project being GPL-2.0.
+
+   LICENSE STATUS: GPL-2.0. Ported, not copied wholesale; the derived routines
+   in src/unlock_v2.c carry this project's own commentary.
+
+
+5. xrip/cmp50hx-unlock  (MIT per its own README)
+   https://github.com/xrip/cmp50hx-unlock
+
+   Primary inspiration. A translated excerpt of its Windows README is kept under
+   vendor/ with attribution; it documents the CMP 50HX (GA107), not the 70HX.
+   Nothing from it is required to build this project.
+
+   LICENSE STATUS: vendor/README.md records MIT. GitHub's API reports
+   NOASSERTION, so the LICENSE file in that repo should be treated as the
+   authoritative statement.
+
+
+6. d3dx9 - Falcon emulator and ROP chain, referenced in the research notes.
+   Cited as prior work.
+
+
+================================================================================
+NOT DISTRIBUTED HERE
+================================================================================
+
+The following are NOT in this repository and must not be added to it. They are
+signed NVIDIA firmware or exploit payloads; see .gitignore and BUILDING.md 2.
+
+  v67_payload.bin                    V67 exploit payload
+  booter_ucode_prod_patched.bin       patched SEC2 booter, PROD
+  booter_ucode_dbg_patched.bin       patched SEC2 booter, DBG
+  gsp_rm_boot*.bin                   GSP boot blobs
+  *.rom                              VBIOS images with NVIDIA FWSEC signatures
+  *.efi, *.img                       built loader and flash image
+
+The build links the blobs at the objcopy stage. Obtain them yourself; the
+project tells you how in BUILDING.md.
+
+
+================================================================================
+NO AFFILIATION
+================================================================================
+
+This project is not written, endorsed, sponsored, or approved by NVIDIA
+Corporation. "NVIDIA", "CMP", "GA104" and related marks belong to NVIDIA.
+The firmware it manipulates is NVIDIA's, and it manipulates it in ways NVIDIA
+did not intend. That is the point of the research, and it is also why there is
+no support channel and no guarantee that anything here keeps working after a
+driver update.
