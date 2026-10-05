@@ -9,6 +9,19 @@
 blobs/
 *.bin
 
+# VBIOS images with NVIDIA FWSEC signatures (src/GA104.rom, src/GA102.rom,
+# out/GA102.rom). They were tracked by mistake — *.rom was never listed here,
+# while every sibling blob (*.bin) was. They are inputs for
+# src/tools/extract_fwsec_ga104.py and are re-obtained from the card's VBIOS,
+# so there is no reason to publish signed firmware.
+*.rom
+
+# Compiled tools and debug leftovers. Built by src/build.sh and out/tools/*.cu;
+# nothing needs them in the repository, and a stale .exe is a trap for readers
+# ("which of these three binaries is the current one?").
+*.exe
+unlock_v2_test.*
+
 # Local scratch
 *.log
 build/
