@@ -104,7 +104,13 @@ $REQUIRED = @(
     @{ name = 'fbpskip';   text = 'FBP    SKIPPED'    },
     @{ name = 'loghdr';    text = 'CMPUNLOG v1 '      },
     @{ name = 'gfx';       text = 'GFX_SPEED_SELECT' },
-    @{ name = 'rmask';     text = 'G2RMS'            }
+    @{ name = 'rmask';     text = 'G2RMS'            },
+    # v3.53: маркер предусловия канарейки V67 (KNOWN-ISSUES §51.2). Рендер-цикл
+    # обязан идти ДО блока селекторов, иначе цепочка V67 проскакивает ботер
+    # молча - ровно тот отказ, на который у iatethelogs/cmp90hx_pwner ушли месяцы.
+    # Строка обязана быть в бинаре: сборка без неё выглядит здоровой, а прогон
+    # на железе ничего не доказывает.
+    @{ name = 'canary';    text = 'G2RCC'            }
 )
 # Strings that must NOT be there: the 90HX profile means the wrong card. The port
 # is 70HX-only as of 2026-10-01.

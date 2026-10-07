@@ -5300,12 +5300,53 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
      * коде до входа в функцию, и следующий замер ставится там. */
     {
         UINT64 tq = fx_now_us();
+        UINTN g2Suspect = 0;
     ulogf(L"G2RMK  %s === opening GFX_SPEED_SELECT gates: "
           L"FEAT PLMs only, XVE window dropped in v3.40 (hypothesis) ===\n",
           tag);
-    for (k = 0; k < NTGT; k++)
-        ulogf(L"G2RMK  %s BEFORE  0x%08x = 0x%08x\n", tag, tgt[k],
-              mmio_read32(tgt[k]));
+    for (k = 0; k < NTGT; k++) {
+        UINT32 g2Bv = mmio_read32(tgt[k]);
+        ulogf(L"G2RMK  %s BEFORE  0x%08x = 0x%08x\n", tag, tgt[k], g2Bv);
+        if (g2Bv == 0xFFFFFFFFU) g2Suspect++;
+    }
+        /* v3.53, НАХОДКА 1: 0xFFFFFFFF БЫВАЕТ НЕ «МАСКА ОТКРЫТА», А «BAR0 МЁРТВ».
+         *
+         * Источник - Linux-инструмент iatethelogs/cmp90hx_pwner, rejoin16-cycle.sh,
+         * сформулировано буквально: "After `modprobe -r` the device drops into a
+         * low-power state (BAR0 reads back 0xffffffff, every write REJECTED)".
+         * То есть чтение неотображённого BAR в PCIe даёт все единицы, а не fault,
+         * и значение 0xFFFFFFFF двусмысленно:
+         *
+         *   0xFFFFFF8F - устройство живо, маска закрыта (наше нормальное)
+         *   0xFFFFFFFF - маска открыта ЛИБО BAR0 мёртв
+         *
+         * ЧТО ЭТО ЗНАЧИТ У НАС. mmio_read32() - голое разыменование без всякой
+         * проверки (стр. 1365). Если BAR0 умрёт, то по цепочке:
+         *   - цикл k ПОСчитает маску открытой и уйдёт в continue (стр. 5374),
+         *     ботер#2 не выстрелит;
+         *   - пересчёт done увидит то же значение;
+         *   - G2RMS напечатает "GFX gates open 2 of 2" - правдоподобно и неверно;
+         *   - GFX_SPEED_SELECT не встанет, и в логе не будет НИ ОДНОЙ строки
+         *     о том, что BAR0 мёртв.
+         *
+         * ЧТО ДЕЛАЕМ. Только Print. Свидетель УЖЕ есть в логе и печатался всегда:
+         * строка BEFORE даёт 0xFFFFFF8F = «живо, но закрыто». Считаем прямо в
+         * этом цикле, то есть НУЛЕВЫЕ дополнительные чтения MMIO.
+         *
+         * НОРМАЛЬНОЕ СОСТОЯНИЕ - 0xFFFFFF8F, проверено на железе:
+         * usb-log-1004-183613.txt строки 277-278. Ни одна сборка после этого
+         * не должна печатать BAR0 SUSPECT; если напечатала, прогон ничего не
+         * доказал и первым делом смотреть сюда. */
+        if (g2Suspect)
+            ulogf(L"G2RMS  %s BAR0 SUSPECT: %d of %d targets already read "
+                  L"0xFFFFFFFF before the sweep - indistinguishable from an "
+                  L"OPEN mask on a DEAD BAR0. If GFX_SPEED_SELECT does not "
+                  L"stick, read this line first.\n",
+                  tag, (INTN)g2Suspect, (INTN)NTGT);
+        else
+            ulogf(L"G2RMS  %s BAR0 alive: all %d targets read a partial mask, "
+                  L"so 0xFFFFFFFF later means really open\n",
+                  tag, (INTN)NTGT);
         fx_mk_acc(tq, L"render: preamble BEFORE reads");
     }
 
@@ -5366,10 +5407,55 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
             {
                 UINTN g2Pre = 0;
                 UINTN g2J;
+                UINT32 g2S0, g2S1;
                 for (g2J = 0; g2J < NTGT; g2J++)
                     if (mmio_read32(tgt[g2J]) == 0xFFFFFFFFU) g2Pre++;
                 ulogf(L"G2RMC %s top of iter %d: already open %d of %d\n",
                       tag, (INTN)k, (INTN)g2Pre, (INTN)NTGT);
+                /* v3.53, НАХОДКА 2: ГЕЙТ КАНАРЕЙКИ ПО SS0/SS1.
+                 *
+                 * Тот же cmp90hx_pwner, rejoin16-cycle.sh, дважды:
+                 *   "Re-lock the compute selectors BEFORE unloading, while BAR0
+                 *    is still accessible" и "the V67 canary saw 'already
+                 *    present' and skipped the Booter chain entirely
+                 *    ('(no REJOIN16 lines!)' + PCIe FAIL every cycle)".
+                 *
+                 * Механика: цепочка V67 срабатывает ТОЛЬКО если SS0/SS1 ещё не
+                 * полные. У них при входе в ОС селекторы всегда полные, поэтому
+                 * они ПРИНУДИТЕЛЬНО обнуляют 0x0082381c/0x00823820 перед выгрузкой
+                 * модуля и проверяют readback - функция relock().
+                 *
+                 * У НАС ПРЕДУСЛОВИЕ ВЫПОЛНЯЕТСЯ БЕСПЛАТНО. Цикл масок идёт ДО
+                 * блока селекторов (вызов render_open_gfx_masks стоит выше
+                 * "--- Селекторы ---"), и на железе SS0/SS1 в этот момент
+                 * 0x00000000: usb-log-1004-183613.txt даёт PRE SS0=0x00000000,
+                 * а "FUSE before 0x0082381C = 0x00000000 <- SS0 (we write here)"
+                 * печатается уже ПОСЛЕ цикла масок.
+                 *
+                 * ЭТО НЕ СВОЙСТВО КОДА, А ПОБОЧНЫЙ ЭФФЕКТ ПОРЯДКА. Ровно в эту
+                 * ловушку они и попали, и потратили месяцы: сломалось не железо -
+                 * apt --fix-broken подтянул другие libnvidia, пересобрал
+                 * initramfs и изменил power management, после чего цепочка
+                 * перестала стрелять молча.
+                 *
+                 * ПОЧЕМУ ЭТО ВАЖНО ИМЕННО СЕЙЧАС. Ближайшая задача - вернуть PCIe
+                 * Gen2, а его конфиг по архитектуре идёт в КОНЕЦ прогона, то есть
+                 * ПОСЛЕ блока селекторов. Любой рефакторинг, который сдвинет
+                 * рендер-цикл за селекторы, тихо сломает предусловие: ботер
+                 * перестанет стрелять, маски останутся 0xFFFFFF8F, и единственная
+                 * строка, которая об этом скажет, - новая, эта.
+                 *
+                 * Ничего не меняется: два чтения MMIO на итерацию, ~25 мкс на двух
+                 * итерациях. Только печать. Строка G2RMC выше остаётся байт в
+                 * байт - на неё ссылается приёмка (PLAN-SPEED.md §4.1), и
+                 * flash-build.ps1 завязан на её текст. */
+                g2S0 = mmio_read32(REG_FEAT_OVR_SM_SPD);
+                g2S1 = mmio_read32(REG_FEAT_OVR_SM_SPD_1);
+                ulogf(L"G2RCC %s iter %d canary precondition: SS0=0x%08x "
+                      L"SS1=0x%08x %s\n", tag, (INTN)k, g2S0, g2S1,
+                      ((g2S0 == 0) && (g2S1 == 0))
+                          ? L"ZERO, V67 canary runs the Booter"
+                          : L"NONZERO, V67 canary may SKIP the Booter");
             }
             if (mmio_read32(tgt[k]) == 0xFFFFFFFFU) { done++; continue; }
 
