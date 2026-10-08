@@ -1788,13 +1788,71 @@ is_unlocked(void)
  * done:, то есть в том числе после do_flr(), где MMIO мёртв и отдаёт мусор.
  * Единственный честный источник — g_snap*, снятый до FLR. */
 #define VERDICT_RULE       L"----------------------------------------------------------------------"
-#define VERDICT_GFX_OK     0x00000004U
+
+/* Значение селектора графики, которое мы пишем.
+ *
+ * Перенесено из селекторного блока (было около строки 4891) сюда, потому
+ * что вердикт ниже обязан сверяться с тем, что реально записывается, а не
+ * с константой 0x4, объявленной ниже по файлу. Это третий и последний
+ * случай того же дефекта; см. комментарий у unlock_verdict_text().
+ *
+ * При значении по умолчании машинный код идентичен прежнему.
+ *
+ * ШИРИНА ПОЛЯ - ГИПОТЕЗА, А НЕ ФАКТ (ослаблено 2026-10, шаг B).
+ *
+ * Раньше здесь стоял отказ собирать что-либо вне 0x0..0x7:
+ *     #if (GFX_SPEED_SEL_VALUE & ~0x7U) != 0
+ *     # error "поле трёхбитное, допустимы 0x0..0x7"
+ *     #endif
+ *
+ * Проверка была написана мной же и ни разу не сверялась с железом.
+ * Утверждать, что поле трёхбитное, можно было только потому, что
+ * проект когда-то видел лестницу из восьми значений, а не потому, что
+ * кто-то проверил границу. Это тот же класс утверждения, который проект
+ * уже ловил дважды: «поле трёхбитное» звучало как измерение, но было
+ * экстраполяцией из перебора.
+ *
+ * Теперь верхняя граница проверки - 0xFF, и это СПЕЦИАЛЬНО разрешает
+ * проверку, а не утверждает ширину. Шаг B пишет 0x8 и читает оба
+ * регистра: держится ли значение и что станет с CAND-ID. Исходы:
+ *   - 0x8 не застрял (readback != 8) - поле действительно трёхбитное,
+ *     лестница закрыта, остаётся C3;
+ *   - застрял и CAND-ID = 0 - значение ЛУЧШЕ 0x4, то есть цель всего
+ *     проекта;
+ *   - застрял и CAND-ID = 3 - поле шире, но вовлечённости нет;
+ *   - застрял и иное - поле шире, есть промежуточные ступени.
+ *
+ * Риск нулевой при любом исходе: если поле трёхбитное, железо отмаскирует
+ * 0x8 в 0, а 0x0 - это те же базовые 9 fps. Хуже не станет.
+ *
+ * Релизная линия не задета: при значении по умолчанию 0x4 проверка ниже
+ * проходит, и генерируемый код тот же. */
+#ifndef GFX_SPEED_SEL_VALUE
+# define GFX_SPEED_SEL_VALUE 0x00000004U
+#endif
+#if (GFX_SPEED_SEL_VALUE & ~0xFFU) != 0
+# error "GFX_SPEED_SEL_VALUE: ожидается 0x0..0xFF. Значения выше 0x7 допускаются СПЕЦИАЛЬНО - ширина поля проверяется, см. комментарий выше."
+#endif
 
 static const CHAR16 *
 unlock_verdict_text(UINT32 ss0, UINT32 ss1, UINT32 gfx)
 {
     BOOLEAN c = (ss0 == VAL_SS0_UNLOCKED && ss1 == VAL_SS1_UNLOCKED);
-    BOOLEAN r = (gfx == VERDICT_GFX_OK);
+    /* Сверяемся с ЗАПИСАННЫМ значением, а не с константой 0x4.
+     *
+     * Третье место с тем же дефектом, что и порядок A/B (часть 6 §2).
+     * На прогоне gfxsel0x6_oracle баннер печатал
+     *   VRC : COMPUTE ONLY (render not unlocked)
+     * при CAND-ID = 2, то есть рендер частично встал и игра даёт 16 fps,
+     * а не базовые 9. Баннер врал, и врал тем хуже, что его читает
+     * человек и принимает на веру - это ведь единственное место, где
+     * вывод сведён к одному решению.
+     *
+     * Про релизную линию: у неё GFX_SPEED_SEL_VALUE всегда 0x4, поэтому
+     * сравнение с константой и со значением дают РОВНО тот же результат.
+     * Правка делает честными экспериментальные сборки и не меняет
+     * ничего в релизной. */
+    BOOLEAN r = (gfx == GFX_SPEED_SEL_VALUE);
     if (c && r) return L"UNLOCKED (compute + render)";
     if (c && !r) return L"COMPUTE ONLY (render not unlocked)";
     if (!c && r) return L"RENDER ONLY (compute not unlocked)";
@@ -4887,13 +4945,11 @@ gen2_readonly_dump(const CHAR16 *tag)
  * отсутствие эффекта; читать это как отказ нельзя.
  *
  * При значении по умолчании машинный код идентичен текущему, md5 откатного
- * бинаря не меняется. */
-#ifndef GFX_SPEED_SEL_VALUE
-# define GFX_SPEED_SEL_VALUE 0x00000004U
-#endif
-#if (GFX_SPEED_SEL_VALUE & ~0x7U) != 0
-# error "GFX_SPEED_SEL_VALUE: поле трёхбитное, допустимы 0x0..0x7"
-#endif
+ * бинаря не меняется.
+ *
+ * Определение самого макроса перенесено выше, к VERDICT_RULE, вместе с
+ * проверкой диапазона 0x0..0x7: вердикт ниже обязан видеть записываемое
+ * значение. */
 
 #ifdef GEN2_LINK_TRY
 static void
@@ -4926,13 +4982,31 @@ gen2_gfx_try(const CHAR16 *tag)
      * Поэтому проверяем ОБА порядка в одном прогоне, иначе отрицательный
      * результат был бы неоднозначен: не встало из-за маски или из-за
      * порядка. */
+    /* СРАВНИВАЕМ С ТЕМ, ЧТО РЕАЛЬНО ЗАПИСАЛИ, А НЕ С КОНСТАНТОЙ 0x4.
+     *
+     * Найдено 2026-08-08 на прогоне gfxsel0x7_oracle: стояло
+     *     if (v == 0x00000004U) { okA = 1; break; }
+     * то есть проверка требовала ВСЕГДА 0x4, независимо от того, что писал
+     * рычаг GFX_SPEED_SEL_VALUE. Следствия, все ложные:
+     *   - 'ORDER A ... NOT SET' и 'ORDER B ... NOT SET' при фактически
+     *     успешной записи (FTPO3 подтверждал 0x823830 = 0x7);
+     *   - 'readback 0x00000007 *** DID NOT HOLD ***' - запись держала;
+     *   - 10 бессмысленных повторов: 5 попыток в порядке A плюс весь
+     *     порядок B, потому что okA остался 0. Отсюда 5,2 с вместо 4,2.
+     *
+     * Это ровно тот случай, о котором предупреждает правило проекта:
+     * «не объявлять успех по факту принятия записи» - и наоборот, не
+     * объявлять провал, когда запись прошла. Рычаг GFX_SPEED_SEL_VALUE
+     * предназначен для перебора значений, значит проверка обязана
+     * сверяться с записываемым значением, иначе она бесполезна на всех
+     * значениях, кроме дефолтного. */
     for (t = 0; t < 5; t++) {
         mmio_write32(0x00823830U, GFX_SPEED_SEL_VALUE);
         uefi_call_wrapper(BS->Stall, 1, 50000);
         v = mmio_read32(0x00823830U);
-        if (v == 0x00000004U) { okA = 1; break; }
-        ulogf(L"G2GFX  %s order A attempt %d: readback 0x%08x != 4, retry\n",
-              tag, (INTN)t + 1, v);
+        if (v == GFX_SPEED_SEL_VALUE) { okA = 1; break; }
+        ulogf(L"G2GFX  %s order A attempt %d: readback 0x%08x, want 0x%08x, "
+              L"retry\n", tag, (INTN)t + 1, v, (UINT32)GFX_SPEED_SEL_VALUE);
         uefi_call_wrapper(BS->Stall, 1, 50000);
     }
     ulogf(L"G2GFX  %s ORDER A (GFX after SS): GFX_SPEED_SELECT=0x%08x %s\n",
@@ -4949,9 +5023,9 @@ gen2_gfx_try(const CHAR16 *tag)
             mmio_write32(0x00823830U, GFX_SPEED_SEL_VALUE);
             uefi_call_wrapper(BS->Stall, 1, 50000);
             v = mmio_read32(0x00823830U);
-            if (v == 0x00000004U) { okB = 1; break; }
-            ulogf(L"G2GFX  %s order B attempt %d: readback 0x%08x != 4, retry\n",
-                  tag, (INTN)t + 1, v);
+            if (v == GFX_SPEED_SEL_VALUE) { okB = 1; break; }
+            ulogf(L"G2GFX  %s order B attempt %d: readback 0x%08x, want 0x%08x, "
+                  L"retry\n", tag, (INTN)t + 1, v, (UINT32)GFX_SPEED_SEL_VALUE);
             uefi_call_wrapper(BS->Stall, 1, 50000);
         }
         ulogf(L"G2GFX  %s ORDER B (GFX before SS): GFX_SPEED_SELECT=0x%08x %s\n",
@@ -5075,12 +5149,13 @@ gen2_gfx_try(const CHAR16 *tag)
     uefi_call_wrapper(BS->Stall, 1, 100000);
     v     = mmio_read32(0x00823830U);
     feat1 = mmio_read32(0x00823814U);
-     ulogf(L"G2SUM  %s GFX_SPEED_SELECT=0x4 (kartina: 0x2=9fps, 0x4=50fps/135W, "
-          L"0x5=26fps, 0x7=9fps - lestnicy net, 0x4 edinstvennyi rabochii): "
-          L"readback 0x%08x %s; "
+     ulogf(L"G2SUM  %s wrote GFX_SPEED_SELECT=0x%08x (kartina: 0x2=9fps, "
+          L"0x4=50fps/135W, 0x5=26fps, 0x7=9fps - lestnicy net, 0x4 "
+          L"edinstvennyi rabochii): readback 0x%08x %s; "
           L"FEAT_READOUT_0=0x%08x bit8=%u; DMAQ full=%d idle=%d; "
           L"SS0=0x%08x SS1=0x%08x\n",
-          tag, v, (v == 0x00000004U) ? L"OK" : L"*** DID NOT HOLD ***",
+          tag, (UINT32)GFX_SPEED_SEL_VALUE, v,
+          (v == GFX_SPEED_SEL_VALUE) ? L"HELD" : L"*** DID NOT HOLD ***",
           feat1, (INTN)((feat1 >> 8) & 1u),
           (INTN)g_dmaFullTo, (INTN)g_dmaIdleTo,
           mmio_read32(REG_FEAT_OVR_SM_SPD),
@@ -5751,6 +5826,673 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     log_ms(L"render masks: sweep finished");
 #undef NTGT
 }
+
+#ifdef FUSE_ORACLE
+/* ==== FUSE_ORACLE (2026-10-08) — проверка отчётчика селектора ============
+ *
+ * САМЫЙ ДЕШЁВЫЙ ЭКСПЕРИМЕНТ ИЗ ВСЕХ, ЧТО ДЕЛАЛИСЬ. Ноль новых записей.
+ *
+ * Установленный факт (прогон fusetab2): мы пишем SS0=0x88888888 в
+ * 0x82381C, а рядом 0x82380C читается 0x00888888 и записи не принимает.
+ * Это очень похоже на схему «регистр-команда + регистр-отчётчик», где
+ * отчётчик повторяет значение команды. Тот же вид и у селектора:
+ * мы пишем 0x823830=0x4, а 0x823834 стабильно читается 0x3 и не пишется.
+ *
+ * ГИПОТЕЗА: 0x823834 — отчётчик активного бина графики. Если после записи
+ * селектора он станет 0x4, то:
+ *   - механизм GFX_SPEED_SELECT мы понимаем правильно;
+ *   - появляется ORACLE — способ узнать вступивший бин чтением регистра,
+ *     без запуска игры и без замера fps. Сейчас единственный способ
+ *     такой проверки - игра, то есть минуты на цикл и ручной замер;
+ *   - лестницу значений селектора можно будет перебирать дешево.
+ *
+ * ПОЧЕМУ ЭТО ДЕШЁВО. Селекторы и так пишутся штатным путём в каждом
+ * прогоне. Мы добавляем ТОЛЬКО ЧТЕНИЯ: 21 регистр до записи и 21 после.
+ * Секунды на прогон, ноль риска, ноль отката - если что-то сломается,
+ * виноват будет не этот код, а штатный путь селекторов.
+ *
+ * ЧТО ПЕЧАТАЕТСЯ. Только ИЗМЕНИВШИЕСЯ регистры, с именами. Неизменившиеся
+ * молчат - иначе получится 42 строки шума, а нужны две.
+ * ======================================================================== */
+
+#define FTP_SNAP_BASE 0x00823800UL
+#define FTP_SNAP_N    17          /* 0x823800..0x823840 */
+
+/* Имена. Совпадают с FUSE_NB, но этот блок должен собираться и без
+ * FUSE_TABLE_PROBE, поэтому таблица тут своя. */
+static const struct { UINT32 a; const CHAR16 *n; } ftp_snapnames[] = {
+    { 0x00823800UL, L"PLM-page-mask"   },
+    { 0x00823804UL, L"PLM"            },
+    { 0x00823808UL, L"?"              },
+    { 0x0082380CUL, L"?(ro) 88888888" },
+    { 0x00823810UL, L"FUSE_OVERRIDE?" },
+    { 0x00823814UL, L"FEATURE_READOUT"},
+    { 0x00823818UL, L"?"              },
+    { 0x0082381CUL, L"SS0 (cmd)"      },
+    { 0x00823820UL, L"SS1 (cmd)"      },
+    { 0x00823824UL, L"?"              },
+    { 0x00823828UL, L"?"              },
+    { 0x0082382CUL, L"?(=SS1 val)"    },
+    { 0x00823830UL, L"GFX_SPEED_SEL"  },
+    { 0x00823834UL, L"?(=3) CAND-ID"  },
+    { 0x00823838UL, L"?"              },
+    { 0x0082383CUL, L"?"              },
+    { 0x00823840UL, L"page+0x40"      },
+};
+
+static UINT32 ftp_snap[FTP_SNAP_N];
+
+/* Индекс в ftp_snap по АДРЕСУ, а не константой. Магические индексы
+ * разъедутся, если кто-то вставит строку в таблицу имён, и тогда мы
+ * будем молча печатать не те регистры - худший вид отказа здесь. */
+static INTN
+ftp_snap_idx(UINT32 addr)
+{
+    UINTN i;
+    for (i = 0; i < FTP_SNAP_N; i++)
+        if (ftp_snapnames[i].a == addr) return (INTN)i;
+    return -1;
+}
+
+static void
+ftp_snap_take(const CHAR16 *tag)
+{
+    UINTN i;
+    for (i = 0; i < FTP_SNAP_N; i++)
+        ftp_snap[i] = mmio_read32(FTP_SNAP_BASE + (UINT32)i * 4);
+    ulogf(L"FTPO0 %s SNAPSHOT %s, %d registers, read-only\n", tag, "pre-sel",
+          (INTN)FTP_SNAP_N);
+    for (i = 0; i < FTP_SNAP_N; i++)
+        ulogf(L"FTPO1 %s %08x = %08x  %s\n", tag,
+              ftp_snapnames[i].a, ftp_snap[i], ftp_snapnames[i].n);
+}
+
+static void
+ftp_snap_diff(const CHAR16 *tag)
+{
+    UINTN i, changed = 0;
+    UINT32 now;
+    UINT32 selWas, selNow, candWas, candNow;
+    INTN   si, ci;
+
+    si = ftp_snap_idx(0x00823830UL);
+    ci = ftp_snap_idx(0x00823834UL);
+    selWas = (si >= 0) ? ftp_snap[si] : 0xDEADBEEFU;
+    candWas = (ci >= 0) ? ftp_snap[ci] : 0xDEADBEEFU;
+    selNow = mmio_read32(0x00823830UL);
+    candNow = mmio_read32(0x00823834UL);
+    if (si < 0 || ci < 0)
+        ulogf(L"FTPO4 %s *** snapshot table lookup failed sel=%d cand=%d, "
+              L"values below are raw reads ***\n", tag, (INTN)si, (INTN)ci);
+
+    ulogf(L"FTPO2 %s DIFF vs snapshot, changed registers only\n", tag);
+    for (i = 0; i < FTP_SNAP_N; i++) {
+        now = mmio_read32(FTP_SNAP_BASE + (UINT32)i * 4);
+        if (now == ftp_snap[i]) continue;
+        changed++;
+        ulogf(L"FTPO3 %s CHANGED %08x = %08x -> %08x  %s\n", tag,
+              ftp_snapnames[i].a, ftp_snap[i], now, ftp_snapnames[i].n);
+    }
+    ulogf(L"FTPO4 %s %d of %d registers changed after the selector write\n",
+          tag, (INTN)changed, (INTN)FTP_SNAP_N);
+    /* Прямой вопрос A2, без интерпретаций.
+     *
+     * Печатаем ДО и ПОСЛЕ для обоих регистров, а не только изменившиеся.
+     * Причина: если при нерабочем значении селектора 0x823834 не изменится
+     * вовсе, строки FTPO3 для неё не будет вообще, и значение потеряется
+     * именно там, где оно нужнее всего - в опровержении гипотезы.
+     * Поэтому строка самодостаточна и не зависит от наличия FTPO3. */
+    ulogf(L"FTPO5 %s SELECTOR 0x823830: %08x -> %08x    CAND-ID 0x823834: "
+          L"%08x -> %08x    %s\n", tag,
+          selWas, selNow, candWas, candNow,
+          (candNow == candWas)
+              ? ((candNow == 0U) ? L"UNCHANGED and now 0" : L"UNCHANGED")
+              : L"CHANGED");
+}
+#endif /* FUSE_ORACLE */
+
+#ifdef FUSE_TABLE_PROBE
+/* ==== FUSE_TABLE_PROBE — A1 + A3 (2026-10-08) ============================
+ *
+ * ОДИН прогон, две гипотезы, строго по возрастанию риска. Порядок фаз
+ * выбран так, чтобы ЗАВИСАНИЕ от фазы быть невозможно: фаза 0 ничего не
+ * пишет и идёт ПЕРВОЙ, поэтому даже жёсткое зависание гостя в фазе 1
+ * оставит в логе на флешке полный дамп - то есть прогон не пропадёт.
+ *
+ * ---------------------------------------------------------------------------
+ * ЧТО ЭТО ЗА ЭКСПЕРИМЕНТ (docs/POWER-SEARCH-LIST.md, пункты A1 и A3).
+ *
+ * A3 - блок OPTB 0x8200D0..0x8200F4 (10 регистров). Вычеркнут из проекта с
+ * формулировкой «валит гостя в ресет» (KNOWN-ISSUES #10, PORT-STATUS 1u).
+ * Этот вердикт вынесен ДО v3.40, где нашли баг гарда «ботер#1 срабатывает
+ * только на первой записи прогона» (см. комментарий выше, v3.17/v3.40).
+ * Тот же класс молчаливого отказа стоил 7 масок рендера. Значит «валит
+ * гостя» могло быть свойством этого бага, а не самого блока.
+ * Перепроверяем РАБОЧИМ способом: тем же циклом FLR -> ботер#1 -> ботер#2,
+ * каким открываются маски 0x823800/0x823B04.
+ *
+ * A1 - страница физов 0x820Cxx, где chip_size_scan нашёл пять регистров со
+ * значением 48 (usb-log-1004-183613.txt:560-564). 48 = полное число SM у
+ * GA104 (RTX 3070 Ti). У нас multiProcessorCount = 30. В той же странице
+ * NVIDIA называет 0x820C04 = NV_FUSE_STATUS_OPT_DISPLAY (dev_fuse.h:137),
+ * то есть это фича-фузы, а не случайный config. Ни один из этих пяти
+ * адресов в проекте не записывался.
+ *
+ * ---------------------------------------------------------------------------
+ * ГЛАВНОЕ, ЧТО РЕШАЕТСЯ ФАЗОЙ 0. Мы НЕ ЗНАЕМ, ЧТО ЛЕЖИТ В 0x820Cxx.
+ * Фаза 1 открывает доступ к странице, но не отвечает на вопрос «что эти
+ * пять регистров означают». Ответ на это - разбор раскладки страницы,
+ * и он получается БЕСПЛАТНО, одним чтением. Поэтому фаза 0 печатает
+ * страницу целиком и отдельным списком все значения, похожие на счётчик
+ * (1..64), с двумя соседями: если это таблица, счётчик будет виден по
+ * равномерному шагу адресов.
+ *
+ * ---------------------------------------------------------------------------
+ * ПРАВИЛА, КОТОРЫЕ ЗДЕСЬ СОБЛЮДЕНЫ.
+ *
+ * 1. Порядок по риску: чтение -> открытие известного блока -> контрольная
+ *    запись в безобидное поле -> ОДНА возмущаемая запись. Ничего не
+ *    откатывается одним куском, каждый шаг печатается ДО действия.
+ * 2. 0x823800/0x823B04 в этом же прогоне открываются штатно, и их строки
+ *    «became 0xFFFFFFFF OPEN» и есть положительный контроль механики
+ *    ботера для всей фазы 1 - отдельный контроль не нужен и не делается.
+ * 3. Ни одна строка не пишет 48 поверх 48: это неотличимо от «не
+ *    записалось». Единственный способ узнать, что регистр пишется, -
+ *    изменить значение. Поэтому возмущается ровно ОДИН регистр, и он
+ *    восстанавливается в том же прогоне.
+ * 4. Значение возмущения - 0x2E = 46. Это НЕ выдуманное число: 46 SM -
+ *    реальная конфигурация того же кристалла GA104 (RTX 3070, 5888 ядер).
+ *    Если регистр всё же окажется счётчиком SM, запрос 46 - это просьба о
+ *    существующей конфигурации, а не о несуществующей. Если это отчётность -
+ *    запись не липнет, и мы получим ответ без побочных эффектов.
+ * 5. Контрольная запись идёт в 0x820C04 (NV_FUSE_STATUS_OPT_DISPLAY,
+ *    документирован R-I4R) по двум причинам: он в ТОЙ ЖЕ странице, что и
+ *    цель, и он функционально безобиден - у карты нет выхода изображения
+ *    (nvidia-smi: Display Active: Disabled), бит 0 по NVIDIA это «дисплей
+ *    ВЫКЛЮЧЕН», то есть мы пишем в «уже выключено» и сразу
+ *    восстанавливаем.
+ * 6. Ни одного %u в ulogf (KNOWN-ISSUES #37.2), все строки - ASCII
+ *    (ulogf заменяет не-ASCII на '?', и читать такой лог с флешки нельзя).
+ *
+ * ОТКАТ: анлок волатилен, откат = перезагрузка. Экспериментальные бинари
+ * в out/ не кладутся (docs/RENDER-LIMITS.md §6), откатная сборка не тронута.
+ * ======================================================================== */
+
+#define FTP_PAGE_LO   0x00820C00UL
+#define FTP_PAGE_HI   0x00820DFFUL
+#define FTP_OPTB_LO   0x008200D0UL
+#define FTP_OPTB_N    10
+#define FTP_DISPLAY   0x00820C04UL      /* NV_FUSE_STATUS_OPT_DISPLAY, R-I4R */
+#define FTP_TGT_A     0x00820C14UL      /* первый из пяти "48" */
+#define FTP_TGT_B     0x00820C44UL
+#define FTP_TGT_C     0x00820C48UL
+#define FTP_TGT_D     0x00820C4CUL
+#define FTP_TGT_E     0x00820D38UL
+#define FTP_EXPECT48  0x00000030UL      /* 48 в виде dword */
+#define FTP_PROBE_VAL 0x0000002EUL      /* 46 = реальная конфигурация GA104 */
+#define FTP_MAXCNT    64               /* сколько count-like напечатать */
+
+static UINT64 ftp_v67, ftp_uc, ftp_fw, ftp_meta;
+
+/* Сколько регистров подряд от базы сейчас читаются как 0xffffffff.
+ * Только чтение, используется для вердикта фазы 1. */
+static UINTN
+ftp_count_open(UINT32 base, UINTN n)
+{
+    UINTN i, k = 0;
+    for (i = 0; i < n; i++)
+        if (mmio_read32(base + (UINT32)i * 4) == 0xFFFFFFFFU) k++;
+    return k;
+}
+
+/* Фаза 0: полный дамп страницы + поиск «похожих на счётчик». Только чтение. */
+static void
+ftp_dump_page(const CHAR16 *tag)
+{
+    UINT32 a, v[8];
+    UINTN  j, nZero = 0, nOnes = 0, nBadf = 0, nCnt = 0, nPrint = 0, lines = 0;
+
+    ulogf(L"FTP0  %s DUMP 0x%08x..0x%08x, 8 dwords per line, read-only\n",
+          tag, (UINT32)FTP_PAGE_LO, (UINT32)FTP_PAGE_HI);
+    for (a = FTP_PAGE_LO; a <= FTP_PAGE_HI; a += 32) {
+        for (j = 0; j < 8; j++) v[j] = mmio_read32(a + (UINT32)j * 4);
+        ulogf(L"FTP1  %08x %08x %08x %08x %08x %08x %08x %08x\n",
+              v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+        lines++;
+        for (j = 0; j < 8; j++) {
+            UINT32 x = v[j];
+            if (x == 0x00000000U)            { nZero++; continue; }
+            if (x == 0xFFFFFFFFU)            { nOnes++; continue; }
+            if ((x & 0xFFFF0000U) == 0xBADF0000U) { nBadf++; continue; }
+            if (x >= 1U && x <= 64U) {
+                nCnt++;
+                if (nPrint >= FTP_MAXCNT) continue;
+                ulogf(L"FTP2  count-like %08x = %d (0x%02x)  prev=%08x "
+                      L"next=%08x\n",
+                      a + (UINT32)j * 4, (INTN)x, (INTN)(x & 0xFF),
+                      mmio_read32(a + (UINT32)j * 4 - 4),
+                      mmio_read32(a + (UINT32)j * 4 + 4));
+                nPrint++;
+            }
+        }
+    }
+    ulogf(L"FTP3  %s DUMP done: %d lines, zero=%d ones=%d badf=%d "
+          L"count-like=%d (printed %d)\n", tag, (INTN)lines, (INTN)nZero,
+          (INTN)nOnes, (INTN)nBadf, (INTN)nCnt, (INTN)nPrint);
+}
+
+/* ==== FUSE_NB — уровень 2 (2026-10-08), по итогам прогона fusetab ====
+ *
+ * Первый прогон дал три результата, и каждый меняет следующий шаг.
+ *
+ * (1) A3 ЗАКРЫТ ПОЛОЖИТЕЛЬНО. Все 10 регистров OPTB открылись рабочим
+ *     способом (polls=78..81), зависания не было. Значит вердикт «валит
+ *     гостя» был следствием бага гарда ботера, найденного в v3.40.
+ *     НО итоговая перепроверка дала «8 of 10» при том, что все десять
+ *     индивидуально напечатали OPEN. Два не удержали. Адреса тех двух
+ *     лог не печатал - это пробел инструментации, и он же главный
+ *     вопрос этого уровня.
+ *
+ * (2) A1 ЗАКРЫТ ОТРИЦАТЕЛЬНО. 0x820C14 не изменился (polls=400). Дамп
+ *     объяснил: страница на 47 из 128 регистров = BADF5040, то есть
+ *     sentinel «узел заперт», и на 55 = ноль. Живых значений всего 25.
+ *     Это не таблица счётчиков, а в основном незадействованный регион.
+ *     Наш исходный «48 = полное число SM» может быть просто неверным
+ *     прочтением: 48 = 0b00110000 это два бита, а 49 рядом = три бита.
+ *
+ * (3) КОНТРОЛЬ ФАЗЫ 2 БЫЛ ПЛОХОЙ. Мы писали в 0x820C04 =
+ *     NV_FUSE_STATUS_OPT_DISPLAY, а он документирован R-I4R, то есть
+ *     только для чтения. «NOT STUCK» из него ничего не следует.
+ *
+ * Что делает этот уровень:
+ *
+ *   NB0 - дамп ВСЕЙ страницы физов 0x823800..0x823B0F с именами. Первый
+ *         прогон её не смотрел, а там лежит и загадка A2 («стоковый 0x3»
+ *         физически находится по адресу 0x823834, а мы пишем в 0x823830),
+ *         и вопрос A4 (в NV_FUSE_FEATURE_READOUT расходятся ДВА бита, 8 и
+ *         9, а обсуждался только 8). Оба закрываются чтением.
+ *   NB1 - вторая попытка по тем OPTB, что не удержались, с печатью
+ *         адресов. Прецедент «нужен второй проход» есть в самом проекте
+ *         (KNOWN-ISSUES #10).
+ *   NB2 - новый контроль writability на ЖИВОМ регистре той же страницы:
+ *         0x820C08 держит 15, пишем 14 и возвращаем. Прежний контроль был
+ *         на заведомо RO-поле, это исправление той ошибки.
+ *   NB3 (A2) - ОДНО возмущение 0x823834: пишем 0x00000004 и возвращаем.
+ *         Почему 4: ровно это значение мы доказано пишем в 0x823830, и
+ *         оно ОТЛИЧАЕТСЯ от текущего 0x3, то есть запись различима.
+ *         Если 0x823834 - настоящий селектор, а 0x823830 нет, то это
+ *         единственный способ это различить.
+ */
+
+#define FTP_SS_LO     0x00823800UL
+#define FTP_SS_HI     0x00823B0FUL
+
+/* Опережающая декларация: функции уровня 2 стоят ВЫШЕ определения
+ * ftp_booter_write, а вызывают его. */
+static UINT32 ftp_booter_write(UINT32 addr, UINT32 want, INTN *polls);
+
+/* Имена регистров страницы физов. Неизвестные помечены знаком '?' -
+ * это честнее, чем выдумывать. Источники: docs/REGISTERS.md (PLM/SS0/SS1/
+ * GFX_SPEED_SELECT), NVIDIA dev_fuse.h (NV_FUSE_FEATURE_READOUT). */
+static const struct { UINT32 a; const CHAR16 *n; } ftp_nbnames[] = {
+    { 0x00823800UL, L"PLM-page-mask"  },
+    { 0x00823804UL, L"PLM"           },
+    { 0x00823808UL, L"?"             },
+    { 0x0082380CUL, L"?(ro)"         },
+    { 0x00823810UL, L"FUSE_OVERRIDE?" },
+    { 0x00823814UL, L"FEATURE_READOUT" },
+    { 0x00823818UL, L"?"             },
+    { 0x0082381CUL, L"SS0"           },
+    { 0x00823820UL, L"SS1"           },
+    { 0x00823824UL, L"?"             },
+    { 0x00823828UL, L"?"             },
+    { 0x0082382CUL, L"?"             },
+    { 0x00823830UL, L"GFX_SPEED_SEL" },
+    { 0x00823834UL, L"?(stock-3)"    },
+    { 0x00823838UL, L"?"             },
+    { 0x0082383CUL, L"?"             },
+};
+#define FTP_NBN_N ((INTN)(sizeof(ftp_nbnames) / sizeof(ftp_nbnames[0])))
+
+/* NB0: дамп страницы физов с именами + разбор FEATURE_READOUT по битам. */
+static void
+ftp_dump_fuse_page(const CHAR16 *tag)
+{
+    UINTN i;
+    UINT32 v, fr;
+    static const struct { UINTN b; const CHAR16 *m; } feat[] = {
+        { 0, L"0" }, { 1, L"1" }, { 2, L"2" }, { 3, L"3" },
+        { 4, L"4" }, { 5, L"5" }, { 6, L"6" }, { 7, L"7" },
+        { 8, L"8 PGRAPH" }, { 9, L"9 ?" }, { 16, L"16 ECC_DRAM" },
+    };
+    UINTN f;
+
+    ulogf(L"FTPN0 %s FUSE PAGE 0x%08x..0x%08x, named, read-only\n", tag,
+          (UINT32)FTP_SS_LO, (UINT32)FTP_SS_HI);
+    for (i = 0; i < FTP_NBN_N; i++) {
+        v = mmio_read32(ftp_nbnames[i].a);
+        ulogf(L"FTPN1 %s %08x = %08x  %s\n", tag, ftp_nbnames[i].a, v,
+              ftp_nbnames[i].n);
+    }
+    /* хвост страницы 0x823840..0x823B0F — печатаем только ненулевое */
+    {
+        UINT32 a;
+        UINTN n = 0;
+        for (a = 0x00823840UL; a <= FTP_SS_HI; a += 4) {
+            v = mmio_read32(a);
+            if (v == 0 || v == 0xFFFFFFFFU
+                || (v & 0xFFFF0000U) == 0xBADF0000U) continue;
+            n++;
+            if (n > 24) { ulogf(L"FTPN2 %s tail: ... truncated\n", tag); break; }
+            ulogf(L"FTPN2 %s %08x = %08x\n", tag, a, v);
+        }
+        ulogf(L"FTPN3 %s tail 0x00823840..%08x: %d non-trivial words\n", tag,
+              (UINT32)FTP_SS_HI, (INTN)n);
+    }
+    /* A4: FEAT_READOUT_0 против RTX 3090.
+     *
+     * ИСПРАВЛЕНИЕ 2026-10. Здесь стояло «расходятся биты 8 и 9».
+     * Арифметически неверно: 0x33 xor 0x233 = 0x200, то есть расходится
+     * РОВНО ОДИН бит - девятый. Бит 8 пуст у обеих карт, включая 3090,
+     * которая рендерит нормально, поэтому называть его PGRAPH /
+     * graphics-engine-functional было неверно: у полной GA102 он пуст.
+     *
+     * Практически это важно вдвойне: до исправления аргумент «у нас
+     * графика не функциональна на уровне признака» опирался на
+     * несуществующее различие, а после него остаётся ровно один
+     * неопознанный признак - бит 9. Он и есть единственная настоящая
+     * разница между 70HX и полной GA102.
+     *
+     * Само сравнительное число 0x233 взято из docs/70HX-PORT-STATUS.md
+     * и в SDK не подтверждается (документирован только ECC_DRAM, бит 16),
+     * поэтому оно само требует перепроверки. Печатаем xor, чтобы это
+     * было видно в логе без пересчёта на глаз. */
+    fr = mmio_read32(0x00823814UL);
+    ulogf(L"FTPN4 %s FEAT_READOUT_0=%08x  ours vs 3090=%08x  xor=%08x "
+          L"(0x200 = bit 9 only, bit 8 is 0 on BOTH)\n",
+          tag, fr, 0x00000233U, fr ^ 0x00000233U);
+    for (f = 0; f < sizeof(feat) / sizeof(feat[0]); f++)
+        ulogf(L"FTPN5 %s   bit %s = %d\n", tag, feat[f].m,
+              (INTN)((fr >> feat[f].b) & 1U));
+}
+
+/* NB1: кто из OPTB не удержался + второй проход по нему. */
+static void
+ftp_optb_second_pass(const CHAR16 *tag)
+{
+    UINTN i, bad = 0, polls;
+    UINT32 a, v;
+
+    ulogf(L"FTPN6 %s === NB1: which OPTB did not hold, second pass ===\n", tag);
+    for (i = 0; i < FTP_OPTB_N; i++) {
+        a = FTP_OPTB_LO + (UINT32)i * 4;
+        v = mmio_read32(a);
+        if (v != 0xFFFFFFFFU) {
+            bad++;
+            ulogf(L"FTPN7 %s NOT HOLDING: OPTB[%d] 0x%08x = 0x%08x "
+                  L"(expected ffffffff)\n", tag, (INTN)i, a, v);
+        }
+    }
+    ulogf(L"FTPN8 %s NB1: %d of %d did not hold\n", tag, (INTN)bad,
+          (INTN)FTP_OPTB_N);
+    if (!bad) return;
+    for (i = 0; i < FTP_OPTB_N; i++) {
+        a = FTP_OPTB_LO + (UINT32)i * 4;
+        if (mmio_read32(a) == 0xFFFFFFFFU) continue;
+        ulogf(L"FTPN9 %s second pass OPTB[%d] 0x%08x -> write ffffffff\n",
+              tag, (INTN)i, a);
+        v = ftp_booter_write(a, 0xFFFFFFFFU, &polls);
+        ulogf(L"FTPN9 %s second pass OPTB[%d] 0x%08x = 0x%08x %s (polls=%d)\n",
+              tag, (INTN)i, a, v,
+              (v == 0xFFFFFFFFU) ? L"OPEN NOW" : L"STILL LOCKED", (INTN)polls);
+    }
+    bad = 0;
+    for (i = 0; i < FTP_OPTB_N; i++)
+        if (mmio_read32(FTP_OPTB_LO + (UINT32)i * 4) != 0xFFFFFFFFU) bad++;
+    ulogf(L"FTPNB %s after second pass: %d of %d still locked\n", tag,
+          (INTN)bad, (INTN)FTP_OPTB_N);
+}
+
+/* NB2: контроль writability на живом регистре 0x820C08 (15 -> 14 -> 15). */
+static void
+ftp_ctrl_live(const CHAR16 *tag)
+{
+    UINT32 before, after;
+    INTN  polls;
+    UINT64 t;
+
+    before = mmio_read32(0x00820C08UL);
+    ulogf(L"FTPNC %s === NB2: control on LIVE register 0x00820C08, "
+          L"before=0x%08x (%d dec) ===\n", tag, before, (INTN)before);
+    if (before != 0x0000000FU) {
+        ulogf(L"FTPNC %s value is not 15, control skipped\n", tag);
+        return;
+    }
+    t = fx_now_us();
+    after = ftp_booter_write(0x00820C08UL, 0x0000000EU, &polls);
+    ulogf(L"FTPND %s wrote 0x0000000e -> 0x%08x %s (polls=%d)\n", tag, after,
+          (after == 0x0000000EU) ? L"STUCK" : L"NOT STUCK", (INTN)polls);
+    ulogf(L"FTPND %s verdict: live register in 0x820Cxx is %s\n", tag,
+          (after == 0x0000000EU)
+              ? L"WRITABLE - so 0x820C14 is register-specific, not page-wide"
+              : L"read-only - the whole page is a readout zone");
+    if (after == 0x0000000EU) {
+        after = ftp_booter_write(0x00820C08UL, before, &polls);
+        ulogf(L"FTPND %s restored 0x%08x -> 0x%08x %s\n", tag, before, after,
+              (after == before) ? L"OK" : L"MISMATCH");
+    }
+    fx_mk_acc(t, L"ftp: NB2 live-register control");
+}
+
+/* NB3 (A2): одно возмущение 0x823834 - «стоковый 0x3». */
+static void
+ftp_nb_selector(const CHAR16 *tag)
+{
+    UINT32 before, after;
+    INTN  polls;
+    UINT64 t;
+
+    before = mmio_read32(0x00823834UL);
+    ulogf(L"FTPNE %s === NB3 (A2): 0x00823834 before=0x%08x, "
+          L"GFX_SPEED_SELECT(0x823830)=0x%08x ===\n", tag, before,
+          mmio_read32(0x00823830UL));
+    t = fx_now_us();
+    after = ftp_booter_write(0x00823834UL, 0x00000004U, &polls);
+    ulogf(L"FTPNF %s wrote 0x00000004 -> 0x%08x %s (polls=%d)\n", tag, after,
+          (after == 0x00000004U) ? L"STUCK" : L"NOT STUCK", (INTN)polls);
+    ulogf(L"FTPNF %s verdict: 0x823834 is %s\n", tag,
+          (after == 0x00000004U)
+              ? L"WRITABLE - a real control field, candidate for the real selector"
+              : L"a readout - the 'stock 0x3' there is just a coincidence of value");
+    if (after == 0x00000004U) {
+        after = ftp_booter_write(0x00823834UL, before, &polls);
+        ulogf(L"FTPNF %s restored 0x%08x -> 0x%08x %s\n", tag, before, after,
+              (after == before) ? L"OK" : L"MISMATCH");
+    }
+    fx_mk_acc(t, L"ftp: NB3 selector neighbour probe");
+}
+
+/* ОДИН ботер-цикл: ровно тот, каким открываются маски рендера.
+ * Отличие от масок одно: значение записи произвольное (у масок всегда
+ * 0xFFFFFFFF), и вместо открытия маски проверяется произвольное значение.
+ * Третий выстрел ботера в одном состоянии SEC2 не работает (v3.18,
+ * usb-log-v318.txt), поэтому между вызовами обязателен FLR. */
+static UINT32
+ftp_booter_write(UINT32 addr, UINT32 want, INTN *polls)
+{
+    UINT32 saveBar, wLo, wHi, v;
+    volatile UINT32 *pv = (volatile UINT32 *)(UINTN)(ftp_v67 + 0xf948);
+    volatile UINT32 *pa = (volatile UINT32 *)(UINTN)(ftp_v67 + 0xf960);
+    INTN   tries;
+
+    saveBar = cfg_read32(0x10) & ~0xF;
+    (VOID)do_flr();
+    uefi_call_wrapper(BS->Stall, 1, 300000);
+    cfg_write32(0x10, saveBar);
+    enable_mem_decode();
+    gBar0Base = saveBar;
+
+    CopyMem((VOID *)(UINTN)ftp_v67, v67_payload_bin, V67_SIZE);
+    __asm__ volatile("wbinvd" ::: "memory");
+    (VOID)early_unlock_path(ftp_uc, ftp_fw, ftp_meta);
+
+    wLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+    wHi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+    *pv = want;
+    *pa = addr;
+    __asm__ volatile("wbinvd" ::: "memory");
+    (VOID)booter_load_v67(ftp_meta, ftp_uc);
+    mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
+    mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
+
+    v = mmio_read32(addr);
+    for (tries = 0; v != want && tries < 400; tries++) {
+        uefi_call_wrapper(BS->Stall, 1, 1000);
+        v = mmio_read32(addr);
+    }
+    if (polls) *polls = tries;
+    return v;
+}
+
+static void
+fuse_table_probe(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
+                 UINT64 fwsecPhys, UINT64 v67Phys)
+{
+    UINTN  i, polls;
+    UINT32 before, after, disp0;
+    UINT64 t;
+
+    ftp_v67 = v67Phys; ftp_uc = ucodePhys;
+    ftp_fw = fwsecPhys; ftp_meta = wprMetaPhys;
+
+    ulogf(L"FTP   === FUSE_TABLE_PROBE start: %s ===\n", tag);
+    ulogf(L"FTP   readback sanity: PLM=0x%08x SS0=0x%08x SS1=0x%08x\n",
+          mmio_read32(REG_FEAT_OVR_PLM), mmio_read32(REG_FEAT_OVR_SM_SPD),
+          mmio_read32(REG_FEAT_OVR_SM_SPD_1));
+    ulogf(L"FTP   targets: disp=%08x A=%08x B=%08x C=%08x D=%08x E=%08x\n",
+          mmio_read32(FTP_DISPLAY), mmio_read32(FTP_TGT_A),
+          mmio_read32(FTP_TGT_B), mmio_read32(FTP_TGT_C),
+          mmio_read32(FTP_TGT_D), mmio_read32(FTP_TGT_E));
+    if (!v67Phys || !ucodePhys) {
+        ulogf(L"FTP   *** no payload context (v67=%d uc=%d), phases 1-3 "
+              L"skipped ***\n", v67Phys ? 1 : 0, ucodePhys ? 1 : 0);
+        return;
+    }
+
+    /* ---- ФАЗА 0: только чтение. Идёт первой специально. ------------------ */
+    t = fx_now_us();
+    ftp_dump_page(tag);
+#ifdef FUSE_NB
+    /* NB0: страница физов 0x8238xx — её первый прогон не смотрел, а там
+     * лежат и загадка A2, и вопрос A4. Тоже только чтение. */
+    ftp_dump_fuse_page(tag);
+#endif
+    fx_mk_acc(t, L"ftp: phase0 read-only dump");
+
+    /* ---- ФАЗА 1 (A3): OPTB, по одному адресу за цикл -------------------- */
+    ulogf(L"FTP4  %s === PHASE 1 (A3): OPTB 0x%08x+%d, one booter cycle each "
+          L"===\n", tag, (UINT32)FTP_OPTB_LO, (INTN)FTP_OPTB_N);
+    t = fx_now_us();
+    for (i = 0; i < FTP_OPTB_N; i++) {
+        UINT32 a = FTP_OPTB_LO + (UINT32)i * 4;
+        before = mmio_read32(a);
+        ulogf(L"FTP5  %s OPTB[%d] 0x%08x before=0x%08x, writing 0xffffffff\n",
+              tag, (INTN)i, a, before);
+        if (before == 0xFFFFFFFFU) {
+            ulogf(L"FTP6  %s OPTB[%d] 0x%08x already open, no cycle spent\n",
+                  tag, (INTN)i, a);
+            continue;
+        }
+        after = ftp_booter_write(a, 0xFFFFFFFFU, &polls);
+        ulogf(L"FTP6  %s OPTB[%d] 0x%08x after=0x%08x %s (polls=%d)\n",
+              tag, (INTN)i, a, after,
+              (after == 0xFFFFFFFFU) ? L"OPEN" : L"LOCKED", (INTN)polls);
+    }
+    ulogf(L"FTP7  %s PHASE 1 verdict: %d of %d OPTB registers read 0xffffffff\n",
+          tag,
+          (INTN)ftp_count_open(FTP_OPTB_LO, FTP_OPTB_N), (INTN)FTP_OPTB_N);
+    fx_mk_acc(t, L"ftp: phase1 OPTB booter cycles");
+#ifdef FUSE_NB
+    /* NB1: первый прогон дал «8 of 10» при десяти индивидуальных OPEN.
+     * Выясняем, кто именно не удержался, и пробуем второй проход. */
+    t = fx_now_us();
+    ftp_optb_second_pass(tag);
+    fx_mk_acc(t, L"ftp: NB1 OPTB second pass");
+#endif
+
+    /* ---- ФАЗА 2: контроль writability на безобидном поле ----------------- */
+    ulogf(L"FTP8  %s === PHASE 2: writability control at 0x%08x "
+          L"(NV_FUSE_STATUS_OPT_DISPLAY) ===\n", tag, (UINT32)FTP_DISPLAY);
+    disp0 = mmio_read32(FTP_DISPLAY);
+    t = fx_now_us();
+    if (disp0 == 0x00000000U || disp0 == 0x00000001U) {
+        UINT32 want = (disp0 == 0x00000000U) ? 0x00000001U : 0x00000000U;
+        after = ftp_booter_write(FTP_DISPLAY, want, &polls);
+        ulogf(L"FTP9  %s wrote 0x%08x -> 0x%08x %s (polls=%d)\n", tag, want,
+              after, (after == want) ? L"STUCK" : L"NOT STUCK", (INTN)polls);
+        ulogf(L"FTP9  %s verdict: page 0x820Cxx is %s\n", tag,
+              (after == want) ? L"WRITABLE - phase 3 may proceed"
+                              : L"read-only or still protected");
+        if (after == want) {
+            after = ftp_booter_write(FTP_DISPLAY, disp0, &polls);
+            ulogf(L"FTP9  %s restored to 0x%08x -> 0x%08x %s\n", tag, disp0,
+                  after, (after == disp0) ? L"OK" : L"MISMATCH");
+        }
+    } else {
+        ulogf(L"FTP9  %s value 0x%08x is neither 0 nor 1, control skipped\n",
+              tag, disp0);
+    }
+    fx_mk_acc(t, L"ftp: phase2 writability control");
+#ifdef FUSE_NB
+    /* NB2: исправление ошибки первого прогона. Контроль стоял на
+     * 0x820C04 = NV_FUSE_STATUS_OPT_DISPLAY, а он документирован R-I4R,
+     * то есть «NOT STUCK» из него ничего не следовало. Теперь контроль
+     * на ЖИВОМ регистре той же страницы. */
+    ftp_ctrl_live(tag);
+#endif
+
+    /* ---- ФАЗА 3 (A1): ОДНО возмущение "48"-регистра --------------------- */
+    before = mmio_read32(FTP_TGT_A);
+    ulogf(L"FTPA  %s === PHASE 3 (A1): perturb ONE 48-register 0x%08x -> "
+          L"0x%08x, then restore ===\n", tag, (UINT32)FTP_TGT_A,
+          (UINT32)FTP_PROBE_VAL);
+    ulogf(L"FTPA  %s 0x%08x before=0x%08x (%d dec) bytes %02x %02x %02x %02x\n",
+          tag, (UINT32)FTP_TGT_A, before, (INTN)before,
+          (INTN)(before & 0xFF), (INTN)((before >> 8) & 0xFF),
+          (INTN)((before >> 16) & 0xFF), (INTN)((before >> 24) & 0xFF));
+    if (before != FTP_EXPECT48) {
+        ulogf(L"FTPA  %s value is 0x%08x, not the expected 48 - perturbation "
+              L"skipped, phase 0 dump is the result\n", tag, before);
+    } else {
+        t = fx_now_us();
+        after = ftp_booter_write(FTP_TGT_A, FTP_PROBE_VAL, &polls);
+        ulogf(L"FTPB  %s 0x%08x after=0x%08x %s (polls=%d)\n", tag,
+              (UINT32)FTP_TGT_A, after,
+              (after == FTP_PROBE_VAL) ? L"STUCK" : L"NOT STUCK", (INTN)polls);
+        ulogf(L"FTPB  %s verdict: register is %s\n", tag,
+              (after == FTP_PROBE_VAL)
+                  ? L"WRITABLE - a value survives, so it is a control, not a readout"
+                  : L"a readout or protected - writing 48 over 48 would prove nothing");
+        if (after == FTP_PROBE_VAL) {
+            after = ftp_booter_write(FTP_TGT_A, before, &polls);
+            ulogf(L"FTPB  %s restored 0x%08x -> 0x%08x %s\n", tag, before,
+                  after, (after == before) ? L"OK" : L"MISMATCH");
+        }
+        fx_mk_acc(t, L"ftp: phase3 single-register perturbation");
+    }
+    ulogf(L"FTPC  %s the other four, NOT written this run: B=%08x C=%08x "
+          L"D=%08x E=%08x\n", tag, mmio_read32(FTP_TGT_B),
+          mmio_read32(FTP_TGT_C), mmio_read32(FTP_TGT_D),
+          mmio_read32(FTP_TGT_E));
+#ifdef FUSE_NB
+    /* NB3 (A2) — в конце, после всех записей фазы 3: к этому моменту
+     * страница 0x8238xx уже вскрыта для чтения, а селектор GFX_SPEED_SELECT
+     * ещё стоковый (блок стоит ДО блока селекторов). */
+    ftp_nb_selector(tag);
+#endif
+    ulogf(L"FTP   === FUSE_TABLE_PROBE done: %s ===\n", tag);
+}
+#endif /* FUSE_TABLE_PROBE */
 #endif /* RENDER_MASKS */
 
 static BOOLEAN
@@ -12418,6 +13160,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         fx_mk_acc(fx_gapT0, L"pro: early-path to render entry");
         render_open_gfx_masks(L"render-masks",
                               wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+#ifdef FUSE_TABLE_PROBE
+        /* A1 + A3, docs/POWER-SEARCH-LIST.md. Стоит РЯДОМ с циклом масок и
+         * до блока селекторов по одной причине: ботер стреляет только пока
+         * SS0/SS1 нулевые (канарейка V67, строка G2RCC выше). После блока
+         * селекторов предусловие уже нарушено, и все циклы ботера в этом
+         * месте были бы холостыми. */
+        fuse_table_probe(L"ftp", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+#endif
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "
               L"(success=%d direct=%d early=%d)\n",
@@ -12442,6 +13192,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
               L"gen2Fire=%d\n",
               (INTN)Status, (INTN)directOk, (INTN)earlyOk,
               GEN2_FIRE_STATE());
+#ifdef FUSE_ORACLE
+        /* Снимок ДО записи селекторов. Сама запись не добавляется: SS0/SS1 и
+         * GFX_SPEED_SELECT и так пишутся штатным путём, мы только запоминаем
+         * состояние страницы и потом сравниваем. */
+        ftp_snap_take(L"pre-sel");
+#endif
 
         /* v3n: СНИМОК БЛОКА FUSE ДО записи селекторов.
          *
@@ -12703,6 +13459,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         }
 #endif
         gen2_gfx_try(L"step1-GFX_SEL");
+#ifdef FUSE_ORACLE
+        /* Тот же снимок ПОСЛЕ записи селектора. Сравнение даёт ответ на
+         * вопрос A2 без единой новой записи: если 0x823834 повторит
+         * значение селектора, то это его отчётчик, и мы получаем oracle
+         * для проверки любой записи без запуска игры. */
+        ftp_snap_diff(L"post-sel");
+#endif
         /* v3.43, этап 24: замыкает разрез блока селекторов. */
         log_ms(L"sel: GFX_SPEED_SELECT write done");
 #endif
