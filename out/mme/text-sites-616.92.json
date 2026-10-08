@@ -1,0 +1,148 @@
+[
+  {
+    "file": "C:\\Users\\Administrator\\Desktop\\mme\\bin\\nvoglv64.dll",
+    "ok": true,
+    "pe32p": true,
+    "size": 48629880,
+    "funcs": 81889,
+    "family_total": 13,
+    "in_code": 3,
+    "in_data": 10,
+    "confirmed": 2,
+    "rejected": 1,
+    "sites": [
+      {
+        "off": 12497230,
+        "rva": 12500302,
+        "method": 536940152,
+        "func": [
+          12500146,
+          12500386
+        ],
+        "arg_const": null,
+        "arg_expr": "dword ptr [rbx + 0x14], r13d",
+        "arg_reg": "r13d",
+        "arg_def": "0000000180bebcc7  mov      r13d, dword ptr [rsp + 0x78]   <- из r13d"
+      },
+      {
+        "off": 12540306,
+        "rva": 12543378,
+        "method": 536940152,
+        "func": [
+          12543302,
+          12543499
+        ],
+        "arg_const": null,
+        "arg_expr": "dword ptr [rdx + 0x14], eax",
+        "arg_reg": "eax",
+        "arg_def": "0000000180bf6585  lea      eax, [rcx*4]   <- из eax ; 0000000180bf657c  mov      eax, dword ptr [rbx + 0x24188]"
+      }
+    ]
+  },
+  {
+    "file": "C:\\Users\\Administrator\\Desktop\\mme\\bin\\nvvkscv64.dll",
+    "ok": true,
+    "pe32p": true,
+    "size": 11821696,
+    "funcs": 32620,
+    "family_total": 5,
+    "in_code": 2,
+    "in_data": 3,
+    "confirmed": 2,
+    "rejected": 0,
+    "sites": [
+      {
+        "off": 5862846,
+        "rva": 5865918,
+        "method": 536940152,
+        "func": [
+          5865762,
+          5866002
+        ],
+        "arg_const": null,
+        "arg_expr": "dword ptr [rbx + 0x14], r13d",
+        "arg_reg": "r13d",
+        "arg_def": "0000000180598137  mov      r13d, dword ptr [rsp + 0x78]   <- из r13d"
+      },
+      {
+        "off": 5894386,
+        "rva": 5897458,
+        "method": 536940152,
+        "func": [
+          5897382,
+          5897579
+        ],
+        "arg_const": null,
+        "arg_expr": "dword ptr [rdx + 0x14], eax",
+        "arg_reg": "eax",
+        "arg_def": "000000018059fce5  lea      eax, [rcx*4]   <- из eax ; 000000018059fcdc  mov      eax, dword ptr [rbx + 0x23ed0]"
+      }
+    ]
+  },
+  {
+    "file": "C:\\Users\\Administrator\\Desktop\\mme\\bin\\nvd3dumx.dll",
+    "ok": true,
+    "pe32p": true,
+    "size": 43266176,
+    "funcs": 14453,
+    "family_total": 38,
+    "in_code": 4,
+    "in_data": 34,
+    "confirmed": 4,
+    "rejected": 0,
+    "sites": [
+      {
+        "off": 1923869,
+        "rva": 1926941,
+        "method": 536940036,
+        "func": [
+          1919856,
+          1927473
+        ],
+        "arg_const": null,
+        "arg_expr": null,
+        "arg_reg": null,
+        "arg_def": null
+      },
+      {
+        "off": 1963685,
+        "rva": 1966757,
+        "method": 536940034,
+        "func": [
+          1966624,
+          1966783
+        ],
+        "arg_const": null,
+        "arg_expr": "dword ptr [rax + 4], esi",
+        "arg_reg": "esi",
+        "arg_def": "00000001801e024e  mov      esi, r8d   <- из esi"
+      },
+      {
+        "off": 1993471,
+        "rva": 1996543,
+        "method": 536940040,
+        "func": [
+          1996253,
+          1996593
+        ],
+        "arg_const": null,
+        "arg_expr": "dword ptr [rax + 4], r15d",
+        "arg_reg": "r15d",
+        "arg_def": "00000001801e76cd  add      r15d, eax   <- из r15d ; 00000001801e76c6  imul     r15d, ebx"
+      },
+      {
+        "off": 1995509,
+        "rva": 1998581,
+        "method": 536940038,
+        "func": [
+          1997847,
+          1998731
+        ],
+        "arg_const": null,
+        "arg_expr": "dword ptr [rax + 4], r13d",
+        "arg_reg": "r13d",
+        "arg_def": "00000001801e7e45  imul     r9d, r13d   <- из r9d ; 00000001801e7e3f  mov      r9d, ebp"
+      }
+    ]
+  }
+]

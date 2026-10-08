@@ -1,0 +1,157 @@
+[
+  {
+    "file": "C:\\Users\\Administrator\\Desktop\\mme\\work\\ref-restore.bin",
+    "ok": true,
+    "family_total": 84,
+    "in_code": 83,
+    "in_data": 1,
+    "sites": [
+      {
+        "off": 3139925,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "r8, 0x820010e78"
+      },
+      {
+        "off": 3140007,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "r8, 0x820010e78"
+      },
+      {
+        "off": 11618375,
+        "method": 536940110,
+        "arg": 6914,
+        "arg_const": 6914,
+        "insn": "rsi, 0x1b0220010e4e"
+      },
+      {
+        "off": 11668525,
+        "method": 536940136,
+        "arg": 240,
+        "arg_const": 240,
+        "insn": "rcx, 0xf020010e68"
+      },
+      {
+        "off": 11865095,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "rcx, 0x820010e78"
+      },
+      {
+        "off": 11865942,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "rcx, 0x820010e78"
+      },
+      {
+        "off": 11867419,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "rcx, 0x820010e78"
+      },
+      {
+        "off": 11869137,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "rcx, 0x820010e78"
+      },
+      {
+        "off": 11873547,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "r8, 0x820010e78"
+      },
+      {
+        "off": 11873922,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "rax, 0x820010e78"
+      },
+      {
+        "off": 11875079,
+        "method": 536940152,
+        "arg": 8,
+        "arg_const": 8,
+        "insn": "r8, 0x820010e78"
+      },
+      {
+        "off": 13982696,
+        "method": 536940152,
+        "arg": 20,
+        "arg_const": 20,
+        "insn": "rdi, 0x1420010e78"
+      },
+      {
+        "off": 13983209,
+        "method": 536940152,
+        "arg": 20,
+        "arg_const": 20,
+        "insn": "rsi, 0x1420010e78"
+      },
+      {
+        "off": 14006868,
+        "method": 536940152,
+        "arg": 32,
+        "arg_const": 32,
+        "insn": "rcx, 0x2020010e78"
+      },
+      {
+        "off": 14466912,
+        "method": 536940136,
+        "arg": 240,
+        "arg_const": 240,
+        "insn": "rsi, 0xf020010e68"
+      },
+      {
+        "off": 14800681,
+        "method": 536940134,
+        "arg": 536937742,
+        "arg_const": 536937742,
+        "insn": "rax, 0x2001050e20010e66"
+      }
+    ],
+    "pairs": {
+      "0x20010e78/8": [
+        "0x2fe955",
+        "0x2fe9a7",
+        "0xb50c07",
+        "0xb50f56",
+        "0xb5151b",
+        "0xb51bd1",
+        "0xb52d0b",
+        "0xb52e82",
+        "0xb53307"
+      ],
+      "0x20010e4e/6914": [
+        "0xb14847"
+      ],
+      "0x20010e68/240": [
+        "0xb20c2d",
+        "0xdcbf60"
+      ],
+      "0x20010e78/20": [
+        "0xd55be8",
+        "0xd55de9"
+      ],
+      "0x20010e78/32": [
+        "0xd5ba54"
+      ],
+      "0x20010e66/536937742": [
+        "0xe1d729"
+      ]
+    },
+    "throttle_hits": [
+      "0xb20c2d",
+      "0xdcbf60"
+    ]
+  }
+]

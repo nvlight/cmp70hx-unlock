@@ -1,0 +1,35 @@
+====================================================================================================
+ELF-SITES  C:\Users\Administrator\Desktop\mme\work\ref-restore.bin
+ELF64, секций 29, функций по .symtab: 0
+====================================================================================================
+
+--- dword семейства 0x20010eXX: всего 84
+    в .text: 83      вне .text: 1
+
+--- подтверждённые эмиттеры movabs: 16
+    offset 0x002fe955  method 0x20010e78  arg=8          
+    offset 0x002fe9a7  method 0x20010e78  arg=8          
+    offset 0x00b14847  method 0x20010e4e  arg=6914       
+    offset 0x00b20c2d  method 0x20010e68  arg=240        
+    offset 0x00b50c07  method 0x20010e78  arg=8          
+    offset 0x00b50f56  method 0x20010e78  arg=8          
+    offset 0x00b5151b  method 0x20010e78  arg=8          
+    offset 0x00b51bd1  method 0x20010e78  arg=8          
+    offset 0x00b52d0b  method 0x20010e78  arg=8          
+    offset 0x00b52e82  method 0x20010e78  arg=8          
+    offset 0x00b53307  method 0x20010e78  arg=8          
+    offset 0x00d55be8  method 0x20010e78  arg=20         
+    offset 0x00d55de9  method 0x20010e78  arg=20         
+    offset 0x00d5ba54  method 0x20010e78  arg=32         
+    offset 0x00dcbf60  method 0x20010e68  arg=240        
+    offset 0x00e1d729  method 0x20010e66  arg=536937742  
+
+  из них с аргументом 0xF0 (240): 2  <== ТОРМОЗ, места: ['0xb20c2d', '0xdcbf60']
+
+--- сводка (метод, аргумент) ---
+    0x20010e4e  arg=6914       x1  0xb14847
+    0x20010e66  arg=536937742  x1  0xe1d729
+    0x20010e68  arg=240        x2  0xb20c2d, 0xdcbf60  <== ТОРМОЗ 240
+    0x20010e78  arg=8          x9  0x2fe955, 0x2fe9a7, 0xb50c07, 0xb50f56, 0xb5151b, 0xb51bd1
+    0x20010e78  arg=20         x2  0xd55be8, 0xd55de9
+    0x20010e78  arg=32         x1  0xd5ba54
