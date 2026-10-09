@@ -87,6 +87,12 @@
  *                        fixes the Code 43 of v3.02-full
  *   EFI_AUTOTEST         QEMU test-stand behaviour: auto-advance, extra dumps
  *   PCIE_GEN_EXPERIMENT  dev-only Gen2/Gen3 register experiments
+ *   XP3G_GATE_V67        experiment E-A: one privileged V67 write of
+ *                        0xFFFFFFFF into the XP3G privilege gate 0x8E1B0,
+ *                        with 0x8E1B4 as positive control. Requires
+ *                        RENDER_MASKS. Touches no link bit, no functional bit.
+ *                        Acceptance markers: XGATE phase0 / phase1 / phase2 /
+ *                        XGATE VERDICT. See docs/70HX-XP3G-GATE-V67.md
  *   ENDGAME_WARMRESET    plan-B endgame (BootNext + warm reset), unused
  *
  *   v3.01 = RELEASE_BUILD + MULTI_CARD                       (compute only)
@@ -6863,6 +6869,171 @@ fuse_table_probe(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     ulogf(L"FTP   === FUSE_TABLE_PROBE done: %s ===\n", tag);
 }
 #endif /* FUSE_TABLE_PROBE */
+
+#ifdef XP3G_GATE_V67
+/* ==== ЭКСПЕРИМЕНТ E-A: гейт XP3G привилегированным писателем V67 =============
+ *
+ * ВОПРОС, который закрывает этот блок — одним прогоном с флешки:
+ *   откроет ли ПРИВИЛЕГИРОВАННЫЙ писатель V67 гейт 0x8E1B0 в точный
+ *   0xFFFFFFFF, который с хоста не открывается НИ ОДНОЙ записью из 36?
+ *
+ * ПОЧЕМУ ЭТО НЕ ПОВТОРЕНИЕ §1q/§1r. Отрицательный результат там честный, но
+ * он про ДРУГОГО писателя: §1q/§1r били mmio_write32 С ХОСТА, а маска и есть
+ * защита от такой записи, поэтому «0 из 36» верно для хоста и ничего не
+ * говорит о V67. §1r это прямо оговаривает: «у нас уже есть привилегированный
+ * исполнитель (V67 открывает PLM), вопрос только в том, что именно он пишет».
+ * Этот блок — ответ на «что именно он пишет», для одного адреса.
+ *
+ * ПРИМИТИВ УЖЕ ГОТОВ, НОВОГО КОДА В НЁМ НЕТ. V67 — параметризованный писатель:
+ *   pv = payload+0xf948 -> значение,  pa = payload+0xf960 -> адрес
+ * (так же устроены уже существующие ftp_booter_write и pcie_gen_unlock_debug,
+ * второй пишет так же в PCIE_FUSE_OVERRIDE 0x823810). Здесь меняется только
+ * адрес. Реверс блоба, которого ждал PORT-STATUS §1s, НЕ требуется: интерфейс
+ * блоба проекту уже известен, см. строки 5553-5554.
+ *
+ * ПРО ЖИВУЮ ССЫЛКУ. Здесь НЕТ ни кика 0x8872C, ни TLS, ни ретрейна, ни записей
+ * политики PCIe. Пишем ТОЛЬКО в регистр-маску (снимаем защиту с записи), ни
+ * одного функционального бита. Линк не трогаем — ровно как объявлено заранее
+ * в §1q перед шагом 1b.
+ *
+ * ФАЗЫ ПО ВОЗРАСТАНИЮ РИСКА. Правило проекта: фаза 0 только на чтение идёт
+ * первой, чтобы даже жёсткое зависание в фазе 1 оставило дамп в логе.
+ *
+ *   Фаза 0  ТОЛЬКО ЧТЕНИЕ: гейт 0x8E1B0..BC и XP3G OVR/VAL 0 и 3. Ноль риска.
+ *   Фаза 1  ЦЕЛЬ:    0x8E1B0 <- 0xFFFFFFFF привилегированно. Решающий выстрел.
+ *   Фаза 2  КОНТРОЛЬ: 0x8E1B4 <- 0xFFFFFFFF, тем же кодом, свой FLR-цикл.
+ *
+ * ПОЧЕМУ КОНТРОЛЬ ОБЯЗАТЕЛ. 70HX-FINAL-SUMMARY §4: «показание принято за
+ * доказательство, не будучи им» — три самые дорогие ошибки проекта. Отрицательный
+ * результат фазы 1 сам по себе не значит ничего: он не отличает «гейт не
+ * открывается привилегированно» от «механизм в этом прогоне не выстрелил».
+ * 0x8E1B4 — сосед по тому же семейству 0x8E1B0..F0, с тем же стоковым
+ * значением, и открывается тем же кодом. Разбор только такой пары:
+ *
+ *   контроль OPEN  + цель NOT OPEN -> гейт 0x8E1B0 особенный: НЕ открывается.
+ *   контроль OPEN  + цель OPEN     -> гейт открыт, §1s пересмотреть, Gen2 жив.
+ *   контроль NOT OPEN              -> результат фазы 1 НЕДЕЙСТВИТЕЛЕН, и вердикт
+ *                                     обязан сказать это, а не закрывать Gen2.
+ *
+ * Ограничение ботера: третий выстрел в одном состоянии SEC2 не работает
+ * (v3.18), поэтому между фазами 1 и 2 обязателен свой FLR-цикл — так же, как
+ * в ftp_booter_write. Отсюда цена блока: два полных цикла, ~2,5 с прогона.
+ *
+ * Место вызова — сразу после цикла масок и ДО блока селекторов, потому что
+ * ботер стреляет только пока SS0/SS1 нулевые (канарейка V67, строка G2RCC
+ * выше). После блока селекторов предусловие уже нарушено.
+ */
+#define XG_GATE        0x0008e1b0U   /* гейт привилегий XP3G */
+#define XG_CTRL        0x0008e1b4U   /* сосед по семейству: положительный контроль */
+#define XG_OPEN        0xffffffffU
+
+/* Один привилегированный выстрел V67 — тот же цикл, что ftp_booter_write:
+ * FLR -> restore BAR0 -> ботер#1 открывает PLM -> ботер#2 пишет пару pv/pa ->
+ * restore WPR2 -> опрос readback. Ничего нового, кроме адреса. */
+static UINT32
+xg_v67_write(UINT64 v67Phys, UINT64 ucodePhys, UINT64 fwsecPhys,
+             UINT64 wprMetaPhys, UINT32 addr, UINT32 want, INTN *polls)
+{
+    volatile UINT32 *pv = (volatile UINT32 *)(UINTN)(v67Phys + 0xf948);
+    volatile UINT32 *pa = (volatile UINT32 *)(UINTN)(v67Phys + 0xf960);
+    UINT32 saveBar, wLo, wHi, v;
+    INTN   tries;
+
+    saveBar = cfg_read32(0x10) & ~0xF;
+    (VOID)do_flr();
+    uefi_call_wrapper(BS->Stall, 1, 300000);
+    cfg_write32(0x10, saveBar);
+    enable_mem_decode();
+    gBar0Base = saveBar;
+
+    CopyMem((VOID *)(UINTN)v67Phys, v67_payload_bin, V67_SIZE);
+    __asm__ volatile("wbinvd" ::: "memory");
+    (VOID)early_unlock_path(ucodePhys, fwsecPhys, wprMetaPhys);
+
+    /* Ботер портит WPR2 (42.10) — восстанавливаем ДО чтения результата, иначе
+     * readback идёт по сломанному BAR0. Ровно как в ftp_booter_write. */
+    wLo = mmio_read32(REG_PFB_MMU_WPR2_LO);
+    wHi = mmio_read32(REG_PFB_MMU_WPR2_HI);
+    *pv = want;
+    *pa = addr;
+    __asm__ volatile("wbinvd" ::: "memory");
+    (VOID)booter_load_v67(wprMetaPhys, ucodePhys);
+    mmio_write32(REG_PFB_MMU_WPR2_LO, wLo);
+    mmio_write32(REG_PFB_MMU_WPR2_HI, wHi);
+
+    v = mmio_read32(addr);
+    for (tries = 0; v != want && tries < 400; tries++) {
+        uefi_call_wrapper(BS->Stall, 1, 1000);
+        v = mmio_read32(addr);
+    }
+    if (polls) *polls = tries;
+    return v;
+}
+
+static void
+xg_probe(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
+         UINT64 fwsecPhys, UINT64 v67Phys)
+{
+    UINT32 before, tgt, later, ctrl;
+    INTN   pT, pC;
+    UINT64 t;
+
+    t = fx_now_us();
+
+    /* --- Фаза 0: ТОЛЬКО ЧТЕНИЕ. Идёт первой и всегда оставляет след. --- */
+    before = mmio_read32(XG_GATE);
+    ulogf(L"XGATE phase0: gate 0x%08x=0x%08x ctrl 0x%08x=0x%08x\n",
+          XG_GATE, before, XG_CTRL, mmio_read32(XG_CTRL));
+    ulogf(L"XGATE phase0: fam 0x%08x/0x%08x/0x%08x/0x%08x\n",
+          mmio_read32(0x0008e1b8U), mmio_read32(0x0008e1bcU),
+          mmio_read32(0x0008e1c0U), mmio_read32(0x0008e1c4U));
+    ulogf(L"XGATE phase0: XP3G OVR0=0x%08x VAL0=0x%08x OVR3=0x%08x VAL3=0x%08x\n",
+          mmio_read32(0x0008e110U), mmio_read32(0x0008e120U),
+          mmio_read32(0x0008e11cU), mmio_read32(0x0008e12cU));
+    Print(L"xgate: pre gate=0x%08x ctrl=0x%08x\n", before, mmio_read32(XG_CTRL));
+
+    /* --- Фаза 1: ЦЕЛЬ, гейт 0x8E1B0. Решающий выстрел. --- */
+    tgt = xg_v67_write(v67Phys, ucodePhys, fwsecPhys, wprMetaPhys,
+                       XG_GATE, XG_OPEN, &pT);
+    /* Повторное чтение через 0,5 с отделяет «не встало» от «встало и слетело». */
+    uefi_call_wrapper(BS->Stall, 1, 500000);
+    later = mmio_read32(XG_GATE);
+    ulogf(L"XGATE phase1: target 0x%08x <- 0x%08x gave 0x%08x %s "
+           "(polls=%d, recheck=0x%08x, before=0x%08x)\n",
+          XG_GATE, XG_OPEN, tgt,
+          (tgt == XG_OPEN) ? "OPEN" : "NOT OPEN", pT, later, before);
+    Print(L"xgate: target 0x%08x -> 0x%08x %s polls=%d\n", XG_GATE, tgt,
+          (tgt == XG_OPEN) ? "OPEN" : "NOT OPEN", pT);
+
+    /* --- Фаза 2: КОНТРОЛЬ, 0x8E1B4, тот же код, свой FLR-цикл.
+     * Без него отрицательный результат фазы 1 нельзя интерпретировать. --- */
+    ctrl = xg_v67_write(v67Phys, ucodePhys, fwsecPhys, wprMetaPhys,
+                        XG_CTRL, XG_OPEN, &pC);
+    ulogf(L"XGATE phase2: control 0x%08x <- 0x%08x gave 0x%08x %s (polls=%d)\n",
+          XG_CTRL, XG_OPEN, ctrl,
+          (ctrl == XG_OPEN) ? "OPEN" : "NOT OPEN", pC);
+    Print(L"xgate: control 0x%08x -> 0x%08x %s polls=%d\n", XG_CTRL, ctrl,
+          (ctrl == XG_OPEN) ? "OPEN" : "NOT OPEN", pC);
+
+    /* --- Вердикт. Три исхода, третий запрещает делать вывод. --- */
+    if ((tgt == XG_OPEN) && (ctrl == XG_OPEN)) {
+        ulogf(L"XGATE VERDICT: OPEN - gate opens privileged; "
+               "XP3G_OVR0/VAL0 writable next; PORT-STATUS 1s needs rework\n");
+        Print(L"xgate: VERDICT OPEN\n");
+    } else if ((tgt != XG_OPEN) && (ctrl == XG_OPEN)) {
+        ulogf(L"XGATE VERDICT: GATE-ONLY-LOCKED - mechanism works, gate does "
+               "not open; XP3G policy writes stay dropped\n");
+        Print(L"xgate: VERDICT GATE-ONLY-LOCKED\n");
+    } else {
+        ulogf(L"XGATE VERDICT: INCONCLUSIVE - control did not open either; "
+               "phase1 result carries NO weight, do not close Gen2 on it\n");
+        Print(L"xgate: VERDICT INCONCLUSIVE\n");
+    }
+
+    ulogf(L"XGATE === E-A done: %s ===\n", tag);
+    fx_mk_acc(t, L"xgate: E-A xp3g gate via V67");
+}
+#endif /* XP3G_GATE_V67 */
 #endif /* RENDER_MASKS */
 
 static BOOLEAN
@@ -13537,6 +13708,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * селекторов предусловие уже нарушено, и все циклы ботера в этом
          * месте были бы холостыми. */
         fuse_table_probe(L"ftp", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+#endif
+#ifdef XP3G_GATE_V67
+        /* ЭКСПЕРИМЕНТ E-A. Место то же, что у FUSE_TABLE_PROBE и по той же
+         * причине: ботер стреляет только пока SS0/SS1 нулевые, то есть до
+         * блока селекторов. Блок не трогает линк и не пишет ни одного
+         * функционального бита — только снятие защиты с записи. */
+        xg_probe(L"xg", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
 #endif
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "
