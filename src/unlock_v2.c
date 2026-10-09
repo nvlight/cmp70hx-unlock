@@ -7734,6 +7734,152 @@ xg_tls_bar0(const CHAR16 *tag)
     fx_mk_acc(t, L"xtl: E-E TLS via BAR0 mirror, gate open");
 }
 #endif /* XP3G_TLS_BAR0 && XP3G_GATE_POLICY */
+
+#ifdef PJTAG_SCAN
+/* ==== ЭКСПЕРИМЕНТ E-F: ПОИСК PJTAG / ПРИВИЛЕГИРОВАННЫХ ГЕЙТОВ. ТОЛЬКО ЧТЕНИЕ
+ *
+ * ЗАЧЕМ, ПОСЛЕ ТОГО КАК ЗАКРЫТ Gen2. Граница, которая его убила: на GPU нет
+ * цепочки PCIe capabilities (CapPtr обнулён, E-D), а BAR0-зеркало LC2
+ * (0x880A8) заблокировано не тем гейтом, что мы открыли (E-E). Каждый
+ * оставшийся вопрос упирается в "регистр недоступен", а не в "значение
+ * неизвестно" - значит снимать надо потолок доступа, а не искать значения.
+ *
+ * ГДЕ ВЗЯТО. amoghmunikote/cmpunlocker (CMP 170HX) перечисляет
+ * "JTAG (Host2Jtag register access): Working" и в common/constants.yaml даёт
+ *   pjtag_plm     { addr: 0x0000c840, value: 0xffffffff }
+ *   pjtag_sec_plm { addr: 0x0000c848, value: 0xffffffff }
+ *
+ * ГЛАВНЫЙ РИСК, И ОН ПРИЧИНА, ПОЧЕМУ БЛОК ТОЛЬКО ЧИТАЕТ. 170HX - это GA100
+ * (HBM2e, 7 нм, как A100). У нас GA104. Это РАЗНЫЕ внутренние карты, и
+ * priv-домены между GA100 и GA10x переставлялись: тот же 0x8E1xx у нас не
+ * совпадает с GA100. Переносить 0xC840 слепо нельзя - это было бы правкой без
+ * измерения, ровно то, за что в проекте платили трижды.
+ *
+ * ПОЭТОМУ ИЩЕМ НЕ АДРЕС, А КЛАСС. Замаскированный регистр в этом проекте
+ * выглядит предсказуемо: PLM-поля читаются как 0xFFFFFF8F / 0xFFFFFFCF, а
+ * открытые - как точный 0xFFFFFFFF. Значит кандидат находится признаком, а не
+ * адресом из чужого репозитория.
+ *
+ * ЧТО ДЕЛАЕМ. Три дампа, все только чтение:
+ *   1. Окно вокруг предполагаемого PJTAG: 0xC800..0xC8FF. Есть ли оно на GA104
+ *      вообще, и замаскировано ли оно тем же 0xFFFFFFxx.
+ *   2. Скан двух priv-окон (0x820000..0x821FFF и 0x8E0000..0x8E0FFF) на ВСЕ
+ *      значения вида 0xFFFFFFxx - это и есть карта запертых гейтов.
+ *   3. Скан младших окон BAR0 (0xC0000..0xC0FFF) тем же признаком.
+ *
+ * ЧТО НЕ ДЕЛАЕМ. Ни одной записи. Ни в один регистр, включая предполагаемый
+ * PJTAG: пока кандидат не найден признаком, трогать нечего.
+ *
+ * ПРИЁМКА:
+ *   XPJT win 0x000c800..0x000c8ff  nonff=.. mask8f=.. maskcf=.. zeros=..
+ *   XPJT cands: 0x........ = 0x........ (name)
+ *   XPJT === E-F done ===
+ */
+#define PJT_WIN_LO    0x0000c800UL
+#define PJT_WIN_HI    0x0000c8ffUL
+#define PJT_SCAN_LO   0x000c0000UL
+#define PJT_SCAN_HI   0x000c0fffUL
+#define PJT_PRIV_LO   0x00820000UL
+#define PJT_PRIV_HI   0x00821fffUL
+#define PJT_XP3G_LO   0x008e0000UL
+#define PJT_XP3G_HI   0x008e0fffUL
+/* Лог кольцевой и переполняется, поэтому печатаем счётчики всегда, а сами
+ * кандидаты - с жёстким потолком, как CHIPLOG_MAX в chip_size_scan(). */
+#define PJT_LOG_MAX   160
+
+static void
+pjt_log_cand(UINT32 addr, UINT32 v, INTN *printed)
+{
+    if (*printed < PJT_LOG_MAX) {
+        ulogf(L"XPJT cand 0x%08x = 0x%08x\n", addr, v);
+        Print(L"xpjt: cand 0x%08x = 0x%08x\n", addr, v);
+        (*printed)++;
+    }
+}
+
+static void
+xg_pjtag_scan(const CHAR16 *tag)
+{
+    UINT32 a, v;
+    INTN   nonff, m8f, mcf, zeros, printed = 0;
+    UINT64 t;
+
+    t = fx_now_us();
+    ulogf(L"XPJT === E-F start: PJTAG / privileged gate hunt, READ ONLY ===\n");
+    ulogf(L"XPJT reference values from amoghmunikote/cmpunlocker (GA100!): "
+          L"pjtag_plm=0x0000c840 pjtag_sec_plm=0x0000c848\n");
+    ulogf(L"XPJT caveat: 170HX is GA100, ours is GA104; priv domains differ "
+          L"between the two, so the addresses above are a HINT, not a target\n");
+
+    /* --- 1. Окно вокруг предполагаемого PJTAG --- */
+    nonff = m8f = mcf = zeros = 0;
+    for (a = PJT_WIN_LO; a <= PJT_WIN_HI; a += 4) {
+        v = mmio_read32(a);
+        if (v == 0xFFFFFFFFU) nonff++;
+        else if (v == 0)          zeros++;
+        else if ((v & 0xFFFFFF00U) == 0xFFFFFF00U) {
+            /* КЛАСС ЗАКРЫТЫХ ГЕЙТОВ. Печатаем каждый - их десятки, и они и есть
+             * содержание окна. Потолок защищает кольцевой лог. */
+            if (v == 0xFFFFFF8FU) m8f++;
+            else                  mcf++;
+            pjt_log_cand(a, v, &printed);
+        }
+    }
+    ulogf(L"XPJT win 0x%08x..0x%08x: nonff=%d mask8f=%d maskcf=%d zeros=%d\n",
+          PJT_WIN_LO, PJT_WIN_HI, nonff, m8f, mcf, zeros);
+    Print(L"xpjt: win C800: nonff=%d mask8f=%d maskcf=%d zeros=%d\n",
+          nonff, m8f, mcf, zeros);
+
+    /* --- 2. Младшее окно BAR0: там может быть сам PJTAG --- */
+    nonff = m8f = mcf = zeros = 0;
+    for (a = PJT_SCAN_LO; a <= PJT_SCAN_HI; a += 4) {
+        v = mmio_read32(a);
+        if (v == 0xFFFFFFFFU) nonff++;
+        else if (v == 0)          zeros++;
+        else if ((v & 0xFFFFFF00U) == 0xFFFFFF00U) {
+            if (v == 0xFFFFFF8FU) m8f++;
+            else                  mcf++;
+            pjt_log_cand(a, v, &printed);
+        }
+    }
+    ulogf(L"XPJT scan 0x%08x..0x%08x: nonff=%d mask8f=%d maskcf=%d zeros=%d\n",
+          PJT_SCAN_LO, PJT_SCAN_HI, nonff, m8f, mcf, zeros);
+
+    /* --- 3. priv-окно 0x82xxxx: эталонная карта гейтов проекта --- */
+    nonff = m8f = mcf = zeros = 0;
+    for (a = PJT_PRIV_LO; a <= PJT_PRIV_HI; a += 4) {
+        v = mmio_read32(a);
+        if (v == 0xFFFFFFFFU) nonff++;
+        else if (v == 0)          zeros++;
+        else if ((v & 0xFFFFFF00U) == 0xFFFFFF00U) {
+            if (v == 0xFFFFFF8FU) m8f++;
+            else                  mcf++;
+            pjt_log_cand(a, v, &printed);
+        }
+    }
+    ulogf(L"XPJT priv 0x%08x..0x%08x: nonff=%d mask8f=%d maskcf=%d zeros=%d\n",
+          PJT_PRIV_LO, PJT_PRIV_HI, nonff, m8f, mcf, zeros);
+
+    /* --- 4. XP3G-окно: где уже есть открытый гейт, для сравнения --- */
+    nonff = m8f = mcf = zeros = 0;
+    for (a = PJT_XP3G_LO; a <= PJT_XP3G_HI; a += 4) {
+        v = mmio_read32(a);
+        if (v == 0xFFFFFFFFU) nonff++;
+        else if (v == 0)          zeros++;
+        else if ((v & 0xFFFFFF00U) == 0xFFFFFF00U) {
+            if (v == 0xFFFFFF8FU) m8f++;
+            else                  mcf++;
+            pjt_log_cand(a, v, &printed);
+        }
+    }
+    ulogf(L"XPJT xp3g 0x%08x..0x%08x: nonff=%d mask8f=%d maskcf=%d zeros=%d\n",
+          PJT_XP3G_LO, PJT_XP3G_HI, nonff, m8f, mcf, zeros);
+
+    ulogf(L"XPJT printed %d candidates (cap %d)\n", printed, PJT_LOG_MAX);
+    ulogf(L"XPJT === E-F done: %s ===\n", tag);
+    fx_mk_acc(t, L"xpjt: E-F PJTAG / gate hunt, read only");
+}
+#endif /* PJTAG_SCAN */
 #endif /* RENDER_MASKS */
 
 
@@ -14440,6 +14586,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * ОТКРЫТОМ гейте, с readback. Ни кика, ни ретрейна, ни записей в
          * LINK_CAP: скорость линка этим блоком не меняется. Требует E-B. */
         xg_tls_bar0(L"xtl");
+#endif
+#ifdef PJTAG_SCAN
+        /* ЭКСПЕРИМЕНТ E-F. ТОЛЬКО ЧТЕНИЕ: поиск класса запертых гейтов
+         * 0xFFFFFFxx по BAR0, вокруг адреса PJTAG из чужого проекта и по
+         * priv-окнам. Ни одной записи. Снимает потолок доступа после того, как
+         * Gen2 упёрся в "регистр недоступен". */
+        xg_pjtag_scan(L"xpjt");
 #endif
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "
