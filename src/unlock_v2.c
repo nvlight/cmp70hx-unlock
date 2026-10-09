@@ -7595,6 +7595,145 @@ xg_cap_diag(const CHAR16 *tag)
     fx_mk_acc(t, L"xcap: E-D capability chain diagnostic");
 }
 #endif /* XP3G_CAP_DIAG */
+
+#if defined(XP3G_TLS_BAR0) && defined(XP3G_GATE_POLICY)
+/* ==== ЭКСПЕРИМЕНТ E-E: ПРИМЕТ ЛИ BAR0-ЗЕРКАЛО TLS ПРИ ОТКРЫТОМ ГЕЙТЕ ======
+ *
+ * Проблема, которую поставил E-D. На GPU цепочки PCIe capabilities НЕТ:
+ *
+ *   XCAP raw GPU/gBr id=0x248A10DE 0x04=0x00100006 CapPtr=0x00 capLo=0x06
+ *   XCAP RESULT GPU/capptr -> 0 (steps=0)
+ *
+ * Байт 0x07 = 0x00, то есть CapPtr обнулён и обход не начинается. Обход с 0x40
+ * читает на GPU мусор - id=0xDE это BAR4, а не capability:
+ *
+ *   XCAP walk GPU/from40 step 0 pos=0x40 id=0xDE next=0x10
+ *
+ * На МОСТЕ capability есть, но указатель на неё тоже обнулён:
+ *
+ *   XCAP raw BRIDGE  id=0xA1678086 0x04=0x00100007 CapPtr=0x00 capLo=0x07
+ *   XCAP RESULT BRIDGE/gBr-from40 -> 64 (steps=1 lastid=0x10)   <- HIT на 0x40
+ *
+ * Итог E-D: мост читается и TLS на нём поставить можно; на GPU через PCI config
+ * поставить НЕЧЕГО, capability-структуры нет.
+ *
+ * ЧТО ПРОВЕРЯЕМ. Link Control 2 существует в BAR0 как зеркало того же регистра:
+ *   BAR0 0x880A8  = LC2 (LINK_CTRL_2), мы его читаем в дампах;
+ *   PCI config cap+0x30 = тот же регистр на другой стороне.
+ * Проблема была в том, что ЗАПИСЬ в 0x880A8 отбрасывалась (1p ошибка 2). Но
+ * те записи шли ПРИ ЗАКРЫТОМ гейте. Гейт с тех пор открыт (E-A), и это ровно
+ * то, что здесь проверяется: изменилось ли поведение.
+ *
+ * ЧТО ВАЖНО НЕ СДЕЛАТЬ. LINK_CAP 0x88084 НЕ пишем ни в коем случае: он
+ * скорость-ибловый и живой - следует за фактическим линком, кремний клампит
+ * Gen3 (REGISTERS.md, замер "write 03 -> readback 02"). TLS - другое поле.
+ *
+ * ЛИНК НЕ ТРОГАЕМ. Ни кика, ни ретрейна, ни LnkSta-записей. Только запись
+ * TLS-полей с readback и чтение LnkSta как контроль. Даже если TLS встанет,
+ * ретрейн в этом блоке НЕ делается - это отдельное решение E-C.
+ *
+ * ЗАЩИТА ОТ ТАВТОЛОГИИ, как в E-B: поле, у которого цель совпала с «до»,
+ * помечается NOOP и в счёт пройденных не идёт.
+ *
+ * ОТКАТ БЕЗОПАСЕН. Запись в зеркало TLS, даже если она встанет, не меняет
+ * negotiated speed: линок переходит на новую скорость только по ретрейну.
+ * POST вернёт регистр в сток в любом случае.
+ */
+typedef struct {
+    UINT32 addr;
+    UINT32 clrMask;
+    UINT32 setBits;
+    CHAR8  name[12];
+} XT_TLS;
+
+static const XT_TLS xt_tls[] = {
+    /* LC2: Target Link Speed в младшем ниббле. */
+    { 0x000880a8U, 0x0000000fU, 0x00000002U, "LC2_TLS"    },
+    /* Контрольные: те же поля политики, что и в E-B, но в BAR0-виде.
+     * Если хотя бы одно из них не встанет - значит проблема не в TLS, а в
+     * доступе к BAR0-зеркалам вообще, и вывод E-E будет другой. */
+    { 0x0008c040U, 0x000c0000U, 0x00080000U, "LINK_CONFIG"},
+    { 0x0008c1c0U, 0x00060000U, 0x00040000U, "PL_LINKRATE"},
+};
+#define XT_TLS_N ((INTN)(sizeof(xt_tls) / sizeof(xt_tls[0])))
+
+static void
+xg_tls_bar0(const CHAR16 *tag)
+{
+    UINT32 gate, st, stAfter, changed, ok, i;
+    UINT64 t;
+
+    t = fx_now_us();
+
+    gate = mmio_read32(0x0008e1b0U);
+    if (gate != 0xffffffffU) {
+        ulogf(L"XTL precondition FAIL: gate 0x0008e1b0=0x%08x not open\n", gate);
+        Print(L"xtl: SKIPPED, gate not open\n");
+        return;
+    }
+    ulogf(L"XTL precondition OK: gate open - testing whether the BAR0 mirror "
+           L"now accepts a write, which it did not while the gate was shut\n");
+
+    st = mmio_read32(0x00088088U);
+    ulogf(L"XTL link BEFORE: LNKSTA=0x%08x speed=%d width=%d\n", st,
+          (INTN)((st >> 16) & 0xF), (INTN)((st >> 4) & 0x3F));
+
+    changed = 0; ok = 0;
+    for (i = 0; i < XT_TLS_N; i++) {
+        UINT32 cur  = mmio_read32(xt_tls[i].addr);
+        UINT32 want = (cur & ~xt_tls[i].clrMask) | xt_tls[i].setBits;
+        UINT32 got;
+
+        ulogf(L"XTL %s 0x%08x before=0x%08x want=0x%08x %s\n",
+              xt_tls[i].name, xt_tls[i].addr, cur, want,
+              (want == cur) ? "NOOP" : "CHANGE");
+        if (want == cur) {
+            Print(L"xtl: %s 0x%08x already 0x%08x - NOOP, not counted\n",
+                  xt_tls[i].name, xt_tls[i].addr, cur);
+            continue;
+        }
+        changed++;
+        mmio_write32(xt_tls[i].addr, want);
+        got = mmio_read32(xt_tls[i].addr);
+        if (got == want) {
+            ok++;
+            ulogf(L"XTL %s 0x%08x wrote 0x%08x got 0x%08x STUCK\n",
+                  xt_tls[i].name, xt_tls[i].addr, want, got);
+            Print(L"xtl: %s 0x%08x -> 0x%08x OK\n", xt_tls[i].name,
+                  xt_tls[i].addr, got);
+        } else {
+            ulogf(L"XTL %s 0x%08x wrote 0x%08x got 0x%08x DROPPED\n",
+                  xt_tls[i].name, xt_tls[i].addr, want, got);
+            Print(L"xtl: %s 0x%08x -> 0x%08x DROPPED\n", xt_tls[i].name,
+                  xt_tls[i].addr, got);
+        }
+    }
+
+    stAfter = mmio_read32(0x00088088U);
+    ulogf(L"XTL link AFTER : LNKSTA=0x%08x speed=%d width=%d\n", stAfter,
+          (INTN)((stAfter >> 16) & 0xF), (INTN)((stAfter >> 4) & 0x3F));
+    ulogf(L"XTL summary: %d of %d changed fields stuck (%d NOOP not counted)\n",
+          ok, changed, XT_TLS_N - changed);
+
+    if ((changed > 0) && (ok == changed)) {
+        ulogf(L"XTL VERDICT: MIRROR-OK - BAR0 TLS mirror accepts writes now "
+               "that the gate is open; E-C can be retried. NOT retrained here, "
+               "link speed is unchanged on purpose\n");
+        Print(L"xtl: VERDICT MIRROR-OK\n");
+    } else if (changed > 0) {
+        ulogf(L"XTL VERDICT: MIRROR-BLOCKED - %d of %d stuck; the gate was not "
+               "the reason the BAR0 mirror refused writes\n", ok, changed);
+        Print(L"xtl: VERDICT MIRROR-BLOCKED %d/%d\n", ok, changed);
+    } else {
+        ulogf(L"XTL VERDICT: NO-CHANGE - every field already at target; "
+               "nothing proven\n");
+        Print(L"xtl: VERDICT NO-CHANGE\n");
+    }
+
+    ulogf(L"XTL === E-E done: %s ===\n", tag);
+    fx_mk_acc(t, L"xtl: E-E TLS via BAR0 mirror, gate open");
+}
+#endif /* XP3G_TLS_BAR0 && XP3G_GATE_POLICY */
 #endif /* RENDER_MASKS */
 
 
@@ -14295,6 +14434,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * трогаем. Разбирает причину NO-PCIE-CAP, из-за которой E-C вышел по
          * страховке. */
         xg_cap_diag(L"xcap");
+#endif
+#ifdef XP3G_TLS_BAR0
+        /* ЭКСПЕРИМЕНТ E-E. Только запись TLS-полей через BAR0-зеркало при
+         * ОТКРЫТОМ гейте, с readback. Ни кика, ни ретрейна, ни записей в
+         * LINK_CAP: скорость линка этим блоком не меняется. Требует E-B. */
+        xg_tls_bar0(L"xtl");
 #endif
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "

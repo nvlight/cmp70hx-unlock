@@ -445,6 +445,47 @@ build_one xcap                -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
                               -DXP3G_CAP_DIAG
 
+# E-E (2026-10-09) - примет ли BAR0-зеркало TLS запись ПРИ ОТКРЫТОМ гейте.
+#
+# ЧТО ПОСТАВИЛ E-D. На GPU цепочки PCIe capabilities нет вовсе:
+#   XCAP raw GPU/gRb id=0x248A10DE 0x04=0x00100006 CapPtr=0x00 capLo=0x06
+#   XCAP RESULT GPU/capptr -> 0 (steps=0)
+#   XCAP walk GPU/from40 step 0 pos=0x40 id=0xDE next=0x10
+# Байт 0x07 = 0x00, CapPtr обнулён; обход с 0x40 читает BAR4, а не capability.
+# На МОСТЕ capability ЕСТЬ, но указатель тоже обнулён:
+#   XCAP RESULT BRIDGE/gBr-from40 -> 64 (steps=1 lastid=0x10)   HIT на 0x40
+#
+# ИТОГ: мост читается, TLS на нём поставить можно; на GPU через PCI config
+# поставить нечего. Остаётся BAR0-зеркало того же LC2: 0x880A8.
+#
+# ЧТО ПРОВЕРЯЕМ. Запись в 0x880A8 отбрасывалась (1p ошибка 2), но те записи шли
+# ПРИ ЗАКРЫТОМ гейте. Гейт с тех пор открыт (E-A) - проверяем, изменилось ли.
+#
+# ЧТО ВАЖНО НЕ ДЕЛАТЬ. LINK_CAP 0x88084 НЕ пишем: speed-ниббл живой, следует
+# за фактическим линком, кремний клампит Gen3. TLS - другое поле.
+#
+# ЛИНК НЕ ТРОГАЕМ. Ни кика, ни ретрейна, ни записей в LnkSta. Даже если TLS
+# встанет, negotiated speed не изменится: линок идёт на новую скорость только
+# по ретрейну. Это отдельное решение E-C.
+#
+# Контрольные поля те же, что в E-B, но в BAR0-виде: если и они не встанут,
+# вывод будет не про TLS, а про доступ к BAR0-зеркалам вообще.
+# Защита от тавтологии как в E-B: поле с целью == «до» идёт как NOOP и в счёт
+# пройденных не идёт.
+#
+# Приёмка:
+#   XTL precondition OK: gate open
+#   XTL link BEFORE: LNKSTA=0x.. speed=1
+#   XTL LC2_TLS 0x000880a8 before=0x.. want=0x.. CHANGE
+#   XTL LC2_TLS 0x000880a8 wrote 0x.. got 0x.. STUCK|DROPPED
+#   XTL summary: N of M changed fields stuck (K NOOP not counted)
+#   XTL link AFTER : LNKSTA=0x.. speed=1   <- обязано остаться 1
+#   XTL VERDICT: MIRROR-OK | MIRROR-BLOCKED | NO-CHANGE
+build_one xtls                -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
+                              -DXP3G_TLS_BAR0
+
 # E6 (2026-10-08) - проверка отчётчика селектора. САМЫЙ ДЕШЁВЫЙ ЭКСПЕРИМЕНТ
 # ИЗ ВСЕХ: НОЛЬ новых записей.
 #
