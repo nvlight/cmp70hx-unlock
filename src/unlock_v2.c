@@ -7338,6 +7338,91 @@ xg_link_probe(const CHAR16 *tag)
            L"time in this project ===\n");
     xg_snap("before");
 
+#if defined(XP3G_XVE_MASK)
+    /* --- Шаг 0 (E-F): открыть XVE-маску PCIe-домена ДО ретрейна ----------
+     *
+     * ЗАЧЕМ. Референс iatethelogs (rejoin16-cycle.sh) открывает ровно две
+     * маски: 0x823800 (FEAT PLM) и 0x88FE8 (XVE). Первую мы открываем
+     * (рендер-стадия G2RMK), вторую НЕ открывали НИ РАЗУ ни в одной сборке.
+     * Прогон 2026-10-10 (xgate3) поэтому мерил не тот рецепт: гейт 0x8E1B0
+     * и policy set — из нашего списка, а XVE-маски из референсного в нём
+     * не было. docs/70HX-XP3G-GATE-V67.md §4a.11.11.
+     *
+     * ГИПОТЕЗА, КОТОРУЮ ЭТО ПРОВЕРЯЕТ. Шаг 1 ниже пишет TLS=2 в LNKCTL2
+     * (cap+0x30) на GPU и запись DROPPED — readback 0x0001, тогда как на
+     * мосте тот же бит встал. Если XVE-маска держит запись в PCIe-домене,
+     * после её открытия шаг 1 обязан перестать отбрасываться. Это
+     * ПРОВЕРЯЕМО: строка шага 1 печатается в этом же прогоне.
+     *
+     * ПОРЯДОК. Маска открывается ДО шага 1, потому что её назначение —
+     * снять защиту с записи в домен до того, как туда кто-то пишет. После
+     * шага 1 открытие бессмысленно: отброшенную запись надо повторить.
+     *
+     * ЧТО ЗДЕСЬ НЕ ДЕЛАЕТСЯ. Не пишется 0x823800: рендер-стадия уже открыла
+     * его раньше по коду, и повтор здесь ничего бы не изменил. Не делается
+     * кик LTSSM и не трогается LINK_CAP — это шаги 3 и отдельная тема.
+     */
+    {
+        UINT32 b4 = mmio_read32(0x00088fe8U);
+        UINT32 g4;
+        ulogf(L"XVM  precondition: gate=0x%08x XVE_D0(0x88fe8)=0x%08x\n",
+              gate, b4);
+        mmio_write32(0x00088fe8U, 0xffffffffU);
+        /* Запись может быть синхронной, а может нет: у 0x823800 readback
+         * читался с polls=0, но это не доказательство для этого адреса.
+         * Опрос короткий, 400 мс — ровно как у рендер-масок. */
+        g4 = mmio_read32(0x00088fe8U);
+        for (i = 0; g4 != 0xffffffffU && i < 400; i++) {
+            uefi_call_wrapper(BS->Stall, 1, 1000);
+            g4 = mmio_read32(0x00088fe8U);
+        }
+        ulogf(L"XVM  0x00088fe8 before=0x%08x wrote 0xffffffff got 0x%08x %s "
+               L"(polls=%d)\n", b4, g4,
+              (g4 == 0xffffffffU) ? L"OPEN" : L"LOCKED", (INTN)i);
+        Print(L"xvm: XVE 0x88fe8 0x%08x -> 0x%08x %s\n", b4, g4,
+              (g4 == 0xffffffffU) ? L"OPEN" : L"LOCKED");
+
+        /* Соседние маски того же домена (0x88FE8..0x88FF8 идут подряд,
+         * KNOWN-ISSUES.md §51.7). Их открытие НЕ требуется для рецепта
+         * референса, но показывает, открывается ли домой целиком или
+         * по одному адресу. Одна попытка каждая, без повторов. */
+        {
+            static const UINT32 xvm_addr[4] = {
+                0x00088fecU, 0x00088ff0U, 0x00088ff4U, 0x00088ff8U
+            };
+            UINT32 k;
+            for (k = 0; k < 4; k++) {
+                UINT32 b = mmio_read32(xvm_addr[k]);
+                UINT32 g;
+                if (b == 0xffffffffU) {
+                    ulogf(L"XVM  0x%08x already 0xffffffff - NOOP\n",
+                          xvm_addr[k]);
+                    continue;
+                }
+                mmio_write32(xvm_addr[k], 0xffffffffU);
+                g = mmio_read32(xvm_addr[k]);
+                ulogf(L"XVM  0x%08x before=0x%08x wrote 0xffffffff got 0x%08x "
+                       L"%s\n", xvm_addr[k], b, g,
+                      (g == 0xffffffffU) ? L"OPEN" : L"LOCKED");
+            }
+        }
+
+        if (g4 == 0xffffffffU) {
+            ulogf(L"XVM  VERDICT: XVE-MASK-OPEN - the PCIe-domain write mask "
+                   L"took; whether that unblocks TLS=2 on the GPU is decided by "
+                   L"step1 below, not here\n");
+            Print(L"xvm: VERDICT XVE-MASK-OPEN\n");
+        } else {
+            ulogf(L"XVM  VERDICT: XVE-MASK-LOCKED - 0x88fe8 did not open; the "
+                   L"domain is protected by something the gate 0x8e1b0 does "
+                   L"not cover. Step1 will still be DROPPED, and that is now "
+                   L"measured rather than guessed\n");
+            Print(L"xvm: VERDICT XVE-MASK-LOCKED\n");
+        }
+        ulogf(L"XVM  === E-F done: xve domain mask ===\n");
+    }
+#endif /* XP3G_XVE_MASK */
+
     /* --- Шаг 1: TLS = 2 (5 GT/s) на GPU, через PCI config. Readback. --- */
     {
         UINT32 lc2 = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);

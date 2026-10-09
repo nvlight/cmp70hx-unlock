@@ -417,6 +417,36 @@ build_one xgate3              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
                               -DXP3G_LINK_RETRAIN
 
+# E-F (2026-10-10) - XVE-маска 0x88FE8 ПЕРЕД ретрейном. Это то, чего не было
+# ни в одной сборке проекта, и то, что делает референс iatethelogs.
+#
+# ПОЧЕМУ НОВЫЙ ФЛАГ, А НЕ ИЗМЕНЕНИЕ xgate3. xgate3 проверен на железе, его
+# отпечаток стоит в out/flash-build.ps1 как предыдущий; менять его под новый
+# опыт - значит потерять проверенный бинарь. Флаг ничего не меняет в
+# xgate3/xgate2: без него препроцессор вырезает блок целиком.
+#
+# ЧТО ПРОВЕРЯЕТ. Гипотеза, что TLS=2 на GPU отбрасывается из-за маски
+# PCIe-домена. Если после её открытия шаг 1 перестанет давать DROPPED -
+# причина найдена. Если маска не откроется - вопрос закрывается в другую
+# сторону, и это тоже измерение, а не догадка.
+#
+# ОТЛИЧИЕ ОТ ПРОВАЛА РЕНДЕР-МАСОК (v3.19). Те 0x88FE8..0x88FF8 не открылись
+# ботером - лимит «два выстрела на бут-цикл», см. комментарий в unlock_v2.c
+# около G2RMC. Здесь ботер НЕ используется: пишем напрямую MMIO после
+# открытия гейта 0x8E1B0, тем же способом, каким E-B пишет policy set.
+# Это другой механизм, и прошлый отказ его не опровергает.
+#
+# Приёмка:
+#   XVM  0x00088fe8 before=... wrote 0xffffffff got 0xffffffff OPEN
+#   XVM  VERDICT: XVE-MASK-OPEN | XVE-MASK-LOCKED
+#   XCK step1 GPU ... TLS=2 OK | NOT SET   <- главное: стало ли OK
+#   XCK VERDICT: RETRAIN-OK | RETRAIN-FAIL
+# Разбор - docs/70HX-XP3G-GATE-V67.md §4a.11.11.
+build_one xgate4              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
+                              -DXP3G_LINK_RETRAIN -DXP3G_XVE_MASK
+
 # E-D (2026-10-09) - разбор причины NO-PCIE-CAP. ТОЛЬКО ЧТЕНИЕ, линок не
 # трогаем: E-C вышел по страховке, потому что find_pcie_cap() вернул 0 на обоих
 # концах. Ни в одном прогоне проекта обход capability ничего не находил:
