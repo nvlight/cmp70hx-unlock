@@ -81,9 +81,9 @@ $gspRef = Join-Path $outDir 'gsp_ga10x.bin'
 # image the code never actually loaded.
 # The previous reference 2abf59a8 (v3.40, 671744 B) is what
 # 'git checkout rollback-2026-10-04' brings back.
-$REF_MD5       = 'C68878AFAFD0D2D246D2E25C5ACBD888'
+$REF_MD5       = '3C076AF7CF7C2BDA65FDA01F7678982C'
 $REF_SIZE      = 680960
-$ROLLBACK_TAG  = 'rollback-2026-10-04'   # v3.40 image (2abf59a8)
+$ROLLBACK_TAG  = 'rollback-2026-10-10'   # find_pcie_cap fix, 3c076af7, verified on HW
 # GSP blob is no longer part of the payload: since v3.42 the app never reads it
 # off the stick. Kept only so that a stick which still carries a copy is not
 # reported as tampered with.
