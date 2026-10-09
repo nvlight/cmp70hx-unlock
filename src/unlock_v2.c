@@ -4738,6 +4738,360 @@ static void chip_size_scan(const CHAR16 *tag)
 }
 #endif /* CHIP_SIZE_SCAN */
 
+#ifndef SM_ACF
+#define SM_ACF 0
+#endif
+#if SM_ACF
+/* --- ОПРЕДЕЛЕНИЕ ГЕОМЕТРИИ SM ИЗ САМОГО BAR0, v2 (2026-10-09) ----------
+ *
+ * ЧЕТЫРЕ ПРОГОНА, И ЧЕТЫРЕ МОИ ОШИБКИ. Ни одна не была в железе.
+ *
+ *   1  база 0 и шаг 0x80, перенесённые из TU102 -> читались первые
+ *      64 КБ BAR0, где SM нет; вердикт "ALIVE 45" был артефактом;
+ *   2  критерий "не 0xbadf и нули" -> зарезервированная область
+ *      проходит его идеально, отдавая ноль; "окно из 24 юнитов"
+ *      при дочитывании оказалось 0xBADF1100;
+ *   3  окно 0x400000 -> не пересеклось ни с одним известным адресом
+ *      (наши регистры в 0x80000..0x840000);
+ *   4  алгоритм O(N^3) -> прогон на 6 блоках занял 334 секунды
+ *      (t=337941ms против t=3980ms в логе), а я расширил объём
+ *      до 32 блоков и получил около 30 минут. Загрузка висела, и
+ *      человек её прервал.
+ *
+ * Пункт 4 - главный, и он про ту же ошибку, что и остальные: я
+ * ОБОЗНАЧИЛ стоимость, не посчитав её. В коде стояло "единицы
+ * миллисекунд", реально было 334 секунды - расхождение в 70000 раз.
+ * Оценивал я по числу чтений BAR0 (их действительно немного) и
+ * не учёл, что внутри каждого совпадения крутится ещё полный проход
+ * по блоку. Проверялась работоспособность, стоимость - нет.
+ *
+ * ПОЧЕМУ ТЕПЕРЬ НЕ O(N^3).
+ *
+ * Старый код: цикл по i, цикл по j, и ВНУТРИ каждой совпавшей пары
+ * (i,j) ещё один полный цикл по блоку. Отсюда N^3 = 5.5e11 на блок.
+ *
+ * Новый код сортирует пары (значение, позиция) по значению, из-за чего
+ * одинаковые значения стоят рядом, и внутри группы считает разности
+ * позиций. Стоимость - сумма k^2 по группам, а она ограничена сверху
+ * величиной MAXOCC. Замерено на том же синтетическом блоке:
+ *
+ *     синтетика (30 юнитов, настоящий массив)   6.6 мс, массив найден
+ *     сплошная заливка одним значением          2.1 мс, 0 кандидатов
+ *     чередование двух значений                 2.3 мс, 0 кандидатов
+ *     случайные данные                          2.3 мс, 0 кандидатов
+ *
+ * 32 блока - около 72 мс против 334 секунд на 6 блоках раньше.
+ *
+ * ЖЁСТКИЙ БЮДЖЕТ ВРЕМЕНИ.
+ *
+ * Пункт 4 показал, что цена ошибки здесь - зависшая загрузка, а её
+ * чинит только перезагрузка. Поэтому сверху стоит отсечка по TSC: при
+ * превышении ACF_BUDGET_US скан прерывается и пишет ACFTO. Медленный
+ * или нечитаемый регион теперь физически не может затянуть загрузку,
+ * даже если логика ошибочна.
+ *
+ * ЧТО ЭТО ДАСТ И ЧТО НЕ ДАСТ - ДО ПРОГОНА.
+ *
+ * Даст независимое от multiProcessorCount число TPC/SM-слотов.
+ * Не даст способа включить лишние юниты: все известные проекты трогают
+ * только FEAT_OVR, SS0, SS1 и конфигурацию GSP-RM, а конфигурация
+ * GPC/TPC не тронута никем. Успех - это ответ на вопрос, а не
+ * разблокировка.
+ *
+ * БЕЗОПАСНОСТЬ. Только чтение, записи в железо нет, анлок не
+ * затрагивается, откат = перезагрузка. */
+
+#define ACF_WIN        0x00400000UL   /* документированный якорь: ID + 0x400000 */
+#define ACF_BLOCK_N    8192UL         /* dword в блоке: 32 КБ            */
+#define ACF_NBLOCKS    32UL           /* 32 x 32 КБ = 1 МБ               */
+#define ACF_RANGE      0x00200000UL   /* диапазон фазы B                 */
+#define ACF_ABSENT_HI  0xbadfUL       /* признак отсутствующего регистра */
+#define ACF_MINPAIRS   8UL            /* полных пар - порог кандидата    */
+#define ACF_TOPN       5UL            /* печатаем только лучших          */
+
+/* Нижняя граница шага. Без неё метод выдаёт тавтологию: ЛЮБОЙ ряд из
+ * одинаковых dword-ов даёт совпадения при сдвиге 4, 8, 12, ... байт.
+ * Прогон 2026-10-09 (окно 0x400000) поэтому и выдал "43 units" с шагом
+ * 0x4 - это не массив, это run одинаковых слов. */
+#define ACF_MIN_STRIDE 0x40UL
+
+/* Верхняя граница кратности значения. Если значение встречается чаще,
+ * это заливка (замаскированная или reserved область), а не массив:
+ * сплошной 0xFFFFFFFF даёт 1 + (N - S) полных пар при ЛЮБОМ шаге, то
+ * есть идеальный ложный всплеск. Именно он дал 33 млн кандидатов в
+ * прогоне с окном 0x80000. */
+#define ACF_MAXOCC     512UL
+
+/* Бюджет времени на весь скан, микросекунды. При превышении - отказ. */
+#define ACF_BUDGET_US  20000000ULL    /* 20 секунд                       */
+
+/* ПОЛОЖИТЕЛЬНЫЙ КОНТРОЛЬ.
+ *
+ * Три прогона подряд выдали артефакты, и во всех виноваты были мои
+ * параметры. Контроль отвечает на вопрос, который те прогоны не
+ * задавали: работает ли вообще инструмент. Метод обязан найти в BAR0
+ * те самые значения, что проект печатает в GEN2R каждый прогон. Если
+ * контроль не прошёл - вывод один: прибор негоден, и это признаётся
+ * сразу, а не подгоняется. */
+typedef struct { UINT32 addr; UINT32 val; const CHAR16 *name; } ACF_CTRL;
+
+static const ACF_CTRL g_acfCtrl[] = {
+    { 0x00088084UL, 0x00453D01UL, L"LINK_CAP"      },
+    { 0x0008841CUL, 0x20360500UL, L"PRIV_MISC_1"   },
+    { 0x0008C2C0UL, 0x00802005UL, L"CYA_0"         },
+    { 0x0082381CUL, 0x88888888UL, L"SS0"           },
+    { 0x00823820UL, 0x00000008UL, L"SS1"           },
+};
+#define ACF_CTRL_N ((INTN)(sizeof(g_acfCtrl)/sizeof(g_acfCtrl[0])))
+
+/* Пары (значение, позиция). Сортируются по значению, поэтому одинаковые
+ * значения оказываются рядом и их позиции уже по возрастанию. */
+typedef struct { UINT32 val; UINT32 pos; } ACF_ENT;
+
+/* Лучший найденный кандидат по всем блокам. */
+typedef struct {
+    UINT32 value;     /* повторяющееся значение                            */
+    UINT32 stride;    /* шаг в байтах, между юнитами                       */
+    UINT32 count;     /* сколько пар (off, off+S) совпало                  */
+    UINT32 addr;      /* BAR0-адрес, выровненный по шагу                   */
+} ACF_HIT;
+
+static ACF_ENT     g_acfEnt[ACF_BLOCK_N];
+static UINT16      g_acfDelta[ACF_BLOCK_N];   /* гистограмма шагов, dword */
+static UINT16      g_acfTouched[ACF_BLOCK_N]; /* индексы, куда писали    */
+
+/* Маски, которые повторяются и потому дают ложные всплески.
+ *
+ *   0x00000000  зарезервированная область BAR0 отдаёт ноль
+ *   0xbadf..... признак отсутствующего регистра
+ *   0xFFFFFFFF  признак замаскированного/не реализованного регистра
+ *   0x77777777  тот же "выключен" в виде маски
+ *   0x00000001  флаг "включено", повторяется на каждом юните
+ *
+ * Первые две исключались с самого начала, остальные три добавлены после
+ * прогона с окном 0x80000, где блок 0xA0000 оказался сплошным
+ * 0xFFFFFFFF. Это те же "отсутствующие" регистры, просто другой
+ * константой, и исключать их следовало сразу. */
+static INTN acf_is_mask(UINT32 v)
+{
+    if (v == 0x00000000UL) return 1;
+    if ((v >> 16) == ACF_ABSENT_HI) return 1;
+    if (v == 0xFFFFFFFFUL) return 1;
+    if (v == 0x77777777UL) return 1;
+    if (v == 0x00000001UL) return 1;
+    return 0;
+}
+
+/* Сортировка по паре (значение, позиция).
+ *
+ * Именно по ПАРЕ, а не только по значению. Предыдущая версия сравнивала
+ * только val и полагалась на стабильность shell sort для равных
+ * элементов. Стабильности там нет: сортировка с зазорами переставляет
+ * равные элементы между проходами, позиции внутри группы оказывались
+ * в произвольном порядке, и выражение e[b].pos - e[a].pos уходило в
+ * минус. Далее g_acfDelta[d] обращался ЗА ГРАНИЦУ массива. На стенде
+ * это ловится санитайзером как SEGV, а на железе означало бы тишину в
+ * логе вместо результата.
+ *
+ * Полный порядок по (val,pos) даёт позиции по возрастанию внутри
+ * группы гарантированно, а не по предположению. */
+static void acf_sort(ACF_ENT *a, UINT32 n)
+{
+    UINT32 gap, i, j;
+    ACF_ENT t;
+    for (gap = n / 2; gap > 0; gap /= 2) {
+        for (i = gap; i < n; i++) {
+            t = a[i];
+            for (j = i; j >= gap &&
+                 (a[j - gap].val > t.val ||
+                  (a[j - gap].val == t.val && a[j - gap].pos > t.pos));
+                 j -= gap)
+                a[j] = a[j - gap];
+            a[j] = t;
+        }
+    }
+}
+
+/* Обрабатывает один блок. Возвращает 0 при отказе по бюджету времени. */
+static INTN acf_block(const CHAR16 *tag, UINT32 blockBase, UINT32 blkIdx,
+                      UINT64 t0, ACF_HIT *bestOut)
+{
+    UINT32 i, n = 0, g0, g1, a, b;
+    UINT32 ntouch;
+    UINT32 raw = 0, uniq = 0, over = 0;
+    ACF_ENT *e = g_acfEnt;
+
+    for (i = 0; i < ACF_BLOCK_N; i++) {
+        UINT32 v = mmio_read32(blockBase + i * 4UL);
+        if (acf_is_mask(v)) continue;
+        e[n].val = v; e[n].pos = i; n++;
+    }
+    raw = ACF_BLOCK_N - n;
+
+    if (n == 0) {
+        ulogf(L"ACFC  %s blk %u @0x%08x: all masked or zero\n", tag, blkIdx, blockBase);
+        return 1;
+    }
+    acf_sort(e, n);
+
+    g0 = 0;
+    while (g0 < n) {
+        g1 = g0;
+        while (g1 < n && e[g1].val == e[g0].val) g1++;
+        {
+            UINT32 k = g1 - g0;
+            if (k > ACF_MAXOCC) {
+                over++;
+            } else if (k >= 2) {
+                ntouch = 0;
+                for (a = g0; a < g1; a++) {
+                    for (b = a + 1; b < g1; b++) {
+                        UINT32 d;
+                        /* Сортировка гарантирует возрастание позиций, но
+                         * проверка остаётся: при вычитании без неё
+                         * порядок нарушения превращается в индекс минус
+                         * миллиард, то есть в чтение и запись вне массива.
+                         * В бутлоадере это тишина в логе, а не сообщение. */
+                        if (e[b].pos <= e[a].pos) continue;
+                        d = e[b].pos - e[a].pos;
+                        if (d >= ACF_BLOCK_N) continue;
+                        if (d * 4UL < ACF_MIN_STRIDE) continue;
+                        if (g_acfDelta[d] == 0) {
+                            if (ntouch < ACF_BLOCK_N) g_acfTouched[ntouch++] = (UINT16)d;
+                        }
+                        g_acfDelta[d]++;
+                    }
+                }
+                for (i = 0; i < ntouch; i++) {
+                    UINT32 d = g_acfTouched[i];
+                    UINT32 c = g_acfDelta[d];
+                    if (c >= ACF_MINPAIRS) {
+                        uniq++;
+                        if (c > bestOut->count) {
+                            bestOut->count = c;
+                            bestOut->value = e[g0].val;
+                            bestOut->stride = d * 4UL;
+                            bestOut->addr = blockBase +
+                                (e[g0].pos - (e[g0].pos % d)) * 4UL;
+                        }
+                    }
+                    g_acfDelta[d] = 0;
+                }
+            }
+        }
+        g0 = g1;
+        if ((g0 & 0x3FF) == 0 && fx_now_us() - t0 > ACF_BUDGET_US) return 0;
+    }
+
+    ulogf(L"ACFC  %s blk %u @0x%08x: %u masked, %u kept, %u unique (val,stride), %u over-cap\n",
+          tag, blkIdx, blockBase, raw, n, uniq, over);
+    return 1;
+}
+
+/* --- ФАЗА B: по найденному шагу считаем юниты на большом диапазоне. -----
+ *
+ * Здесь BAR0 читается напрямую, поэтому 2 МБ диапазона не требуют
+ * памяти: нужен всего один dword на юнит. */
+static void acf_phase_b(const CHAR16 *tag, UINT32 anchor, UINT32 val, UINT32 S,
+                        UINT64 t0)
+{
+    UINT32 k, run = 0, best = 0, bestAt = 0, runAt = 0, total = 0;
+
+    for (k = 0; anchor + k * S < ACF_WIN + ACF_RANGE; k++) {
+        UINT32 a = anchor + k * S;
+        UINT32 v = mmio_read32(a);
+        if (v == val) {
+            if (run == 0) runAt = a;
+            run++; total++;
+            if (run > best) { best = run; bestAt = runAt; }
+        } else {
+            run = 0;
+        }
+        if ((k & 0x3FF) == 0 && fx_now_us() - t0 > ACF_BUDGET_US) {
+            ulogf(L"ACFTO %s phase B aborted by time budget at unit %u\n", tag, k);
+            break;
+        }
+    }
+    ulogf(L"ACFB  %s anchor 0x%08x val 0x%08x stride 0x%x: longest run %u units at 0x%08x, %u matched\n",
+          tag, anchor, val, S, best, bestAt, total);
+    ulogf(L"ACFB  %s claimed (multiProcessorCount) = 30. A run of identical values can\n"
+          L"ACFB  %s   also be a mask or config register that legitimately repeats per\n"
+          L"ACFB  %s   unit, so read the value before treating the run as an SM count.\n",
+          tag, tag, tag);
+}
+
+static void acf_control(const CHAR16 *tag)
+{
+    INTN k, ok = 0;
+    for (k = 0; k < ACF_CTRL_N; k++) {
+        UINT32 got = mmio_read32(g_acfCtrl[k].addr);
+        INTN  hit = (got == g_acfCtrl[k].val);
+        if (hit) ok++;
+        ulogf(L"ACFK  %s ctrl %-12s @0x%08x want 0x%08x got 0x%08x %s\n",
+              tag, g_acfCtrl[k].name, g_acfCtrl[k].addr,
+              g_acfCtrl[k].val, got, hit ? L"MATCH" : L"DIFFERS");
+    }
+    ulogf(L"ACFCN %s control %d of %d matched\n", tag, ok, ACF_CTRL_N);
+    if (ok == ACF_CTRL_N)
+        ulogf(L"ACFOK %s control PASSED: BAR0 reads are live and expected here.\n"
+              L"ACFOK %s   A missing per-SM array is then a real absence, not a\n"
+              L"ACFOK %s   broken read path.\n", tag, tag, tag);
+    else
+        ulogf(L"ACFBAD %s control FAILED (%d of %d). BAR0 reads here do not match what\n"
+              L"ACFBAD %s   the project has measured for months. Any per-SM result\n"
+              L"ACFBAD %s   from this run is VOID - the instrument is wrong.\n", tag, ok, ACF_CTRL_N, tag, tag);
+}
+
+static void sm_autocorr(const CHAR16 *tag)
+{
+    UINT32 blk;
+    UINT64 t0;
+    ACF_HIT best;
+    INTN   done = 1;
+
+    best.count = 0; best.value = 0; best.stride = 0; best.addr = 0;
+
+    ulogf(L"ACFA  %s %u blocks of %u dwords (%u KB) from BAR0 0x%08x\n",
+          tag, (UINTN)ACF_NBLOCKS, (UINTN)ACF_BLOCK_N,
+          (UINTN)(ACF_BLOCK_N * 4UL / 1024UL), ACF_WIN);
+    ulogf(L"ACFA  %s excluded: 0x00000000, 0xbadf....., 0xFFFFFFFF, 0x77777777, 0x1.\n"
+          L"ACFA  %s   Stride below 0x%x excluded: equal words match at 4/8/12 bytes\n"
+          L"ACFA  %s   by definition. Values occurring more than %u times excluded: that is\n"
+          L"ACFA  %s   a fill pattern, and it matches at every stride.\n",
+          tag, tag, (UINTN)ACF_MIN_STRIDE, tag, (UINTN)ACF_MAXOCC, tag);
+    ulogf(L"ACFA  %s time budget %u ms. Cost is sum(k^2) per distinct value, capped at\n"
+          L"ACFA  %s   %u, so it is bounded by construction - this scan cannot hang the boot.\n",
+          tag, (UINTN)(ACF_BUDGET_US / 1000ULL), tag, (UINTN)ACF_MAXOCC);
+
+    acf_control(tag);
+
+    t0 = fx_now_us();
+    for (blk = 0; blk < ACF_NBLOCKS; blk++) {
+        if (!acf_block(tag, ACF_WIN + blk * (ACF_BLOCK_N * 4UL), blk, t0, &best)) {
+            ulogf(L"ACFTO %s ABORTED by time budget at block %u of %u\n",
+                  tag, blk, (UINTN)ACF_NBLOCKS);
+            done = 0;
+            break;
+        }
+    }
+    ulogf(L"ACFT  %s scan of %u blocks took %u ms\n",
+          tag, (UINTN)(done ? ACF_NBLOCKS : ACF_NBLOCKS), (UINTN)((fx_now_us() - t0) / 1000ULL));
+
+    if (best.count < ACF_MINPAIRS) {
+        ulogf(L"ACFD  %s NO PERIODIC ARRAY. No unmasked value repeated with a stable\n"
+              L"ACFD  %s   stride at least %u times in %u blocks of %u KB at 0x%08x.\n"
+              L"ACFD  %s   With the control passing this is a real absence in this window,\n"
+              L"ACFD  %s   not a broken read path. It says nothing about other windows.\n",
+              tag, tag, (UINTN)ACF_MINPAIRS, (UINTN)ACF_NBLOCKS,
+              (UINTN)(ACF_BLOCK_N * 4UL / 1024UL), ACF_WIN, tag, tag);
+        return;
+    }
+    ulogf(L"ACFS  %s BEST val 0x%08x stride 0x%x pairs %u\n",
+          tag, best.value, best.stride, best.count);
+    acf_phase_b(tag, best.addr, best.value, best.stride, t0);
+}
+#endif /* SM_ACF */
+
 static void
 gen2_readonly_dump(const CHAR16 *tag)
 {
@@ -13436,6 +13790,14 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 #if CHIP_SIZE_SCAN
         /* v3.15: ищем, где хранится размер кристалла. Только чтение. */
         chip_size_scan(L"after-unlock");
+#endif
+#if SM_ACF
+        /* Определяем геометрию per-SM массива из содержимого BAR0:
+         * ни адрес, ни шаг не заданы заранее. Две предыдущие попытки
+         * предполагали геометрию (шаг 0x80 из документации 50HX для
+         * TU102) и обе выдали артефакты, см. описание блока. Ставится
+         * рядом с chip_size_scan, то есть до всех записей селектора. */
+        sm_autocorr(L"after-unlock");
 #endif
 #ifdef GEN2_LINK_TRY
 /* v3.43, этап 24: граница перед собственно записью GFX_SPEED_SELECT. */
