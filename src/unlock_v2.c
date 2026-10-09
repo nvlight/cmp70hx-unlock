@@ -7880,6 +7880,121 @@ xg_pjtag_scan(const CHAR16 *tag)
     fx_mk_acc(t, L"xpjt: E-F PJTAG / gate hunt, read only");
 }
 #endif /* PJTAG_SCAN */
+
+#ifdef FCFF_SCAN
+/* ==== ЭКСПЕРИМЕНТ E-G: ЧТО ЗАЩИЩАЮТ ЧЕТЫРЕ РЕГИСТРА 0xFFFFFFFC ============
+ *
+ * НАХОДКА. E-F (docs/70HX-XP3G-GATE-V67.md §4a.9) нашёл в priv-окне класс
+ * значений, которого в прежних выборках проекта не было: 0xFFFFFFFC, то есть
+ * заперты биты 0 и 1. Раньше встречались только 0xFFFFFF8F и 0xFFFFFFCF.
+ *
+ *   XPJT priv 0x00820000..0x00821FFF: nonff=7 mask8f=6 maskcf=4 zeros=448
+ *   0x008200D0=0xFFFFFF8F  0x008200D4=0xFFFFFFFC
+ *   0x008200D8=0xFFFFFF8F  0x008200DC=0xFFFFFF8F
+ *   0x008200E0=0xFFFFFF8F  0x008200E4=0xFFFFFF8F
+ *   0x008200E8=0xFFFFFFFC  0x008200EC=0xFFFFFFFC
+ *   0x008200F0=0xFFFFFFFC  0x008200F4=0xFFFFFF8F
+ *
+ * ПОЧЕМУ ИМЕННО ЭТО ИНТЕРЕСНО. Тот же блок 0x8200D0..0x8200F4 проект
+ * исключает из всех обходов, и на то есть причина в коде: "записи в этой зоне
+ * стабильно валят гостя в ресет на итерациях [29-31] (3 прогона подряд)". То
+ * есть про НИХ известно только одно - что их нельзя трогать. ЧТО ОНИ ЗАЩИЩАЮТ,
+ * не знает никто, и ни одного прогона, который бы об этом спрашивал, не было.
+ *
+ * ЧТО ПРОВЕРЯЕМ, ТОЛЬКО ЧТЕНИЕ. Разбираем битовые маски каждого из десяти:
+ *   - снимаем маску, сравниваем с соседями того же класса;
+ *   - выясняем, чем отличаются 0xFFFFFFFC от 0xFFFFFF8F в пределах одного
+ *     блока (какой бит замерен как "защищённый");
+ *   - смотрим, есть ли рядом уже ОТКРЫТЫЕ регистры (точный 0xFFFFFFFF) - это
+ *     покажет границу между защищённым и нет.
+ *
+ * ГИПОТЕЗА, КОТОРУЮ ЭТО МОЖЕТ ОПРОВЕРГНУТЬ. "0xFFFFFFFC = 4 гейта, которые
+ * можно открыть и которые дадут доступ". Возможно и наоборот: возможно, 0xFC -
+ * это НЕ маска, а другое состояние (статусное поле), и открывать там нечего.
+ * Именно поэтому сначала ЧТЕНИЕ: отличить "маска" от "статус" можно по чтению,
+ * а стоимость ошибки при записи здесь известна - ресет гостя.
+ *
+ * ЗАЧЕМ ЭТО НУЖНО, ЕСЛИ Gen2 УЖЕ ЗАКРЫТ. Закрыт потому, что НЕЧЕМ открыть
+ * LC2. Эти десять - единственные оставшиеся запертые регистры, которые вообще
+ * нашлись на карте. Если они ведут к домену, где лежит что-то ещё закрытое,
+ * это новая точка входа. Если нет - вопрос закрывается замером, а не
+ * рассуждением.
+ *
+ * НИ ОДНОЙ ЗАПИСИ. Даже если регистры окажутся масками: причину валить гостя
+ * в ресет никто не выяснял, и повторять прогоны 29-31 вслепую нельзя.
+ */
+static void
+xg_fcff_scan(const CHAR16 *tag)
+{
+    UINT32 a, v, opened, fcff, m8f, mcf;
+    UINTN  i;
+    UINT64 t;
+    static const struct { UINT32 base; UINT32 n; } blk[] = {
+        { 0x008200d0UL, 10 },   /* OPTB: тот самый блок, который исключён */
+    };
+
+    t = fx_now_us();
+    ulogf(L"XFCC === E-G start: what do the four 0xFFFFFFFC gates protect? "
+           L"READ ONLY ===\n");
+    ulogf(L"XFCC context: this block is excluded from every sweep in the project "
+           L"because writes there crash the guest (runs 29-31, three in a row)\n");
+    ulogf(L"XFCC known: classes seen before were 0xFFFFFF8F and 0xFFFFFFCF only\n");
+
+    for (i = 0; i < 1; i++) {
+        UINT32 base = blk[i].base;
+        ulogf(L"XFCC block 0x%08x n=%u\n", base, blk[i].n);
+
+        for (a = base; a < base + blk[i].n * 4; a += 4) {
+            v = mmio_read32(a);
+            ulogf(L"XFCC reg 0x%08x = 0x%08x\n", a, v);
+        }
+
+        /* Граница блока: что непосредственно ДО и ПОСЛЕ. Если края открыты,
+         * блок виден как осмысленная группа, а не как случайный набор. */
+        ulogf(L"XFCC edge before: 0x%08x=0x%08x 0x%08x=0x%08x\n",
+              base - 8, mmio_read32(base - 8), base - 4,
+              mmio_read32(base - 4));
+        ulogf(L"XFCC edge after : 0x%08x=0x%08x 0x%08x=0x%08x\n",
+              base + blk[i].n * 4, mmio_read32(base + blk[i].n * 4),
+              base + blk[i].n * 4 + 4,
+              mmio_read32(base + blk[i].n * 4 + 4));
+    }
+
+    /* Счётчики по расширенному окну: сколько вообще какого класса и где. */
+    opened = fcff = m8f = mcf = 0;
+    for (a = 0x00820000UL; a <= 0x00821000UL; a += 4) {
+        v = mmio_read32(a);
+        if (v == 0xFFFFFFFFU) { opened++; }
+        else if ((v & 0xFFFFFF00U) == 0xFFFFFF00U) {
+            if (v == 0xFFFFFFFCU) fcff++;
+            else if (v == 0xFFFFFF8FU) m8f++;
+            else if (v == 0xFFFFFFCFU) mcf++;
+            else ulogf(L"XFCC odd class 0x%08x = 0x%08x\n", a, v);
+        }
+    }
+    ulogf(L"XFCC census 0x00820000..0x00821000: opened=%u fcff=%u mask8f=%u "
+          L"maskcf=%u\n", opened, fcff, m8f, mcf);
+
+    /* Тот же счётчик на XP3G-окне, где гейт УЖЕ открыт: сравнение покажет,
+     * чем открытый класс отличается от закрытого по соседству. */
+    opened = fcff = m8f = mcf = 0;
+    for (a = 0x008e1b00UL; a <= 0x008e1c00UL; a += 4) {
+        v = mmio_read32(a);
+        if (v == 0xFFFFFFFFU) { opened++; }
+        else if ((v & 0xFFFFFF00U) == 0xFFFFFF00U) {
+            if (v == 0xFFFFFFFCU) fcff++;
+            else if (v == 0xFFFFFF8FU) m8f++;
+            else if (v == 0xFFFFFFCFU) mcf++;
+            else ulogf(L"XFCC odd class (xp3g) 0x%08x = 0x%08x\n", a, v);
+        }
+    }
+    ulogf(L"XFCC census 0x008e1b00..0x008e1c00: opened=%u fcff=%u mask8f=%u "
+          L"maskcf=%u\n", opened, fcff, m8f, mcf);
+
+    ulogf(L"XFCC === E-G done: %s ===\n", tag);
+    fx_mk_acc(t, L"xfcc: E-G what the 0xFFFFFFFC gates protect");
+}
+#endif /* FCFF_SCAN */
 #endif /* RENDER_MASKS */
 
 
@@ -14593,6 +14708,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * priv-окнам. Ни одной записи. Снимает потолок доступа после того, как
          * Gen2 упёрся в "регистр недоступен". */
         xg_pjtag_scan(L"xpjt");
+#endif
+#ifdef FCFF_SCAN
+        /* ЭКСПЕРИМЕНТ E-G. ТОЛЬКО ЧТЕНИЕ: что защищают четыре регистра
+         * 0xFFFFFFFC, впервые увиденные в E-F. Блок OPTB известен тем, что
+         * записи в него валят гостя в ресет - поэтому сначала чтение. */
+        xg_fcff_scan(L"xfcc");
 #endif
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "
