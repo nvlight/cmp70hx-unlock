@@ -343,6 +343,36 @@ build_one xgate               -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
                               -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67
 
+# E-B (2026-10-09) - заливается ли policy set, когда гейт открыт. Продолжение
+# E-A, вопрос который 1q назвал ДО всяких экспериментов: при закрытом гейте из
+# семи полей вставало шесть, и проваливалось ровно одно - XP3G_OVR0 (0x8E110).
+#
+# Собирает ВМЕСТЕ с E-A: без открытого гейта E-B бессмыслен, и блок сам это
+# проверяет и пишет XGPOL VERDICT: SKIPPED, а не молчит.
+#
+# ПОЧЕМУ ПОЛИТИКА ПИШЕТСЯ С ХОСТА, а НЕ ЧЕРЕЗ V67. Вопрос не "можно ли записать
+# поле", а "снимает ли ОТКРЫТИЙ ГЕЙТ защиту с хостовой записи". Писать policy
+# тоже через V67 - тавтология: привилегированный писатель пишет куда угодно, и
+# результат ничего не скажет о гейте. Все семь полей - обычный mmio_write32.
+#
+# ЗАЩИТА ОТ ТАВТОЛОГИИ. Поле, у которого цель совпала с "до", доказывает
+# ничего: запись ничего не меняет и readback совпадает по построению. Такие
+# помечаются NOOP и в счёт пройденных не идут (FINAL-SUMMARY 4, ошибка N1).
+#
+# Живой линк не трогаем: ни кика 0x8872C, ни TLS, ни ретрейна. LnkSta читается
+# до и после как контроль, что линок остался Gen1.
+#
+# Приёмка - строки в логе:
+#   XGPOL precondition: XP3G gate 0x0008e1b0 = 0x... OPEN
+#   XGPOL XP3G_OVR0 0x0008e110 before=0x... want=0x... CHANGE
+#   XGPOL XP3G_OVR0 0x0008e110 wrote 0x... got 0x... STUCK|DROPPED
+#   XGPOL summary: N of M changed fields stuck (K NOOP not counted)
+#   XGPOL VERDICT: POLICY-OK | POLICY-PARTIAL | NO-CHANGE
+# Разбор - docs/70HX-XP3G-GATE-V67.md раздел 5.
+build_one xgate2              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY
+
 # E6 (2026-10-08) - проверка отчётчика селектора. САМЫЙ ДЕШЁВЫЙ ЭКСПЕРИМЕНТ
 # ИЗ ВСЕХ: НОЛЬ новых записей.
 #

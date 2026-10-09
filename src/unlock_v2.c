@@ -7034,6 +7034,140 @@ xg_probe(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     fx_mk_acc(t, L"xgate: E-A xp3g gate via V67");
 }
 #endif /* XP3G_GATE_V67 */
+
+#ifdef XP3G_GATE_POLICY
+/* ==== ЭКСПЕРИМЕНТ E-B: заливается ли policy set, когда гейт открыт ==========
+ *
+ * Продолжение E-A. Вопрос, который §1q назвал ДО всяких экспериментов и который
+ * блокировал шаг 2: при закрытом гейте из семи полей политики вставало шесть,
+ * и проваливалось ровно одно — XP3G_OVR0 (0x8E110). Прогон E-A 2026-09-09
+ * показал, что гейт открывается привилегированно. Теперь проверяем, встаёт ли
+ * оно с ХОСТА.
+ *
+ * ПОЧЕМУ ИМЕННО ХОСТОВЫМИ MMIO-ЗАПИСЯМИ, А НЕ ЧЕРЕЗ V67. Вопрос не «можно ли
+ * записать это поле», а «снимает ли ОТКРЫТИЙ ГЕЙТ защиту с хостовой записи».
+ * Если писать policy тоже через V67, тест получится тавтологией: привилегированный
+ * писатель и так пишет куда угодно, и результат ничего не скажет о гейте.
+ * Поэтому все семь полей — обычный mmio_write32 с хоста, как в §1q.
+ *
+ * ЗАЩИТА ОТ ТАВТОЛОГИИ (FINAL-SUMMARY §4, ошибка №1: «is_unlocked()=1 —
+ * функция перечитывает регистры, в которые код только что записал. Тавтология»).
+ * Поле, у которого целевое значение СОВПАДАЕТ с прочитанным «до», ничего не
+ * доказывает: запись не меняет ничего и readback совпадёт по построению.
+ * Такие поля помечаются NOOP и В СЧЁТ ПРОЙДЕННЫХ НЕ ИДУТ. Значимое поле то,
+ * которое реально поменялось.
+ *
+ * Значения clr/set взяты из §1q и перепроверены арифметикой по замеренным
+ * там «до»/«после» — сходятся байт в байт:
+ *   0x8841C: 0x20360500, clr 0x5000 set 0x2800 -> 0x20362D00   (совпало)
+ *   0x88610: 0x00001001, clr 0x1000 set 0x0001 -> 0x00000001   (совпало)
+ *   0x8C2C0: 0x00802005, clr 0x0004 set 0x0000 -> 0x00802001   (совпало)
+ *   0x8C040: MAX_RATE[19:18] = 2
+ *   0x8C1C0: 0x00060000 -> 0x00040000
+ *
+ * ЖИВОЙ ЛИНК НЕ ТРОГАЕМ. Здесь НЕТ кика 0x8872C, НЕТ TLS, НЕТ ретрейна.
+ * Пишем только регистры политики и только ЛИЧШИЙ раз, ничего не форсируя.
+ * LnkSta читается и печатается как контроль того, что линок остался Gen1.
+ */
+typedef struct {
+    UINT32   addr;
+    UINT32   clrMask;
+    UINT32   setBits;
+    CHAR8    name[12];
+} XG_POL;
+
+static const XG_POL xg_pol[] = {
+    { 0x0008e110U, 0xffffffffU, 0x00000001U, "XP3G_OVR0"  },
+    { 0x0008e120U, 0xffffffffU, 0x00000000U, "XP3G_VAL0"  },
+    { 0x0008c040U, 0x000c0000U, 0x00080000U, "LINK_CONFIG"},
+    { 0x0008c1c0U, 0x00060000U, 0x00040000U, "PL_LINKRATE"},
+    { 0x0008841cU, 0x00005000U, 0x00002800U, "PRIV_MISC1" },
+    { 0x00088610U, 0x00001000U, 0x00000001U, "VSEC_HIER"  },
+    { 0x0008c2c0U, 0x00000004U, 0x00000000U, "CYA_0"      },
+};
+#define XG_POL_N ((INTN)(sizeof(xg_pol) / sizeof(xg_pol[0])))
+
+static void
+xg_policy_probe(const CHAR16 *tag)
+{
+    UINT32 gate, st, changed, ok, i;
+    UINT64 t;
+
+    t = fx_now_us();
+
+    /* Предусловие: гейт должен быть открыт. Если E-A не встал — E-B бессмыслен,
+     * и это должно быть сказано в логе, а не промолчать. */
+    gate = mmio_read32(0x0008e1b0U);
+    ulogf(L"XGPOL precondition: XP3G gate 0x0008e1b0 = 0x%08x %s\n", gate,
+          (gate == 0xffffffffU) ? "OPEN" : "NOT OPEN");
+    if (gate != 0xffffffffU) {
+        ulogf(L"XGPOL VERDICT: SKIPPED - gate is not open, policy result "
+               "would carry no weight\n");
+        Print(L"xpol: SKIPPED, gate not open\n");
+        return;
+    }
+
+    /* LnkSta до: контроль того, что линок мы не трогаем. */
+    st = mmio_read32(0x00088088U);
+    ulogf(L"XGPOL link BEFORE: LNKSTA=0x%08x speed=%d width=%d\n", st,
+          (INTN)((st >> 16) & 0xF), (INTN)((st >> 4) & 0x3F));
+
+    changed = 0; ok = 0;
+    for (i = 0; i < XG_POL_N; i++) {
+        UINT32 cur = mmio_read32(xg_pol[i].addr);
+        UINT32 want = (cur & ~xg_pol[i].clrMask) | xg_pol[i].setBits;
+        UINT32 got;
+
+        ulogf(L"XGPOL %s 0x%08x before=0x%08x want=0x%08x %s\n",
+              xg_pol[i].name, xg_pol[i].addr, cur, want,
+              (want == cur) ? "NOOP" : "CHANGE");
+        if (want == cur) {
+            /* Тавтология: запись ничего не меняет, доказательств не даёт. */
+            Print(L"xpol: %s 0x%08x already 0x%08x - NOOP, not counted\n",
+                  xg_pol[i].name, xg_pol[i].addr, cur);
+            continue;
+        }
+        changed++;
+        mmio_write32(xg_pol[i].addr, want);
+        got = mmio_read32(xg_pol[i].addr);
+        if (got == want) {
+            ok++;
+            ulogf(L"XGPOL %s 0x%08x wrote 0x%08x got 0x%08x STUCK\n",
+                  xg_pol[i].name, xg_pol[i].addr, want, got);
+            Print(L"xpol: %s 0x%08x -> 0x%08x OK\n", xg_pol[i].name,
+                  xg_pol[i].addr, got);
+        } else {
+            ulogf(L"XGPOL %s 0x%08x wrote 0x%08x got 0x%08x DROPPED\n",
+                  xg_pol[i].name, xg_pol[i].addr, want, got);
+            Print(L"xpol: %s 0x%08x -> 0x%08x DROPPED\n", xg_pol[i].name,
+                  xg_pol[i].addr, got);
+        }
+    }
+
+    st = mmio_read32(0x00088088U);
+    ulogf(L"XGPOL link AFTER : LNKSTA=0x%08x speed=%d width=%d\n", st,
+          (INTN)((st >> 16) & 0xF), (INTN)((st >> 4) & 0x3F));
+    ulogf(L"XGPOL summary: %d of %d changed fields stuck (%d NOOP not counted)\n",
+          ok, changed, XG_POL_N - changed);
+
+    if ((changed > 0) && (ok == changed)) {
+        ulogf(L"XGPOL VERDICT: POLICY-OK - gate unlocks host writes; "
+               "next step is the LTSSM kick, TLS and retrain, NOT done here\n");
+        Print(L"xpol: VERDICT POLICY-OK\n");
+    } else if (changed > 0) {
+        ulogf(L"XGPOL VERDICT: POLICY-PARTIAL - %d of %d stuck; see DROPPED "
+               "lines above\n", ok, changed);
+        Print(L"xpol: VERDICT POLICY-PARTIAL %d/%d\n", ok, changed);
+    } else {
+        ulogf(L"XGPOL VERDICT: NO-CHANGE - every field already at target; "
+               "nothing proven\n");
+        Print(L"xpol: VERDICT NO-CHANGE\n");
+    }
+
+    ulogf(L"XGPOL === E-B done: %s ===\n", tag);
+    fx_mk_acc(t, L"xpol: E-B policy set with gate open");
+}
+#endif /* XP3G_GATE_POLICY */
 #endif /* RENDER_MASKS */
 
 static BOOLEAN
@@ -13715,6 +13849,11 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * блока селекторов. Блок не трогает линк и не пишет ни одного
          * функционального бита — только снятие защиты с записи. */
         xg_probe(L"xg", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+#endif
+#ifdef XP3G_GATE_POLICY
+        /* ЭКСПЕРИМЕНТ E-B. Идёт сразу за E-A и тем же местом — до блока
+         * селекторов, пока SS0/SS1 нулевые. Ни кика, ни TLS, ни ретрейна. */
+        xg_policy_probe(L"xpol");
 #endif
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "
