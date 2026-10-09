@@ -373,6 +373,50 @@ build_one xgate2              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
                               -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY
 
+# E-C (2026-10-09) - ЕДИНСТВЕННЫЙ шаг, который трогает ЖИВОЙ ЛИНОК.
+# Кик LTSSM + TLS на обоих концах через PCI config + ретрейн. Собирает
+# E-A + E-B + E-C.
+#
+# ПОРЯДОК (из xrip, порядок значим):
+#   0. Предусловие по ФАКТУ: гейт открыт И policy set стоит на цели. Не
+#      выполнено - линок не трогаем вообще, печатаем SKIPPED.
+#   1. TLS = 2 (5 GT/s) на GPU через PCI config cap+0x30, readback.
+#   2. TLS = 2 на АПСТРИМ-БРИДЖЕ, readback. Без него ретрейн не даст Gen2.
+#   3. Кик LTSSM BAR0 0x8872C = 6 ПОСЛЕДНИМ из записей (adoption kick).
+#   4. Retrain Link: LNKCTL |= (1<<5) на мосте.
+#   5. ОДИН опрос 40 x 250 мс. Никаких повторных попыток.
+#
+# ПОЧЕМУ TLS ЧЕРЕЗ PCI CONFIG: 1p ошибка 2 - запись LC2 (0x880A8) через BAR0
+# MMIO не липла и потеряла бит 0x00200000. На GPU и на мосте.
+#
+# ЧЕГО НЕТ СОЗНАТЕЛЬНО: LINK_CAP 0x88084 не пишем (xrip не пишет, speed-ниббл
+# живой, кремний клампит Gen3); Link Disable и перезапуск устройства НЕ делаем
+# (на 40HX это отрывало GSP/RM).
+#
+# ПРЕДУСЛОВИЯ ПО БЕЗОПАСНОСТИ: мост и PCIe-cap ищутся ОДИН раз ДО первого
+# обращения к линку; если их нет - RETRAIN не выполняется вовсе.
+#
+# РИСК И ЕГО ПОБОЧНАЯ СТОРОНА. Если ретрейн не поднимет линок, Gen1 - полностью
+# рабочее состояние, анлок НЕ сломан: compute и рендер от линка не зависят.
+# POST вернёт линок в стоковое состояние в любом случае.
+#
+# ЕДИНСТВЕННЫЙ ЧЕСТНЫЙ КРИТЕРИЙ: src/tools/pcie-bw.py даёт > 5,5 GB/s против
+# нынешних 3,343. LNKSTA и pcie.link.gen.current критериями НЕ являются.
+#
+# Приёмка:
+#   XCK precondition OK: gate open, policy 7 of 7 at target
+#   XCK step1 GPU   LNKCTL2 ... TLS=2 OK
+#   XCK step2 BRIDGE LNKCTL2 ... TLS=2 OK
+#   XCK step3 LTSSM_OVR wrote 6
+#   XCK step4 BRIDGE LNKCTL ... (Retrain Link bit5 set)
+#   XCK step5 polled N x 250ms, LNKSTA=... speed=2
+#   XCK VERDICT: RETRAIN-OK | RETRAIN-FAIL
+# Разбор - docs/70HX-XP3G-GATE-V67.md раздел 4a.5.
+build_one xgate3              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
+                              -DXP3G_LINK_RETRAIN
+
 # E6 (2026-10-08) - проверка отчётчика селектора. САМЫЙ ДЕШЁВЫЙ ЭКСПЕРИМЕНТ
 # ИЗ ВСЕХ: НОЛЬ новых записей.
 #

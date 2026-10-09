@@ -7168,7 +7168,231 @@ xg_policy_probe(const CHAR16 *tag)
     fx_mk_acc(t, L"xpol: E-B policy set with gate open");
 }
 #endif /* XP3G_GATE_POLICY */
+#if defined(XP3G_LINK_RETRAIN) && defined(XP3G_GATE_POLICY)
+/* ==== ЭКСПЕРИМЕНТ E-C: кик LTSSM + TLS + ретрейн ==========================
+ *
+ * Блок требует ОБА флага: E-C перепроверяет policy set таблицей xg_pol[] и
+ * XG_POL_N, объявленными в E-B, и повторно их использовать не должен.
+ * Отдельный флаг, а не продолжение XP3G_GATE_POLICY, потому что xgate2
+ * (E-A + E-B) проверен НА ЖЕЛЕЗЕ 2026-09-09, md5 9832745e50ee02cff08ec8d0c8cc5c45.
+ * Если бы E-C жил внутри того же флага, имя xgate2 перестало бы давать тот
+ * бинарь, который на флешке проверяли.
+ *
+ * Третий и последний шаг к Gen2. E-A открыл гейт, E-B показал, что policy set
+ * заливается целиком. Осталось действие, которое ВПЕРВЫЕ трогает живой линк.
+ *
+ * ПОРЯДОК (из xrip, порядок значим):
+ *   1. Проверить, что policy set действительно стоит (E-B это сделал, но это
+ *      ДРУГИЙ запуск; здесь перепроверяем на ФАКТЕ перед тем, как дёргать линок).
+ *   2. TLS = 2 (5 GT/s) через PCI config на GPU.
+ *   3. TLS = 2 (5 GT/s) через PCI config на АПСТРИМ-БРИДЖЕ.
+ *   4. Кик LTSSM BAR0 0x8872C = 6 - ПОСЛЕДНИМ, он и есть "adoption kick".
+ *   5. Retrain Link: LNKCTL |= (1<<5) на мосте.
+ *
+ * ПОЧЕМУ TLS ЧЕРЕЗ PCI CONFIG, А НЕ ЧЕРЕЗ BAR0. 1p, ошибка 2: запись в
+ * 0x880A8 (LC2) через BAR0 MMIO не липла и потеряла бит 0x00200000. xrip
+ * ставит TLS через PCI config на обоих концах. Наш симптом этим и объяснялся.
+ *
+ * ЧЕГО ЗДЕСЬ НЕТ, СОЗНАТЕЛЬНО:
+ *   - LINK_CAP 0x88084: xrip его не пишет, и у нас он live - speed-ниббл
+ *     следует за фактическим линком, кремний клампит Gen3 (write 03 -> readback 02).
+ *   - Link Disable и перезапуск устройства: на 40HX это отрывало GSP/RM.
+ *     Здесь НЕ делаем, только нормальный ретрейн.
+ *   - Повторных попыток. Один кик, один ретрейн. Если не поднялось - пишем
+ *     RETRAIN-FAIL и выходим. Линк сам вернётся в Gen1 на POST.
+ *
+ * ЕСЛИ РЕТРЕЙН НЕ ПОДНЯЛ ЛИНОК, ЭТО НЕ ПРОВАЛ АНЛОКА. Линк фиксируется на
+ * ближайшем к тренировке состоянии, Gen1 - это полностью рабочее состояние.
+ *
+ * ЕДИНСТВЕННЫЙ ЧЕСТНЫЙ КРИТЕРИЙ - ФИЗИЧЕСКАЯ ПОЛОСА:
+ *   src/tools/pcie-bw.py -> > 5,5 GB/s (против нынешних 3,343, потолок Gen1 ~4,0).
+ * pcie.link.gen.current в простое НЕ является критерием: это downshift (§1p 0.1).
+ */
+
+/* До и после: полный снимок состояния, чтобы отличить "не тронули" от
+ * "тронули и не вышло". Печатается всегда, включая путь отказа. */
+static void
+xg_snap(const char *tag)
+{
+    UINT32 st = mmio_read32(0x00088088U);
+    UINTN  gc = find_pcie_cap(gBus, gDev, gFn);
+    ulogf(L"XCK %s LNKSTA-inner=0x%08x speed=%d width=%d\n", tag, st,
+          (INTN)((st >> 16) & 0xF), (INTN)((st >> 4) & 0x3F));
+    ulogf(L"XCK %s LINK_CAP=0x%08x LINK_CAP2=0x%08x LC2-inner=0x%08x\n", tag,
+          mmio_read32(0x00088084U), mmio_read32(0x000880a4U),
+          mmio_read32(0x000880a8U));
+    if (gc) {
+        UINT32 lk  = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
+        UINT32 lc2 = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
+        ulogf(L"XCK %s GPU   cap@0x%02lx LNKCTL=0x%04x speed=%u width=%u "
+              L"LNKCTL2=0x%04x TLS=%u\n", tag, (INTN)gc,
+              (INTN)(lk & 0xFFFF), (INTN)((lk >> 16) & 0xF),
+              (INTN)((lk >> 20) & 0xF), (INTN)(lc2 & 0xFFFF),
+              (INTN)(lc2 & 0xF));
+    } else {
+        ulogf(L"XCK %s GPU   pcie_cap NOT FOUND\n", tag);
+    }
+    {
+        UINTN bb = 0, bd = 0, bf = 0;
+        if (find_bridge_to(gBus, &bb, &bd, &bf)) {
+            UINTN bc = find_pcie_cap(bb, bd, bf);
+            if (bc) {
+                UINT32 lk  = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+                UINT32 lc2 = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
+                ulogf(L"XCK %s BRIDGE cap@0x%02lx LNKCTL=0x%04x speed=%u "
+                      L"LNKCTL2=0x%04x TLS=%u\n", tag, (INTN)bc,
+                      (INTN)(lk & 0xFFFF), (INTN)((lk >> 16) & 0xF),
+                      (INTN)(lc2 & 0xFFFF), (INTN)(lc2 & 0xF));
+            } else {
+                ulogf(L"XCK %s BRIDGE pcie_cap NOT FOUND\n", tag);
+            }
+        } else {
+            ulogf(L"XCK %s BRIDGE NOT FOUND - cannot retrain\n", tag);
+        }
+    }
+}
+
+static void
+xg_link_probe(const CHAR16 *tag)
+{
+    UINT32 gate, st, kick, i, polOk;
+    UINTN  gc, bb = 0, bd = 0, bf = 0, bc = 0;
+    UINTN  polls;
+    UINT64 t;
+
+    t = fx_now_us();
+
+    /* --- Шаг 0: предусловие. Гейт и policy set обязаны стоять. Без них
+     * дёргать линок бессмысленно и зачем рисковать. --- */
+    gate = mmio_read32(0x0008e1b0U);
+    if (gate != 0xffffffffU) {
+        ulogf(L"XCK precondition FAIL: gate 0x0008e1b0=0x%08x not open - "
+               "NOT touching the link\n", gate);
+        Print(L"xck: SKIPPED, gate not open\n");
+        return;
+    }
+    polOk = 0;
+    for (i = 0; i < XG_POL_N; i++) {
+        UINT32 cur  = mmio_read32(xg_pol[i].addr);
+        UINT32 want = (cur & ~xg_pol[i].clrMask) | xg_pol[i].setBits;
+        if (cur == want) polOk++;
+    }
+    if (polOk != XG_POL_N) {
+        ulogf(L"XCK precondition FAIL: policy %d of %d at target - "
+               "NOT touching the link\n", polOk, XG_POL_N);
+        Print(L"xck: SKIPPED, policy %d/%d\n", polOk, XG_POL_N);
+        return;
+    }
+    ulogf(L"XCK precondition OK: gate open, policy %d of %d at target\n",
+          polOk, XG_POL_N);
+
+    /* Мост ищём ОДИН раз: если его нет, ретрейн физически невозможен и
+     * лезть в TLS GPU незачем. */
+    if (!find_bridge_to(gBus, &bb, &bd, &bf)) {
+        ulogf(L"XCK VERDICT: NO-BRIDGE - link NOT touched at all\n");
+        Print(L"xck: VERDICT NO-BRIDGE\n");
+        return;
+    }
+    bc = find_pcie_cap(bb, bd, bf);
+    gc = find_pcie_cap(gBus, gDev, gFn);
+    if (!bc || !gc) {
+        ulogf(L"XCK VERDICT: NO-PCIE-CAP gpu=%u bridge=%u - link NOT touched\n",
+              (UINTN)gc, (UINTN)bc);
+        Print(L"xck: VERDICT NO-PCIE-CAP\n");
+        return;
+    }
+
+    ulogf(L"XCK === BEFORE: the link is about to be touched for the first "
+           L"time in this project ===\n");
+    xg_snap("before");
+
+    /* --- Шаг 1: TLS = 2 (5 GT/s) на GPU, через PCI config. Readback. --- */
+    {
+        UINT32 lc2 = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
+        UINT32 set = (lc2 & 0xFFFF0000u) | ((lc2 & 0xFFFFu & ~0xFu) | 2u);
+        UINT32 got;
+        pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x30, set);
+        got = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
+        ulogf(L"XCK step1 GPU LNKCTL2(cap+0x30) %04x -> %04x readback %04x "
+              "TLS=%u %s\n", (INTN)(lc2 & 0xFFFF), (INTN)(set & 0xFFFF),
+              (INTN)(got & 0xFFFF), (INTN)(got & 0xF),
+              ((got & 0xFu) == 2u) ? "OK" : "NOT SET");
+        Print(L"xck: GPU TLS -> %u %s\n", (INTN)(got & 0xF),
+              ((got & 0xFu) == 2u) ? "OK" : "NOT SET");
+    }
+
+    /* --- Шаг 2: TLS = 2 на АПСТРИМ-БРИДЖЕ. Обязателен: ретрейн без него
+     * не даст Gen2, потому что мост останется целиться в Gen1. --- */
+    {
+        UINT32 lc2 = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
+        UINT32 set = (lc2 & 0xFFFF0000u) | ((lc2 & 0xFFFFu & ~0xFu) | 2u);
+        UINT32 got;
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x30, set);
+        got = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
+        ulogf(L"XCK step2 BRIDGE LNKCTL2(cap+0x30) %04x -> %04x readback %04x "
+              "TLS=%u %s\n", (INTN)(lc2 & 0xFFFF), (INTN)(set & 0xFFFF),
+              (INTN)(got & 0xFFFF), (INTN)(got & 0xF),
+              ((got & 0xFu) == 2u) ? "OK" : "NOT SET");
+        Print(L"xck: BRIDGE TLS -> %u %s\n", (INTN)(got & 0xF),
+              ((got & 0xFu) == 2u) ? "OK" : "NOT SET");
+    }
+
+    /* --- Шаг 3: кик LTSSM. ПОСЛЕДНИМ из записей, он и есть adoption. --- */
+    kick = mmio_read32(0x0008872cU);
+    ulogf(L"XCK step3 LTSSM_OVR(0x8872c) before=0x%08x\n", kick);
+    mmio_write32(0x0008872cU, 6u);
+    ulogf(L"XCK step3 LTSSM_OVR wrote 6, readback=0x%08x\n",
+          mmio_read32(0x0008872cU));
+    Print(L"xck: LTSSM kick written\n");
+
+    /* Даём LTSSM время перечитать кик, прежде чем ретрейнить. */
+    uefi_call_wrapper(BS->Stall, 1, 100000);
+
+    /* --- Шаг 4: Retrain Link на мосте. Единственный дёргающий момент. --- */
+    {
+        UINT32 lk  = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+        UINT32 set = lk | (1u << 5);
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, set);
+        ulogf(L"XCK step4 BRIDGE LNKCTL %04x -> %04x (Retrain Link bit5 set)\n",
+              (INTN)(lk & 0xFFFF), (INTN)(set & 0xFFFF));
+        Print(L"xck: Retrain Link issued\n");
+    }
+
+    /* --- Шаг 5: опрос. ОДИН цикл, никаких повторных попыток. --- */
+    st = 0;
+    for (polls = 0; polls < 40; polls++) {
+        uefi_call_wrapper(BS->Stall, 1, 250000);
+        st = mmio_read32(0x00088088U);
+        if (((st >> 16) & 0xF) >= 2u) break;
+    }
+    ulogf(L"XCK step5 polled %d x 250ms, LNKSTA=0x%08x speed=%d width=%d\n",
+          polls, st, (INTN)((st >> 16) & 0xF), (INTN)((st >> 4) & 0x3F));
+
+    ulogf(L"XCK === AFTER ===\n");
+    xg_snap("after");
+
+    /* Вердикт. Скорость ниже и ширина ниже - это НЕ провал анлока: линок
+     * зафиксировался на ближайшем к тренировке состоянии, и Gen1 рабоч. */
+    if (((st >> 16) & 0xF) >= 2u) {
+        ulogf(L"XCK VERDICT: RETRAIN-OK - negotiated speed=%d; measure the "
+               "bandwidth with src/tools/pcie-bw.py, LNKSTA alone is not the "
+               "criterion\n", (INTN)((st >> 16) & 0xF));
+        Print(L"xck: VERDICT RETRAIN-OK speed=%d\n", (INTN)((st >> 16) & 0xF));
+    } else {
+        ulogf(L"XCK VERDICT: RETRAIN-FAIL - stayed at speed=%d. This is NOT "
+               "an unlock failure: Gen1 is fully working. No further attempts "
+               "are made; POST returns the link to stock anyway\n",
+              (INTN)((st >> 16) & 0xF));
+        Print(L"xck: VERDICT RETRAIN-FAIL speed=%d\n",
+              (INTN)((st >> 16) & 0xF));
+    }
+
+    ulogf(L"XCK === E-C done: %s ===\n", tag);
+    fx_mk_acc(t, L"xck: E-C LTSSM kick + TLS + retrain");
+}
+#endif /* XP3G_LINK_RETRAIN && XP3G_GATE_POLICY */
 #endif /* RENDER_MASKS */
+
 
 static BOOLEAN
 fwsec_boot_gsp_sig(UINT64 fwsecPhys, const UINT8 *sig, UINTN sigIdx)
@@ -13854,6 +14078,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         /* ЭКСПЕРИМЕНТ E-B. Идёт сразу за E-A и тем же местом — до блока
          * селекторов, пока SS0/SS1 нулевые. Ни кика, ни TLS, ни ретрейна. */
         xg_policy_probe(L"xpol");
+#endif
+#ifdef XP3G_LINK_RETRAIN
+        /* ЭКСПЕРИМЕНТ E-C. Впервые трогает ЖИВОЙ ЛИНОК: кик LTSSM, TLS на
+         * обоих концах через PCI config и ретрейн. Одна попытка, без
+         * повторов; при отказе печатается RETRAIN-FAIL и всё. */
+        xg_link_probe(L"xck");
 #endif
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "
