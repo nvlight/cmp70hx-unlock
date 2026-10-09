@@ -7391,6 +7391,210 @@ xg_link_probe(const CHAR16 *tag)
     fx_mk_acc(t, L"xck: E-C LTSSM kick + TLS + retrain");
 }
 #endif /* XP3G_LINK_RETRAIN && XP3G_GATE_POLICY */
+
+#ifdef XP3G_CAP_DIAG
+/* ==== ЭКСПЕРИМЕНТ E-D: ГДЕ ЛОМАЕТСЯ ОБХОД PCIe CAPABILITY ==================
+ *
+ * Симптом. Ни в одном прогоне проекта обход capability не нашёл ничего - НИ НА
+ * GPU, НИ НА МОСТЕ:
+ *
+ *   usb-log-1008-235743  GEN2C not-found 4/4, успешных cap@0x : 0
+ *   usb-log-pre-xgate    GEN2C not-found 4/4, успешных cap@0x : 0
+ *   usb-log-xgate        GEN2C not-found 4/4, успешных cap@0x : 0
+ *   usb-log-xg2          GEN2C not-found 4/4, успешных cap@0x : 0
+ *   usb-log-xg3          XCK VERDICT: NO-PCIE-CAP gpu=0 bridge=0
+ *
+ * Из-за этого E-C вышел по страховке, НЕ тронув линок. Причина отказа Gen2
+ * сейчас ровно одна: find_pcie_cap() возвращает 0.
+ *
+ * ЧТО УЖЕ ИЗВЕСТНО. Чтение конфигурации РАБОТАЕТ: лог показывает
+ * "PCI: #0 = 10de:0000248A bus=2 dev=0 fn=0 (root bridge #0)" - это
+ * pci_cfg_rd_bdf(). Значит вопрос не в доступе к конфигу, а в САМОМ ОБХОДЕ.
+ *
+ * ГИПОТЕЗЫ, ВСЕ ПРОВЕРЯЮТСЯ ОТДЕЛЬНО:
+ *   (A) чтение 0x04 отдаёт 0xFFFFFFFF -> выход сразу;
+ *   (B) CapPtr = 0 или < 0x40 -> цикл не начинается;
+ *   (C) Capability ID != 0x10 (у GA104 может быть иной);
+ *   (D) цепочка обрывается на next = 0 раньше 0x10;
+ *   (E) 0x10 есть, но не там, где смотрим;
+ *   (F) обход идёт через gRb, а ответ лежит через другой RB.
+ *
+ * (F) САМАЯ ВЕРОЯТНАЯ: find_bridge_to() берёт мост через ЛЮБОЙ из gRbAll[] и
+ * запоминает gBrIdx, а pci_cfg_rd_bdf() читает только через gRb (первый).
+ * Для bus=2 это может разойтись.
+ *
+ * ЧИСТО ЧТЕНИЕ. Ни одной записи, ни в BAR0, ни в конфиг. Линок не трогаем.
+ */
+static void
+xcap_dump_hdr(const char *name, UINTN bus, UINTN dev, UINTN fn, INTN rb)
+{
+    UINT32 id, r04, st;
+    UINTN  cap;
+
+    id = r04 = 0; st = 0;
+    if (rb >= 0) {
+        UINT64 A = ((UINT64)bus << 20) | ((UINT64)dev << 15) |
+                   ((UINT64)fn << 12);
+        UINT32 v;
+        uefi_call_wrapper(gRbAll[rb]->Pci.Read, 5, gRbAll[rb],
+            EfiPciIoWidthUint32, A | 0x00, 1, &v); id = v;
+        uefi_call_wrapper(gRbAll[rb]->Pci.Read, 5, gRbAll[rb],
+            EfiPciIoWidthUint32, A | 0x04, 1, &v); r04 = v;
+        uefi_call_wrapper(gRbAll[rb]->Pci.Read, 5, gRbAll[rb],
+            EfiPciIoWidthUint32, A | 0x0C, 1, &v); st = v;
+    } else {
+        id = pci_cfg_rd_bdf(bus, dev, fn, 0x00);
+        r04 = pci_cfg_rd_bdf(bus, dev, fn, 0x04);
+        st = pci_cfg_rd_bdf(bus, dev, fn, 0x0C);
+    }
+    cap = (r04 >> 24) & 0xFFu;
+    ulogf(L"XCAP raw %s id=0x%08x 0x04=0x%08x CapPtr=0x%02x "
+           L"capLo=0x%02x status=0x%08x\n", name, id, r04, (INTN)cap,
+          (INTN)(r04 & 0xFF), st);
+    Print(L"xcap: %s id=0x%08x 0x04=0x%08x CapPtr=0x%02x\n",
+          name, id, r04, (INTN)cap);
+}
+
+/* Обход цепочки с ЧЕТЫРЬМЯ разными источниками чтения и стартовой точкой,
+ * так видно: ломается доступ, извлечение или сама цепочка. */
+static UINTN
+xcap_walk(const char *name, INTN rb, UINTN bus, UINTN dev, UINTN fn,
+          UINTN start, int from40, UINTN *psteps, UINTN *plast)
+{
+    UINTN pos = start, guard;
+    UINT32 cdw;
+    UINTN  off, id, next;
+
+    *psteps = 0; *plast = 0;
+    for (guard = 0; guard < 48; guard++) {
+        UINT64 A = ((UINT64)bus << 20) | ((UINT64)dev << 15) |
+                   ((UINT64)fn << 12);
+
+        if (!from40 && pos < 0x40) {
+            ulogf(L"XCAP walk %s stop: pos=0x%02x < 0x40 after %d steps\n",
+                  name, (INTN)pos, (INTN)guard);
+            return 0;
+        }
+        if (rb >= 0) {
+            UINT32 v;
+            uefi_call_wrapper(gRbAll[rb]->Pci.Read, 5, gRbAll[rb],
+                EfiPciIoWidthUint32, A | (pos & ~3u), 1, &v); cdw = v;
+        } else {
+            cdw = pci_cfg_rd_bdf(bus, dev, fn, pos & ~3u);
+        }
+        off = pos & 3u;
+        id   = (cdw >> (off * 8)) & 0xFFu;
+        next = (cdw >> (off * 8 + 8)) & 0xFFu;
+        (*psteps)++;
+        *plast = id;
+        if (id == 0x10) {
+            ulogf(L"XCAP walk %s HIT pos=0x%02x id=0x10 after %d steps\n",
+                  name, (INTN)pos, (INTN)guard);
+            return pos;
+        }
+        ulogf(L"XCAP walk %s step %d pos=0x%02x id=0x%02x next=0x%02x\n",
+              name, (INTN)guard, (INTN)pos, (INTN)id, (INTN)next);
+        if (next == 0 || next == 0xFF) {
+            ulogf(L"XCAP walk %s chain ends after %d steps, no id=0x10\n",
+                  name, (INTN)guard);
+            return 0;
+        }
+        pos = next;
+    }
+    ulogf(L"XCAP walk %s exhausted 48 steps\n", name);
+    return 0;
+}
+
+static void
+xg_cap_diag(const CHAR16 *tag)
+{
+    UINTN  bb = 0, bd = 0, bf = 0, steps, last, hits, capStart;
+    INTN   gpuRb = -1;
+    UINTN  i;
+    UINT64 t;
+
+    t = fx_now_us();
+    ulogf(L"XCAP === E-D start: capability chain walk, READ ONLY ===\n");
+    ulogf(L"XCAP env: gRbAllN=%u gBrIdx=%d GPU bus=%u dev=%u fn=%u\n",
+          (UINTN)gRbAllN, (INTN)gBrIdx, gBus, gDev, gFn);
+
+    /* --- GPU --- */
+    xcap_dump_hdr("GPU/gRb", gBus, gDev, gFn, -1);
+    for (i = 0; i < gRbAllN; i++) {
+        UINT64 A = ((UINT64)gBus << 20) | ((UINT64)gDev << 15) |
+                   ((UINT64)gFn << 12);
+        UINT32 v;
+        uefi_call_wrapper(gRbAll[i]->Pci.Read, 5, gRbAll[i],
+            EfiPciIoWidthUint32, A | 0x00, 1, &v);
+        if (v != 0xFFFFFFFFU && v != 0) {
+            if (gpuRb < 0) gpuRb = (INTN)i;
+            ulogf(L"XCAP raw GPU/rb%u answers 0x%08x\n", (UINTN)i, v);
+        } else {
+            ulogf(L"XCAP raw GPU/rb%u DEAD 0x%08x\n", (UINTN)i, v);
+        }
+    }
+
+    capStart = (pci_cfg_rd_bdf(gBus, gDev, gFn, 0x04) >> 24) & 0xFFu;
+    hits = xcap_walk("GPU/capptr", -1, gBus, gDev, gFn, capStart, 0,
+                     &steps, &last);
+    ulogf(L"XCAP RESULT GPU/capptr -> %u (steps=%u lastid=0x%02x)\n",
+          hits, steps, last);
+
+    hits = xcap_walk("GPU/from40", -1, gBus, gDev, gFn, 0x40, 1,
+                     &steps, &last);
+    ulogf(L"XCAP RESULT GPU/from40 -> %u (steps=%u lastid=0x%02x)\n",
+          hits, steps, last);
+
+    if (gpuRb >= 0) {
+        xcap_dump_hdr("GPU/goodRB", gBus, gDev, gFn, gpuRb);
+        hits = xcap_walk("GPU/goodRB-capptr", gpuRb, gBus, gDev, gFn,
+                         capStart, 0, &steps, &last);
+        ulogf(L"XCAP RESULT GPU/goodRB-capptr -> %u (steps=%u lastid=0x%02x)\n",
+              hits, steps, last);
+        hits = xcap_walk("GPU/goodRB-from40", gpuRb, gBus, gDev, gFn, 0x40, 1,
+                         &steps, &last);
+        ulogf(L"XCAP RESULT GPU/goodRB-from40 -> %u (steps=%u lastid=0x%02x)\n",
+              hits, steps, last);
+    } else {
+        ulogf(L"XCAP RESULT GPU: no RB answers the GPU BDF at all\n");
+    }
+
+    /* --- Мост --- */
+    if (find_bridge_to(gBus, &bb, &bd, &bf)) {
+        ulogf(L"XCAP bridge found dev=%u fn=%u gBrIdx=%d\n", bd, bf,
+              (INTN)gBrIdx);
+        xcap_dump_hdr("BRIDGE/gRb", bb, bd, bf, -1);
+        xcap_dump_hdr("BRIDGE/gBrIdx", bb, bd, bf, gBrIdx);
+
+        capStart = (pci_cfg_rd_bdf(bb, bd, bf, 0x04) >> 24) & 0xFFu;
+        hits = xcap_walk("BRIDGE/gBr-capptr", -1, bb, bd, bf, capStart, 0,
+                         &steps, &last);
+        ulogf(L"XCAP RESULT BRIDGE/gBr-capptr -> %u (steps=%u lastid=0x%02x)\n",
+              hits, steps, last);
+
+        hits = xcap_walk("BRIDGE/gBr-from40", -1, bb, bd, bf, 0x40, 1,
+                         &steps, &last);
+        ulogf(L"XCAP RESULT BRIDGE/gBr-from40 -> %u (steps=%u lastid=0x%02x)\n",
+              hits, steps, last);
+
+        if (gBrIdx >= 0) {
+            hits = xcap_walk("BRIDGE/idx-capptr", gBrIdx, bb, bd, bf,
+                             capStart, 0, &steps, &last);
+            ulogf(L"XCAP RESULT BRIDGE/idx-capptr -> %u "
+                  L"(steps=%u lastid=0x%02x)\n", hits, steps, last);
+            hits = xcap_walk("BRIDGE/idx-from40", gBrIdx, bb, bd, bf, 0x40, 1,
+                             &steps, &last);
+            ulogf(L"XCAP RESULT BRIDGE/idx-from40 -> %u "
+                  L"(steps=%u lastid=0x%02x)\n", hits, steps, last);
+        }
+    } else {
+        ulogf(L"XCAP RESULT: NO-BRIDGE\n");
+    }
+
+    ulogf(L"XCAP === E-D done: %s ===\n", tag);
+    fx_mk_acc(t, L"xcap: E-D capability chain diagnostic");
+}
+#endif /* XP3G_CAP_DIAG */
 #endif /* RENDER_MASKS */
 
 
@@ -14084,6 +14288,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * обоих концах через PCI config и ретрейн. Одна попытка, без
          * повторов; при отказе печатается RETRAIN-FAIL и всё. */
         xg_link_probe(L"xck");
+#endif
+#ifdef XP3G_CAP_DIAG
+        /* ЭКСПЕРИМЕНТ E-D. ТОЛЬКО ЧТЕНИЕ PCI config: обход capability chain на
+         * GPU и мосте, четырьмя способами каждый. Ни одной записи, линок не
+         * трогаем. Разбирает причину NO-PCIE-CAP, из-за которой E-C вышел по
+         * страховке. */
+        xg_cap_diag(L"xcap");
 #endif
     } else {
         ulogf(L"G2RMS  render masks SKIPPED: unlock did not pass "

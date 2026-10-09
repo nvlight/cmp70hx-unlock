@@ -417,6 +417,34 @@ build_one xgate3              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
                               -DXP3G_LINK_RETRAIN
 
+# E-D (2026-10-09) - разбор причины NO-PCIE-CAP. ТОЛЬКО ЧТЕНИЕ, линок не
+# трогаем: E-C вышел по страховке, потому что find_pcie_cap() вернул 0 на обоих
+# концах. Ни в одном прогоне проекта обход capability ничего не находил:
+# успешных cap@0x - ноль во всех шести логах.
+#
+# Проверяются ВСЕ гипотезы по отдельности, четырьмя способами на каждом конце:
+#   - чтение 0x04 и извлечение CapPtr из байта 0x07 (sanity + гипотеза A/B);
+#   - обход, начинающийся с CapPtr, как это делает find_pcie_cap();
+#   - обход, начинающийся С 0x40 в обход CapPtr (гипотеза B: chain не там);
+#   - те же два обхода через ТОТ RB, под которым устройство реально найдено.
+# Последнее - главное: find_bridge_to() берёт мост через ЛЮБОЙ из gRbAll[] и
+# запоминает gBrIdx, а pci_cfg_rd_bdf() читает только через gRb (первый).
+#
+# Печатается каждый шаг обхода (pos/id/next), так видно, где цепочка уходит.
+#
+# Приёмка:
+#   XCAP env: gRbAllN=.. gBrIdx=.. GPU bus=.. dev=.. fn=..
+#   XCAP raw GPU/gRb id=0x.. 0x04=0x.. CapPtr=0x..
+#   XCAP raw GPU/rb0 answers 0x.. / DEAD
+#   XCAP walk GPU/capptr step 0 pos=0x.. id=0x.. next=0x..
+#   XCAP RESULT GPU/capptr -> .. (steps=.. lastid=0x..)
+#   XCAP RESULT GPU/from40 -> .. / GPU/goodRB-capptr / GPU/goodRB-from40
+#   XCAP RESULT BRIDGE/... -> ..
+build_one xcap                -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
+                              -DXP3G_CAP_DIAG
+
 # E6 (2026-10-08) - проверка отчётчика селектора. САМЫЙ ДЕШЁВЫЙ ЭКСПЕРИМЕНТ
 # ИЗ ВСЕХ: НОЛЬ новых записей.
 #
