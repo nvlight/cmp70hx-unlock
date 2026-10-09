@@ -1,0 +1,13 @@
+CMP 70HX Unlock 1.0.0
+release=1.0.0
+variant=RELEASE, GFX_SPEED_SELECT=0x4
+built=2026-10-06 (re-verified: md5 identical to release 1.0.0 / v3.52)
+loader=EFI/BOOT/BOOTX64.EFI
+loader_md5=C68878AFAFD0D2D246D2E25C5ACBD888
+loader_size=680960
+renderer=Cyberpunk 2077 50 fps / 135 W / SM 1545 MHz
+note=binselector sweep finished 2026-10-06; seven of eight values measured,
+      all but 0x4 give 9 fps. 0x1 = 9 fps / 92 W / 1545 MHz.
+log_area=lba 4000000..4002047 (1 MiB, outside this image; cleared at every run)
+secure_boot=must be OFF
+boot=select this stick in the UEFI boot menu; no reboot, Windows chainloads itself
