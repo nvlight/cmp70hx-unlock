@@ -1510,9 +1510,26 @@ find_pcie_cap(UINTN bus, UINTN dev, UINTN fn)
     UINTN pos, guard = 0;
     if (pci_cfg_rd_bdf(bus, dev, fn, 0x00) == 0xFFFFFFFFU)
         return 0;
-    /* v2.99i FIX: CapPtr — байт 0x07 (старший байт dword@0x04);
-     * раньше брали >>8 (байт 0x05) и всегда промахивались */
-    pos = (pci_cfg_rd_bdf(bus, dev, fn, 0x04) >> 24) & 0xFF;
+    /* Capabilities Pointer лежит по ФИКСИРОВАННОМУ адресу 0x34 (стандартный
+     * PCI header) и НЕ входит в dword по 0x04 — там Command (0x04-05) и
+     * Status (0x06-07).
+     *
+     * ОШИБКА, БЫВШАЯ ДО 2026-10-10. Здесь стояло:
+     *   «v2.99i FIX: CapPtr — байт 0x07 (старший байт dword@0x04);
+     *    раньше брали >>8 (байт 0x05) и всегда промахивались»
+     * и pos = (rd(0x04) >> 24) & 0xFF. Байт 0x07 — старший байт STATUS,
+     * он по спецификации всегда ноль, поэтому обход цепочки не мог
+     * начаться НИКОГДА. «v2.99i FIX» чинил один сдвиг на другой внутри
+     * неверной посылки, поэтому мимо.
+     *
+     * Подтверждено замером из Windows через WinRing0 (2026-10-10,
+     * docs/70HX-XP3G-GATE-V67.md §4a.11.8):
+     *   GPU 01:00.0  CapPtr=0x60
+     *     0x60 PM -> 0x68 MSI -> 0x78 PCIe -> 0xB4 Vendor -> 0x00
+     *   bridge 00:1b.0  CapPtr=0x40  -> 0x40 PCIe -> 0x80 MSI -> ...
+     * Побочный эффект бага — «CapPtr=0» в E-D и «pcie_cap not found» во
+     * всех шести прогонах GEN2C: это был он, а не свойство карты. */
+    pos = pci_cfg_rd_bdf(bus, dev, fn, 0x34) & 0xFF;
     while (pos >= 0x40 && guard++ < 48) {
         UINT32 cdw = pci_cfg_rd_bdf(bus, dev, fn, pos & ~3U);
         UINTN off = pos & 3;
@@ -5731,8 +5748,23 @@ render_open_gfx_masks(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
  *     0x0008E1D8U, 0x0008E1DCU, 0x0008E1E0U, 0x0008E1E4U, 0x0008E1E8U,
  *     0x0008E1ECU, 0x0008E1F0U
  * Замер их открытия: 24 из 25, polls=0 — механика работает. Их эффект:
- * ноль fps и ноль ватт (PORT-STATUS §1u). Если Gen2 когда-нибудь будет
- * включён обратно, эти 17 адресов надо вернуть ПЕРВЫМИ. */
+ * ноль fps и ноль ватт (PORT-STATUS §1u).
+ *
+ * ВНИМАНИЕ, ПРЕДПИСАНИЕ ОТОЗВАНО (2026-10-10). Раньше здесь стояло «если Gen2
+ * когда-нибудь будет включён обратно, эти 17 адресов надо вернуть ПЕРВЫМИ».
+ * Это больше не так, и предписание снято замерами, а не мнением:
+ *   - референс iatethelogs/cmp90hx_pwner (единственный найденный инструмент,
+ *     где PCIe Gen2 реально работает) держит ровно ДВЕ маски —
+ *     MASK_XVE=0x00088fe8 и MASK_FEAT=0x00823800. Адреса 0x8E1xx он не
+ *     трогает нигде: ни в масках, ни в policy set;
+ *   - наш же PORT-STATUS §1p (Хабр 1082724, тот же автор) даёт ту же пару;
+ *   - E-B: семь полей policy set встали после открытия ОДНОГО гейта 0x8E1B0,
+ *     без остальных шестнадцати;
+ *   - E-G: записи в соседний блок 0x8200D0..0xF4 ВАЛЯТ гостя в ресет
+ *     (прогоны 29-31, три подряд).
+ * Список масок при возврате стадии — {0x00823800, 0x00088FE8}.
+ * Разбор: KNOWN-ISSUES.md §51.7, порядок и офсеты PCI config —
+ * docs/70HX-XP3G-GATE-V67.md §4a.11. Код здесь не менялся. */
 #define NTGT ((INTN)(sizeof(tgt) / sizeof(tgt[0])))
     volatile UINT32 *pv = (volatile UINT32 *)(UINTN)(v67Phys + 0xf948);
     volatile UINT32 *pa = (volatile UINT32 *)(UINTN)(v67Phys + 0xf960);
