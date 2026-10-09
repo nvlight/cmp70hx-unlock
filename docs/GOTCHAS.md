@@ -136,5 +136,10 @@
   (карта кремниево клампнута на Gen2: LINK_CAP write 03 → readback 02).
 - На q35-стенде phase3 бридж не найдёт (ECAM хоста не проброшен) — проверять
   только на реальном HW.
-- LNKCTL2 живёт на CAP_EXP+30 (+2c — это LNKCAP2, read-only!). Баг был в
-  референсных скриптах cmpunlocker.
+- LNKCTL2 живёт на CAP_EXP+30, а не на +2c: по
+  `include/uapi/linux/pci_regs.h` это `PCI_EXP_LNKCTL2`, тогда как `+2c` —
+  `PCI_EXP_LNKCAP2`, read-only. Смещение было найдено в референсных скриптах
+  cmpunlocker; теперь подтверждено спецификацией. **Встреченный референс
+  `iatethelogs/cmp90hx_pwner` делает ровно наоборот** (пишет в `+2c`) и
+  получает Gen2 одним `Retrain Link` на `+0x10.w |= 0x20` — см.
+  [KNOWN-ISSUES.md §51.5](../KNOWN-ISSUES.md).

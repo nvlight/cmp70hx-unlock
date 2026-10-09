@@ -45,15 +45,31 @@ feature-override `0x82xxxx` и priv-домен `0x8Exxx`, плюс XVE-окно 
 
 | Адрес | Имя | Gen2 значение | Примечание |
 |---|---|---|---|
-| `0x88084` | LINK_CAP | `0x00453D02` | ниббл скорости СЛЕДУЕТ за фактическим линком; Gen3 клампится кремнием (write 03 → readback 02) |
+| `0x88084` | LINK_CAP | `0x00453D01` | совпадает с config `LNKCAP`. См. строку ниже |
 | `0x880A8` | LC2 TLS | TLS=2 (5GT/s) | под живым GSP запись ОТБРАСЫВАЕТСЯ — писать только до загрузки ОС |
 | `0x8841C` | PRIV_MISC_1 | биты 11,13=1; 12,14=0 (`e0b62d00`) | рецепт из nv_cmp90hx_gen2_config |
 | `0x8C2C0` | CYA_0 | bit2=0 (`00802001`) | |
 | `0x8C040` | LINK_CONFIG_0 | MAX_RATE[19:18]=2 (`80085800`) | |
 | `0x8E110/0x8E120` | XP3G OVR0/VAL0 | 1 / 0 | |
 | `0x8E11C/0x8E12C` | XP3G OVR3/VAL3 | 4 / 0x00200000 | |
-| cfg GPU `CAP_EXP+30.w` | LNKCTL2 TLS | 5GT/s | офсет +30, НЕ +2c (=LNKCAP2, RO!) |
+| cfg GPU `CAP_EXP+30.w` | LNKCTL2 TLS | 5GT/s | офсет **+30** = `PCI_EXP_LNKCTL2`; **+2c** = `PCI_EXP_LNKCAP2`, RO. См. ниже |
 | cfg bridge `CAP_EXP+30.w` + `+10.w\|=0x20` | TLS + Retrain Link | — | phase3 делает через ECAM из EFI до загрузки ОС |
+
+Офсеты привязаны к `include/uapi/linux/pci_regs.h`, а не к чужим скриптам:
+
+| офсет от базы capability | макрос | RW |
+|---|---|---|
+| `0x10` | `PCI_EXP_LNKCTL` (`_RL = 0x0020` — Retrain Link) | **да** |
+| `0x2C` | `PCI_EXP_LNKCAP2` | RO |
+| **`0x30`** | **`PCI_EXP_LNKCTL2`** (`_TLS = 0x000f`) | **да** |
+| `0x32` | `PCI_EXP_LNKSTA2` | RO |
+
+> Внешняя проверка: `iatethelogs/cmp90hx_pwner` пишет `CAP_EXP+2c.w=0x0002`, то
+> есть в RO-регистр, и его Gen2 держится на одном `Retrain Link`. **Выравнивать
+> офсет под него нельзя.** Разбор — [KNOWN-ISSUES.md §51.5](../KNOWN-ISSUES.md).
+>
+> Наша запись `pci_cfg_wr_bdf(…, gc+0x30, lc2)` идёт **dword**'ом и задевает
+> ещё и `LNKSTA2` на `0x32`. При возврате фазы писать надо word-ом.
 
 ## Законы жизни масок (эмпирика)
 
