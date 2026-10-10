@@ -447,6 +447,38 @@ build_one xgate4              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
                               -DXP3G_LINK_RETRAIN -DXP3G_XVE_MASK
 
+# E-G (2026-10-10) - тот же адрес 0x88FE8, но ПРИВИЛЕГИРОВАННЫМ выстрелом
+# ботера вместо хост-MMIO. Это исправление ошибки пути в E-F, а не новая идея.
+#
+# ЧТО БЫЛО НЕ ТАК. xgate4 (E-F) писала 0x88FE8 обычным mmio_write32 с хоста и
+# получила LOCKED на всех пяти адресах. Я записал, что домен 0x88xxx защищён
+# сильнее гейта. Это верно только про ХОСТОВУЮ запись: гейт 0x8E1B0 тоже
+# открывается ботером, и хост-MMIO в него после E-A не пишет ни E-A, ни E-B.
+# Для 0x88FE8 открывающего гейта у нас нет, значит хостовая запись была
+# обречена изначально.
+#
+# ДОКАЗАТЕЛЬСТВО, ЧТО ИМЕННО БОТЕР. src/unlock_v2.c, комментарий про маски:
+# "гибнут при тёплом/холодном ресете (доказано: 0x88fe8 откатился в CF после
+# ResetSystem-Warm)". Откатился В CF = до этого был FFFFFFFF. Адрес открывался
+# ботерной ROP-записью через g_rj16[], тем же кодом, что и здесь.
+#
+# ЛИМИТ "ДВА ВЫСТРЕЛА" НЕ МЕШАЕТ: он про одно состояние SEC2, а xg_v67_write
+# делает свой FLR в начале каждого выстрела. xg_probe двумя выстрелами подряд
+# открывает 0x8E1B0 и 0x8E1B4 - подтверждено на железе.
+#
+# ПОРЯДОК СТАДИЙ: E-A -> E-G -> E-B -> E-C. E-G обязан идти до E-B, потому что
+# xg_v67_write делает FLR, а policy set состоит из обычных регистров, не масок.
+#
+# Приёмка:
+#   XGM  0x00088fe8 before=0x.. gave 0xffffffff OPEN | NOT OPEN
+#   XGM  VERDICT: XVE-BOOTER-OPEN | XVE-BOOTER-FAILED
+#   XCK step1 GPU ... TLS=2 OK | NOT SET   <- главное, изменилось ли после маски
+# Разбор - docs/70HX-XP3G-GATE-V67.md §4a.11.12.
+build_one xgate5              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
+                              -DXP3G_LINK_RETRAIN -DXP3G_XVE_BOOTER
+
 # E-D (2026-10-09) - разбор причины NO-PCIE-CAP. ТОЛЬКО ЧТЕНИЕ, линок не
 # трогаем: E-C вышел по страховке, потому что find_pcie_cap() вернул 0 на обоих
 # концах. Ни в одном прогоне проекта обход capability ничего не находил:

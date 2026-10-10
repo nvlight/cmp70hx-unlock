@@ -6958,6 +6958,10 @@ fuse_table_probe(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
 #define XG_GATE        0x0008e1b0U   /* гейт привилегий XP3G */
 #define XG_CTRL        0x0008e1b4U   /* сосед по семейству: положительный контроль */
 #define XG_OPEN        0xffffffffU
+/* Маска XVE/PCIe-домена. Адрес референса iatethelogs (MASK_XVE), см.
+ * KNOWN-ISSUES.md §51.4. Открывается БОТЕРОМ, не хост-MMIO: доказано
+ * строкой ниже про откат в CF и таблицей g_rj16[] через ROP. */
+#define XG_XVE_MASK    0x00088fe8U
 
 /* Один привилегированный выстрел V67 — тот же цикл, что ftp_booter_write:
  * FLR -> restore BAR0 -> ботер#1 открывает PLM -> ботер#2 пишет пару pv/pa ->
@@ -7066,6 +7070,104 @@ xg_probe(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
     fx_mk_acc(t, L"xgate: E-A xp3g gate via V67");
 }
 #endif /* XP3G_GATE_V67 */
+
+#if defined(XP3G_XVE_BOOTER) && defined(XP3G_GATE_V67)
+/* ==== ЭКСПЕРИМЕНТ E-G: маска 0x88FE8 ПРИВИЛЕГИРОВАННЫМ ВЫСТРЕЛОМ ========
+ *
+ * Определение XG_XVE_MASK и сама xg_v67_write() живут ВНУТРИ блока
+ * XP3G_GATE_V67, поэтому E-G обязана требовать оба флага, а не один.
+ *
+ * ЗАЧЕМ, ПОСЛЕ ТОГО КАК E-F НЕ СРАБОТАЛ. E-F (xgate4) писала 0x88FE8
+ * обычным mmio_write32 с ХОСТА и получила LOCKED на всех пяти адресах.
+ * Тогда я записал, что домен 0x88xxx защищён сильнее гейта 0x8E1B0.
+ * Это было верно только про ХОСТОВУЮ запись, и вывод из этого не следовал.
+ *
+ * ГДЕ ОШИБКА. Маску 0x88FE8 умеет открывать БОТЕР, а не хост. Прямо в этом
+ * файле, src/unlock_v2.c:14384, написано: «маски переживают FLR, но гибнут при
+ * тёплом/холодном ресете (доказано: 0x88fe8 откатился в CF после
+ * ResetSystem-Warm)». «Откатился в CF» значит, что ДО этого был FFFFFFFF —
+ * адрес в проекте открывался. Механизм там ботерный: пара pv/pa плюс
+ * booter_load_v67 (строка 14452), то есть ROP через сам GPU, не хост-MMIO.
+ *
+ * Таким образом E-F проверял не тот путь доступа. Хост-MMIO к 0x8E1B0 после
+ * E-A тоже не писался бы (гейт открывают БОТЕРОМ), и мы это знаем: E-B пишет
+ * policy ХОСТОМ и встаёт только потому, что гейт уже открыт ботером.
+ * Для 0x88FE8 открывающего гейта у нас нет — значит и хостовая запись была
+ * обречена. Выстрел ботером — единственный путь, который ещё не пробован.
+ *
+ * ПОЧЕМУ ОГРАНИЧЕНИЕ «ДВА ВЫСТРЕЛА» НЕ МЕШАЕТ. «Третий выстрел в одном
+ * состоянии SEC2 не работает» (v3.18) — про ОДНО состояние. xg_v67_write()
+ * делает свой do_flr() в начале каждого выстрела (строка 6975), то есть
+ * каждый выстрел получает свежий счётчик. Подтверждено на железе: xg_probe
+ * делает два выстрела подряд (0x8E1B0, затем 0x8E1B4) и оба открываются.
+ *
+ * ГДЕ СТОИТ СТАДИЯ. МЕЖДУ E-A и E-B, и это невкусно. xg_v67_write() делает
+ * FLR внутри. Политика E-B пишет обычные регистры, а не маски, — если бы E-G
+ * шёл после неё, её результат зависел бы от того, пережил ли policy FLR.
+ * Порядок E-A -> E-G -> E-B снимает вопрос: политика всегда заливается
+ * последней, уже после всех FLR.
+ *
+ * ЧТО ПЕЧАТИТСЯ. Одна строка результата и вердикт из двух исходов, по той же
+ * логике разбора, что у E-A: контрольного адреса здесь нет, но соседний домен
+ * 0x8E1xx в этом же прогоне открыт ботером двумя выстрелами выше, поэтому
+ * отрицательный результат считается содержательным, а не недействительным.
+ *
+ * ЕСЛИ ОТКРОЕТСЯ. Тогда E-F в xgate4 был отрицательным результатом неверного
+ * пути доступа, а не свойством кремния, и вопрос «кто держит TLS=2 на GPU»
+ * остаётся открытым: следующая проверка — снимет ли открытая маска отбрасывание
+ * записи в шаге 1 E-C. Строка XCK step1 печатается в этом же прогоне.
+ *
+ * ЕСЛИ НЕ ОТКРОЕТСЯ. Это третий независимый способ, которым адрес не берётся
+ * (рендер-таблица, хост-MMIO в E-F, ботер здесь), при том что тот же ботер,
+ * тот же ROP и тот же FLR открывают 0x8E1B0 в ста метров строкой выше. Тогда
+ * различие доменов 0x88xxx и 0x8E1xx на одном кремнии ИЗМЕРЕНО, а не
+ * предположено, и следующий вопрос — какой переключатель между ними.
+ */
+static void
+xg_xve_probe(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
+             UINT64 fwsecPhys, UINT64 v67Phys)
+{
+    UINT32 before, got;
+    INTN   pT;
+    UINT64 t;
+
+    t = fx_now_us();
+
+    /* До: обязана быть видна как ровно закрытая, иначе результат без предмета. */
+    before = mmio_read32(XG_XVE_MASK);
+    ulogf(L"XGM  precondition: gate 0x%08x=0x%08x  XVE mask 0x%08x=0x%08x\n",
+          XG_GATE, mmio_read32(XG_GATE), XG_XVE_MASK, before);
+
+    /* Решающий выстрел. Тот же код, что открыл гейт, без единого изменения:
+     * меняется только адрес. */
+    got = xg_v67_write(v67Phys, ucodePhys, fwsecPhys, wprMetaPhys,
+                       XG_XVE_MASK, XG_OPEN, &pT);
+
+    ulogf(L"XGM  0x%08x before=0x%08x wrote 0x%08x gave 0x%08x %s "
+           L"(polls=%d)\n", XG_XVE_MASK, before, XG_OPEN, got,
+          (got == XG_OPEN) ? "OPEN" : "NOT OPEN", pT);
+    Print(L"xgm: XVE 0x%08x 0x%08x -> 0x%08x %s polls=%d\n",
+          XG_XVE_MASK, before, got,
+          (got == XG_OPEN) ? "OPEN" : "NOT OPEN", pT);
+
+    if (got == XG_OPEN) {
+        ulogf(L"XGM  VERDICT: XVE-BOOTER-OPEN - the PCIe-domain mask opens "
+               L"privilege, and E-F's host-MMIO failure was a wrong access path, "
+               L"not a property of the silicon. Whether it unblocks TLS=2 is "
+               L"decided by XCK step1, not here\n");
+        Print(L"xgm: VERDICT XVE-BOOTER-OPEN\n");
+    } else {
+        ulogf(L"XGM  VERDICT: XVE-BOOTER-FAILED - the same booter that opened "
+               L"0x%08x two shots above did NOT open the PCIe-domain mask. "
+               L"Domains 0x88xxx and 0x8E1xx differ on this silicon, and that "
+               L"is now measured rather than assumed\n", XG_GATE);
+        Print(L"xgm: VERDICT XVE-BOOTER-FAILED\n");
+    }
+
+    ulogf(L"XGM  === E-G done: %s ===\n", tag);
+    fx_mk_acc(t, L"xgm: E-G XVE mask 0x88fe8 via V67");
+}
+#endif /* XP3G_XVE_BOOTER && XP3G_GATE_V67 */
 
 #ifdef XP3G_GATE_POLICY
 /* ==== ЭКСПЕРИМЕНТ E-B: заливается ли policy set, когда гейт открыт ==========
@@ -14794,6 +14896,17 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * блока селекторов. Блок не трогает линк и не пишет ни одного
          * функционального бита — только снятие защиты с записи. */
         xg_probe(L"xg", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+#endif
+#if defined(XP3G_XVE_BOOTER) && defined(XP3G_GATE_V67)
+        /* ЭКСПЕРИМЕНТ E-G. МЕЖДУ E-A и E-B — порядок обязателен, а не
+         * косметика. xg_v67_write() делает FLR внутри себя. E-B ниже пишет
+         * policy обычными регистрами (не масками), и если бы E-G шёл после
+         * E-B, результат E-B зависел бы от того, пережил ли policy этот FLR.
+         * Здесь политика заливается последней, уже после всех FLR.
+         *
+         * Само место то же, что у E-A: до блока селекторов, пока SS0/SS1
+         * нулевые — ботер больше нигде не стреляет. Линк не трогает. */
+        xg_xve_probe(L"xgm", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
 #endif
 #ifdef XP3G_GATE_POLICY
         /* ЭКСПЕРИМЕНТ E-B. Идёт сразу за E-A и тем же местом — до блока
