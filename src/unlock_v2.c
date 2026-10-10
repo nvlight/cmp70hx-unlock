@@ -8431,6 +8431,94 @@ xg_link_probe(const CHAR16 *tag)
     }
 #endif /* XP3G_LINK_ORDER */
 
+#if defined(XP3G_RETRY_SERIES)
+    /* --- Шаг 7 (E-P): СЕРИЯ РЕТРЕЙНА ПО РЕЦЕПТУ РЕФЕРЕНСА =================
+     *
+     * ПОЧЕМУ ИМЕННО ЭТО. iatethelogs/cmp90hx_pwner делает до 13 попыток
+     * ретрейна с нарастающей паузой. Мы делали две, с интервалом 10 с, и
+     * никогда ровно так. После двадцати прогонов это единственное
+     * невыполненное расхождение с рецептом инструмента, который умеет, -
+     * дешевле закрыть его, чем строить новые гипотезы.
+     *
+     * ЧТО ПОВТОРЯЕМ РОВНО. Паузы референса: 0 / 0.25 / 0.5 / 1 / 2 / 3 / 5 / 8 /
+     * 13 секунд, до 13 попыток. Список содержит ДЕВЯТЬ значений при потолке в
+     * 13 попыток, поэтому последние повторяют максимум - это наше допущение,
+     * и оно записано здесь, чтобы его можно было оспорить.
+     *
+     * ЧТО НЕ МЕНЯЕМ. Порядок внутри попытки прежний: кик LTSSM, затем Retrain
+     * Link с моста, затем опрос LNKSTA. TLS уже подтверждён на обоих концах
+     * шагами 1b/2b, и переписывать его здесь незачем.
+     *
+     * КРИТЕРИЙ ОСТАВКИ. Как только LNKSTA даёт speed>=2, цикл прерывается и
+     * печатается номер попытки. Иначе - полные 13 попыток и честный итог.
+     * Каждая попытка печатается с фактическим LNKSTA, чтобы по логу было видно
+     * динамику, а не только итог.
+     *
+     * ЧЕСТНО О ШАНСАХ. Их немного. За двадцать прогонов не подтвердилось ни
+     * одно предположение о причине, и все найденные двери закрыты по замерам.
+     * Возможно, разница с референсом не в числе попыток, а в чём-то, чего из
+     * EFI не видно. Но эксперимент дешёвый и исход однозначный: либо Gen2,
+     * либо последнее расхождение с работающим рецептом закрыто.
+     */
+    {
+        /* Референс перечисляет девять пауз при потолке 13 попыток. Последние
+         * четыре повторяют максимум - см. оговорку в комментарии выше. */
+        static const UINT32 paus[13] = {
+            0, 250, 500, 1000, 2000, 3000, 5000,
+            8000, 13000, 13000, 13000, 13000, 13000
+        };
+        UINTN  a;
+        UINT32 got;
+
+        if (((st >> 16) & 0xF) >= 2u) {
+            ulogf(L"XCK step7 series SKIPPED - first retrain already gave "
+                   L"speed=%d\n", (INTN)((st >> 16) & 0xF));
+        } else {
+            ulogf(L"XCK step7 starting retrain series, up to 13 attempts, "
+                   L"reference pauses 0/0.25/0.5/1/2/3/5/8/13 s\n");
+            Print(L"xck: step7 retrain series, up to 13 attempts\n");
+
+            for (a = 0; a < 13; a++) {
+                if (paus[a]) uefi_call_wrapper(BS->Stall, 1, paus[a] * 1000);
+
+                /* Кик перед каждой попыткой: без повторного adoption
+                 * следующий ретрейн не имеет смысла - это показано в E-H. */
+                mmio_write32(0x0008872cU, 6u);
+                got = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+                pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, got | (1u << 5));
+
+                /* Короткий опрос: цель серии - узнать, сдаст ли хоть одна
+                 * попытка, а не измерить время перехода. Длинный опрос после
+                 * успешной попытки всё равно виден в финальном снимке. */
+                for (polls = 0; polls < 8; polls++) {
+                    uefi_call_wrapper(BS->Stall, 1, 250000);
+                    st = mmio_read32(0x00088088U);
+                    if (((st >> 16) & 0xF) >= 2u) break;
+                }
+                ulogf(L"XCK step7 attempt %d of 13, pause %d ms, LNKSTA=0x%08x "
+                       L"speed=%d width=%d\n", (INTN)(a + 1), (INTN)paus[a], st,
+                      (INTN)((st >> 16) & 0xF), (INTN)((st >> 4) & 0x3F));
+
+                if (((st >> 16) & 0xF) >= 2u) {
+                    ulogf(L"XCK step7 SUCCESS on attempt %d of 13 - speed=%d\n",
+                          (INTN)(a + 1), (INTN)((st >> 16) & 0xF));
+                    Print(L"xck: step7 SUCCESS attempt %d speed=%d\n",
+                          (INTN)(a + 1), (INTN)((st >> 16) & 0xF));
+                    break;
+                }
+            }
+
+            if (((st >> 16) & 0xF) < 2u) {
+                ulogf(L"XCK step7 series EXHAUSTED - all 13 attempts at the "
+                       L"reference cadence stayed at speed=%d. The last "
+                       L"difference from the reference recipe is now closed\n",
+                      (INTN)((st >> 16) & 0xF));
+                Print(L"xck: step7 EXHAUSTED after 13 attempts\n");
+            }
+        }
+    }
+#endif /* XP3G_RETRY_SERIES */
+
     ulogf(L"XCK === AFTER ===\n");
     xg_snap("after");
 #if defined(XP3G_LINK_DIAG)

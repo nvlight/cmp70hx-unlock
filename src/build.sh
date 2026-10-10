@@ -883,6 +883,47 @@ build_one xgate13             -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DXP3G_WIN_SCAN -DXP3G_WIN_UNLOCK -DXP3G_MASK_FAM \
                               -DXP3G_WIN_RETRY
 
+# E-P (2026-10-10) - серия ретрейна ровно по рецепту iatethelogs.
+# Последнее невыполненное расхождение с рецептом работающего инструмента.
+#
+# ЧТО ЗАКРЫЛ xgate13. При ПОЛНОСТЬЮ открытом семействе 0x88FExx (все пять
+# масок = 0xFFFFFFFF, напечатано в логе) адреса 0x88094 и 0x88098 всё равно
+# остались 0xBADF5040 после 400 polls каждый. Значит защита на них не из
+# семейства, и BAR0-путь к зеркалу LNKCTL закрыт.
+#
+# ЧТО ОСТАЛОСЬ НЕВЫПОЛНЕННЫМ. iatethelogs делает до 13 попыток ретрейна с
+# нарастающей паузой 0/0.25/0.5/1/2/3/5/8/13 с. Мы делали две с интервалом
+# 10 с и никогда ровно так.
+#
+# ЧТО ПОВТОРЯЕМ РОВНО. Паузы референса, до 13 попыток. Список содержит ДЕВЯТЬ
+# значений при потолке в 13 попыток, поэтому последние четыре повторяют
+# максимум - это наше допущение, оно записано в коде явно, чтобы его можно
+# было оспорить.
+#
+# ЧТО НЕ МЕНЯЕМ. Порядок внутри попытки прежний: кик LTSSM, Retrain Link с
+# моста, опрос LNKSTA. TLS уже подтверждён на обоих концах шагами 1b/2b.
+# Опрос после попытки короткий (8 x 250 мс): цель серии - узнать, сдаст ли
+# хоть одна, а не измерить время перехода.
+#
+# ЧЕСТНО О ШАНСАХ. Их немного. За двадцать прогонов не подтвердилось ни одно
+# предположение о причине, все найденные двери закрыты по замерам. Возможно,
+# разница не в числе попыток, а в чём-то, чего из EFI не видно. Но исход
+# однозначный: либо Gen2, либо последнее расхождение закрыто.
+#
+# Приёмка:
+#   XCK step7 starting retrain series, up to 13 attempts, reference pauses ...
+#   XCK step7 attempt N of 13, pause M ms, LNKSTA=0x... speed=1 width=4   x13
+#   XCK step7 SUCCESS on attempt N | XCK step7 series EXHAUSTED - all 13 ...
+# Разбор - docs/70HX-XP3G-GATE-V67.md §4a.11.21.
+build_one xgate14             -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
+                              -DXP3G_LINK_RETRAIN -DXP3G_XVE_BOOTER \
+                              -DXP3G_LINK_ORDER -DXP3G_LINK_STIMULUS \
+                              -DXP3G_LINK_DIAG -DXP3G_LINK_DISABLE -DXP3G_LINK_K \
+                              -DXP3G_WIN_SCAN -DXP3G_WIN_UNLOCK -DXP3G_MASK_FAM \
+                              -DXP3G_WIN_RETRY -DXP3G_RETRY_SERIES
+
 # E-D (2026-10-09) - разбор причины NO-PCIE-CAP. ТОЛЬКО ЧТЕНИЕ, линок не
 # трогаем: E-C вышел по страховке, потому что find_pcie_cap() вернул 0 на обоих
 # концах. Ни в одном прогоне проекта обход capability ничего не находил:
