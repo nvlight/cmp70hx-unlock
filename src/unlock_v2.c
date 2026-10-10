@@ -7393,6 +7393,12 @@ xg_link_probe(const CHAR16 *tag)
     UINTN  gc, bb = 0, bd = 0, bf = 0, bc = 0;
     UINTN  polls;
     UINT64 t;
+#if defined(XP3G_LINK_STIMULUS)
+    /* Счётчик подтверждений TLS=2 на GPU. Считается ДВАЖДЫ: до кика LTSSM и
+     * после него. Объявлен только под этим флагом, чтобы xgate5 и xgate6
+     * собирались побайтово теми же, что проверены на железе. */
+    UINT32 tlsSet;
+#endif
 
     t = fx_now_us();
 
@@ -7557,21 +7563,45 @@ xg_link_probe(const CHAR16 *tag)
               "TLS=%u (instant readback)\n", (INTN)(lc2 & 0xFFFF),
               (INTN)(set & 0xFFFF), (INTN)(got & 0xFFFF), (INTN)(got & 0xF));
 
-        /* Ожидание фактического вступления в силу. Это единственный критерий
-         * для шага 4: пока TLS не 2, ретрейнить нельзя. */
+        /* Ожидание фактического вступления в силу. */
         inst = got;
         for (tp = 0; ((got & 0xFu) != 2u) && tp < 40; tp++) {
             uefi_call_wrapper(BS->Stall, 1, 100000);
             got = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
         }
+#if defined(XP3G_LINK_STIMULUS)
+        ulogf(L"XCK step1b GPU TLS %s after %d polls x 100ms (PRE-KICK, "
+              "instant readback was TLS=%u)\n",
+              ((got & 0xFu) == 2u) ? "SET" : "NOT-SET", (INTN)tp,
+              (INTN)(inst & 0xF));
+#else
+        /* Текст строки НЕ трогаем без XP3G_LINK_STIMULUS: xgate6 прогнан на
+         * железе с этой формулировкой, и его отпечаток 356b6b64 обязан
+         * воспроизводиться. Пометка "PRE-KICK" имеет смысл только рядом с
+         * точкой B, а она есть лишь в E-I. */
         ulogf(L"XCK step1b GPU TLS %s after %d polls x 100ms "
               "(instant readback was TLS=%u - ASYNCHRONOUS WRITE, this is what "
               "three earlier runs misread as DROPPED)\n",
               ((got & 0xFu) == 2u) ? "SET" : "NOT-SET", (INTN)tp,
               (INTN)(inst & 0xF));
+#endif
         Print(L"xck: GPU TLS -> %u %s (%d polls)\n", (INTN)(got & 0xF),
               ((got & 0xFu) == 2u) ? "OK" : "NOT SET", (INTN)tp);
 
+#if defined(XP3G_LINK_STIMULUS)
+        /* РАННЕГО ВЫХОДА ЗДЕСЬ НЕТ, и это главное отличие от xgate6.
+         *
+         * xgate6 выходил с вердиктом TLS-NOT-SET после 4 с ожидания и на этом
+         * останавливался. Прогон xgate5 при этом показывал TLS=2 - но там
+         * между записью и чтением успевали пройти кик LTSSM И ретрейн. То
+         * есть не установлено, чем именно применяется запись: временем или
+         * побуждением контроллера. Выход по часам уничтожал ровно то
+         * наблюдение, ради которого стадия существует.
+         *
+         * Теперь здесь только измерение точки A. Что с ней будет - решает
+         * шаг 3b, а не таймер. */
+        tlsSet = ((got & 0xFu) == 2u) ? 1u : 0u;
+#else
         if ((got & 0xFu) != 2u) {
             ulogf(L"XCK VERDICT: TLS-NOT-SET on the GPU after %d polls - link "
                    "NOT touched, a retrain with no target speed would be "
@@ -7579,6 +7609,7 @@ xg_link_probe(const CHAR16 *tag)
             Print(L"xck: VERDICT TLS-NOT-SET\n");
             return;
         }
+#endif
 #else
         /* Старый путь: записать и прочитать СРАЗУ. Именно он три прогона
          * подряд печатал DROPPED на запись, которая на самом деле вставала
@@ -7616,17 +7647,25 @@ xg_link_probe(const CHAR16 *tag)
             uefi_call_wrapper(BS->Stall, 1, 100000);
             got = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
         }
+#if defined(XP3G_LINK_STIMULUS)
+        ulogf(L"XCK step2b BRIDGE TLS %s after %d polls x 100ms (PRE-KICK)\n",
+              ((got & 0xFu) == 2u) ? "SET" : "NOT-SET", (INTN)tp);
+#else
+        /* См. комментарий у шага 1b: текст без STIMULUS не трогаем. */
         ulogf(L"XCK step2b BRIDGE TLS %s after %d polls x 100ms\n",
               ((got & 0xFu) == 2u) ? "SET" : "NOT-SET", (INTN)tp);
+#endif
         Print(L"xck: BRIDGE TLS -> %u %s (%d polls)\n", (INTN)(got & 0xF),
               ((got & 0xFu) == 2u) ? "OK" : "NOT SET", (INTN)tp);
 
+#if !defined(XP3G_LINK_STIMULUS)
         if ((got & 0xFu) != 2u) {
             ulogf(L"XCK VERDICT: TLS-NOT-SET on the bridge after %d polls - "
                    "link NOT touched\n", (INTN)tp);
             Print(L"xck: VERDICT TLS-NOT-SET bridge\n");
             return;
         }
+#endif
 #else
         /* Старый путь, см. шаг 1: оставлен нетронутым ради побайтовой
          * воспроизводимости xgate5. */
@@ -7671,6 +7710,55 @@ xg_link_probe(const CHAR16 *tag)
 
     /* Даём LTSSM время перечитать кик, прежде чем ретрейнить. */
     uefi_call_wrapper(BS->Stall, 1, 100000);
+
+#if defined(XP3G_LINK_STIMULUS)
+    /* --- Шаг 3b (E-I): ТОЧКА B. Тот же опрос, что был точкой A, но ПОСЛЕ
+     * кика LTSSM. Это и есть решающее измерение.
+     *
+     * ЧТО РАЗДЕЛЯЕТ ЭТОТ ШАГ. После xgate5 и xgate6 остались три равноправные
+     * версии того, почему TLS=2 появляется в финальном снимке, но не сразу:
+     *   (а) задержка больше 4 с - тогда TLS встал бы и в xgate6, где 4 с
+     *       ожидания никуда не делись, а кика не было. Не встал.
+     *   (б) запись применяет кик LTSSM - побуждение контроллера;
+     *   (в) запись применяет ретрейн.
+     * xgate6 отличался от xgate5 отсутствием И кика, И ретрейна, поэтому
+     * сам по себе различения не дал. Этот шаг снимает кик из уравнения:
+     * если здесь TLS встанет, а в точке A не стоял - побуждение это кик,
+     * и никакого «просто подождать» не требуется.
+     *
+     * РАННЕГО ВЫХОДА ПО-прежнему НЕТ. Даже если и A, и B дали NOT-SET,
+     * впереди ретрейн (версия в) и повторный кик (шаг 6), и останавливаться
+     * здесь означало бы снова не довести замер до конца. */
+    {
+        UINT32 got2;
+        UINTN  tp2;
+        for (tp2 = 0; ((got2 = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30),
+                       (got2 & 0xFu)) != 2u) && tp2 < 40; tp2++) {
+            uefi_call_wrapper(BS->Stall, 1, 100000);
+        }
+        ulogf(L"XCK step3b GPU TLS %s after %d polls x 100ms (POST-KICK) - "
+               L"point A was %s\n",
+              ((got2 & 0xFu) == 2u) ? "SET" : "NOT-SET", (INTN)tp2,
+              tlsSet ? "SET" : "NOT-SET");
+        Print(L"xck: GPU TLS post-kick -> %u %s (%d polls)\n",
+              (INTN)(got2 & 0xF),
+              ((got2 & 0xFu) == 2u) ? "OK" : "NOT SET", (INTN)tp2);
+
+        if ((got2 & 0xFu) == 2u && !tlsSet) {
+            ulogf(L"XCK FINDING: the LTSSM kick is what applies the TLS write - "
+                   "point A was NOT-SET, point B is SET with no other event in "
+                   "between. A plain write is not applied on its own; it needs "
+                   "the kick as a stimulus\n");
+            Print(L"xck: FINDING kick applies TLS write\n");
+        } else if ((got2 & 0xFu) == 2u && tlsSet) {
+            ulogf(L"XCK FINDING: the TLS write applied on its own - point A was "
+                   "already SET, so the kick is not required for it\n");
+        } else {
+            ulogf(L"XCK FINDING: neither before nor after the kick did TLS "
+                   "apply; the stimulus, if any, is the retrain\n");
+        }
+    }
+#endif /* XP3G_LINK_STIMULUS */
 
     /* --- Шаг 4: Retrain Link на мосте. Единственный дёргающий момент. --- */
     {
