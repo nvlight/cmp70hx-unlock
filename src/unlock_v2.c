@@ -7169,6 +7169,85 @@ xg_xve_probe(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
 }
 #endif /* XP3G_XVE_BOOTER && XP3G_GATE_V67 */
 
+#if defined(XP3G_WIN_UNLOCK) && defined(XP3G_GATE_V67)
+/* xg_win_scan определён НИЖЕ, а вызывается отсюда. Без прототипа компилятор
+ * считает это внешним нестатичным объявлением и падает на "follows
+ * non-static declaration" - то есть ошибка указывала бы не на ту строку. */
+#if defined(XP3G_WIN_SCAN)
+static void xg_win_scan(const char *tag);
+#endif
+
+/* ==== ЭКСПЕРИМЕНТ E-M: ОТКРЫТЬ ДВА ЗАКРЫТЫХ АДРЕСА В ОКНЕ XVE ===========
+ *
+ * ЧТО НАШЛА РАЗВЕДКА E-L. Окно 0x88080..0x000880FC читается целиком и
+ * осмысленно, но ровно в том промежутке, где мы искали зеркало LNKCTL,
+ * стоят ДВА ЗАКРЫТЫХ адреса:
+ *     0x00088094 = 0xBADF5040
+ *     0x00088098 = 0xBADF5040
+ * 0xBADFxxxx - маркер PLM-прикрытого регистра, он же идёт у GFX_SPEED_SELECT
+ * до анлока. То есть зеркала мы не нашли не потому, что его нет, а потому,
+ * что два кандидата закрыты.
+ *
+ * ЛОГИКА РЕШЕНИЯ - ПРЯМАЯ АНАЛОГИЯ С E-G. Маска 0x88FE8 была PLM-прикрытой,
+ * открылась БОТЕРОМ (xg_v67_write) и оказалась маской: CF -> FFFFFFFF, polls=81.
+ * 0x88094 и 0x88098 ведут себя так же - отдают 0xBADFxxxx. Значит стоит
+ * попробовать ровно ту же операцию в ровно тех же условиях.
+ *
+ * ПОЧЕМУ ИМЕННО ЭТИ ДВА, А НЕ ОДИННАДЦАТЬ ЗАКРЫТЫХ В ХВОСТЕ ОКНА. В хвосте
+ * (0x880D4..0x880FC) закрыто тоже много, но два адреса возле LC_STATUS стоят
+ * именно там, где мы искали зеркало LNKCTL. Остальное пока не трогаем: лишние
+ * открытия не подарят информацию, а расширяют поверхность, которую потом
+ * придётся объяснять.
+ *
+ * БЕЗОПАСНОСТЬ. Запись 0xFFFFFFFF и немедленный readback, ничего кроме. Если
+ * встанет - защита снята. Если нет - адрес не встал и мы ничем не хуже. Это
+ * буквально та же операция, что в E-G, только на других адресах.
+ *
+ * ГДЕ СТОИТ СТАДИЯ. Между E-G и E-B, по той же причине, что и E-G: внутри
+ * xg_v67_write есть FLR, а policy set состоит из обычных регистров, не масок.
+ * Если бы эта стадия шла после E-B, её FLR мог бы стереть политику. Здесь
+ * политика заливается последней, уже после всех FLR.
+ */
+static void
+xg_win_unlock(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
+              UINT64 fwsecPhys, UINT64 v67Phys)
+{
+    /* Два адреса возле LC_STATUS. Порядок не имеет значения: они независимы,
+     * и каждый выстрел идёт со своим FLR-циклом (xg_v67_write начинается с
+     * do_flr), поэтому ограничение "два выстрела на одно состояние SEC2" не
+     * распространяется на третий выстрел - подтверждено на железе в E-G. */
+    static const UINT32 tgt[2] = { 0x00088094U, 0x00088098U };
+    UINTN  i, p;
+    UINT32 got, before;
+    UINT64 t;
+
+    t = fx_now_us();
+
+    for (i = 0; i < 2; i++) {
+        before = mmio_read32(tgt[i]);
+        ulogf(L"XWM  0x%08x before=0x%08x (0xBADF means PLM-covered)\n",
+              tgt[i], before);
+        got = xg_v67_write(v67Phys, ucodePhys, fwsecPhys, wprMetaPhys,
+                           tgt[i], 0xffffffffU, &p);
+        ulogf(L"XWM  0x%08x wrote 0xffffffff gave 0x%08x %s (polls=%d)\n",
+              tgt[i], got, (got == 0xffffffffU) ? L"OPEN" : L"NOT OPEN",
+              (INTN)p);
+        Print(L"xwm: 0x%08x 0x%08x -> 0x%08x %s\n", tgt[i], before, got,
+              (got == 0xffffffffU) ? L"OPEN" : L"NOT OPEN");
+    }
+
+#if defined(XP3G_WIN_SCAN)
+    /* Пересканируем сразу после открытия, пока состояние ещё то, что мы
+     * наделали: между стадией и концом прогона что угодно может переписать
+     * эти регистры, и тогда мы бы смотрели не на то, что открывали. */
+    xg_win_scan("post");
+#endif
+
+    ulogf(L"XWM  === E-M done: %s ===\n", tag);
+    fx_mk_acc(t, L"xwm: E-M unlock 0x88094/0x88098 via V67");
+}
+#endif /* XP3G_WIN_UNLOCK && XP3G_GATE_V67 */
+
 #ifdef XP3G_GATE_POLICY
 /* ==== ЭКСПЕРИМЕНТ E-B: заливается ли policy set, когда гейт открыт ==========
  *
@@ -15505,6 +15584,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * Само место то же, что у E-A: до блока селекторов, пока SS0/SS1
          * нулевые — ботер больше нигде не стреляет. Линк не трогает. */
         xg_xve_probe(L"xgm", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+#endif
+#if defined(XP3G_WIN_UNLOCK) && defined(XP3G_GATE_V67)
+        /* ЭКСПЕРИМЕНТ E-M. Идёт сразу за E-G и по той же причине: внутри
+         * xg_v67_write есть FLR, а policy set состоит из обычных регистров.
+         * Здесь политика заливается последней, уже после всех FLR. */
+        xg_win_unlock(L"xwm", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
 #endif
 #ifdef XP3G_GATE_POLICY
         /* ЭКСПЕРИМЕНТ E-B. Идёт сразу за E-A и тем же местом — до блока
