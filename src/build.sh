@@ -576,6 +576,61 @@ build_one xgate7              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DXP3G_LINK_RETRAIN -DXP3G_XVE_BOOTER \
                               -DXP3G_LINK_ORDER -DXP3G_LINK_STIMULUS
 
+# E-J (2026-10-10) - полное пересобирание линка + честная диагностика.
+# Первая сборка, где проверяется не "сработает ли", а "что удерживает линок".
+#
+# ЧТО ДАЛ xgate7. Гипотеза (б) ПОДТВЕРЖДЕНА: точка A = NOT-SET, точка B = SET
+# на нулевом опросе, между ними только кик LTSSM.
+#     XCK step1b GPU TLS NOT-SET ... (PRE-KICK)
+#     XCK step3b GPU TLS SET after 0 polls ... (POST-KICK) - point A was NOT-SET
+#     XCK FINDING: the LTSSM kick is what applies the TLS write
+# Значит запись в LNKCTL2 не применяется сама: контроллеру нужно сказать
+# "пересобери линок", и тогда доезжает всё. Прежнее объяснение "запись
+# асинхронна" было неверным - она не асинхронна, она ЛЕНИВАЯ.
+#
+# НО СКОРОСТЬ НЕ ПОДНЯЛАСЬ. TLS=2 на обоих концах, кик проходит, ретрейн
+# дважды - и LNKSTA speed=1. "Подождать дольше" и "сказать то же ещё раз"
+# исчерпаны.
+#
+# ДВА ИСПРАВЛЕНИЯ В ДИАГНОСТИКЕ, ОБНАРУЖЕННЫЕ ПРИ РАЗБОРЕ.
+#   1. Поле "speed=" у LNKSTA печаталось как (st>>16)&0xF - это XLS, МАКСИМУМ,
+#      а не текущая скорость. Фактическая - CLS в битах 3:0, и она 0.
+#      Подпись врала, но выглядела правдоподобно (1 = Gen2, а линок в Gen1),
+#      поэтому расхождение не заметили. То же в строках LNKCTL, где брали
+#      speed/width из битов 16+ - то есть ЗА ПРЕДЕЛАМИ 16-битного регистра,
+#      где всегда нули.
+#   2. LNKSTA моста не читалась вообще: BAR0-зеркало есть только у GPU, и
+#      состояние моста мы видели исключительно по TLS - одно поле из семи.
+# Теперь xg_link_diag() печатает оба конца целиком: LNKCAP(SLS,SLW),
+# LNKSTA(CLS,NLW,MLS,XLS), LNKCTL(dis,retrain), LNKCTL2(TLS).
+#
+# ЗАЧЕМ ДИАГНОСТИКА ИМЕННО СЕЙЧАС. Потолок каждого конца - единственное, что
+# осталось непрочитанным. Если XLS GPU окажется 0, устройство физически не
+# тянет Gen2 и вопрос закрыт окончательно. Если 1 - оно может, и искать надо
+# причину, по которой линок не собирается.
+#
+# ЧТО ДЕЛАЕТ Disable/Enable. Retrain Link (бит 5) - просьба перетренироваться
+# внутри текущей конфигурации. Disable Link (бит 4) - полный выход из неё с
+# выключением линка. Мы пробовали только первое. Порядок: мост, пауза, GPU,
+# пауза, и только затем Retrain - бит ставится на уже поднявшийся линок.
+#
+# Риск Disable ненадолго уронит линк; анлок от линка не зависит (GFX_SEL и
+# compute работают на Gen1, измерено на всех прогонах).
+#
+# Приёмка:
+#   XCK DIAG pre  GPU    ... CLS=0 NLW=4 XLS=1 SLS=1 TLS=0/2
+#   XCK DIAG pre  BRIDGE ... CLS=0 NLW=4 XLS=3 SLS=3
+#   XCK step4a ... Disable Link bit4 / Enable Link, с readback на обоих концах
+#   XCK DIAG post-dis / post ... <- что стало с CLS и XLS после пересборки
+#   XCK step5/step6 ... speed=2 | XCK VERDICT: RETRAIN-OK | RETRAIN-FAIL
+# Разбор - docs/70HX-XP3G-GATE-V67.md §4a.11.15.
+build_one xgate8              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
+                              -DXP3G_LINK_RETRAIN -DXP3G_XVE_BOOTER \
+                              -DXP3G_LINK_ORDER -DXP3G_LINK_STIMULUS \
+                              -DXP3G_LINK_DIAG -DXP3G_LINK_DISABLE
+
 # E-D (2026-10-09) - разбор причины NO-PCIE-CAP. ТОЛЬКО ЧТЕНИЕ, линок не
 # трогаем: E-C вышел по страховке, потому что find_pcie_cap() вернул 0 на обоих
 # концах. Ни в одном прогоне проекта обход capability ничего не находил:

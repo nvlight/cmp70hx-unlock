@@ -7386,6 +7386,86 @@ xg_snap(const char *tag)
     }
 }
 
+#if defined(XP3G_LINK_DIAG)
+/* ==== ДИАГНОСТИКА E-J: ОБА КОНЦА, ВСЕ ЧЕТЫРЕ ПОЛЯ LNKSTAT ================
+ *
+ * ЗАЧЕМ ЭТОТ БЛОК. Пять прогонов подряд мы смотрели на LNKSTA только у GPU
+ * и только одним числом, подписанным в логе как «speed». Разбор показал, что
+ * это число — НЕ текущая скорость:
+ *
+ *   LNKSTA-inner = 0x11010040
+ *     CLS  (bits  3:0)  = 0   <- ФАКТИЧЕСКАЯ скорость, 2.5 GT/s
+ *     NLW  (bits  9:4)  = 4   <- ширина x4
+ *     MLS  (bits 15:10) = 0
+ *     XLS  (bits 25:16) = 1   <- МАКСИМУМ, 5.0 GT/s
+ *
+ * Код печатал (st>>16)&0xF и подписывал это «speed» — то есть подписывал
+ * МАКСИМУМ. Совпадение выглядит правдоподобно (1 = Gen2, а линок в Gen1),
+ * и именно поэтому расхождение не заметили: подпись врала, но не выглядела
+ * абсурдно. Фактическая скорость — CLS, и она 0.
+ *
+ * Вторая ошибка того же рода. Строки вида «GPU cap@0x78 LNKCTL=0x0040
+ * speed=1 width=0» брали speed из битов 16+ LNKCTL — то есть ЗА ПРЕДЕЛАМИ
+ * 16-битного регистра, где лежат Link Control 2 и Capability 2. Там всегда
+ * нули, поэтому эти два поля не значили ничего.
+ *
+ * ЧТО ПЕЧАТАЕТСЯ. Для КАЖДОГО конца — LNKCAP (SLS, SLW), LNKSTA (CLS, NLW,
+ * MLS, XLS) и оба LNKCTL. Мост читается через PCI config по bc+0x12, потому
+ * что BAR0-зеркало есть только у GPU: до сих пор состояние моста мы видели
+ * исключительно по TLS, а это одно поле из семи.
+ *
+ * ЗАЧЕМ ИМЕННО ЭТО СЕЙЧАС. TLS подтверждён на обоих концах, кик проходит,
+ * ретрейн выполнен дважды — и скорость 1. Единственное, что осталось
+ * непрочитанным, это потолок каждого конца. Если XLS GPU окажется 0,
+ * устройство физически не тянет Gen2 и вопрос закрыт окончательно. Если
+ * окажется 1 — оно может, и искать надо причину, по которой линок не
+ * собирается.
+ */
+static void
+xg_link_diag(const char *tag)
+{
+    UINTN  gc, bb = 0, bd = 0, bf = 0, bc;
+    UINT32 cap, sta, ctl, ctl2;
+
+    gc = find_pcie_cap(gBus, gDev, gFn);
+    if (gc) {
+        cap  = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x0C);
+        sta  = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x12);
+        ctl  = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
+        ctl2 = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
+        ulogf(L"XCK DIAG %s GPU    cap@0x%02lx LNKCAP=0x%08x SLS=%u SLW=%u | "
+              L"LNKSTA=0x%08x CLS=%u NLW=%u MLS=%u XLS=%u | LNKCTL=0x%04x "
+              L"dis=%u retrain=%u | LNKCTL2=0x%04x TLS=%u\n",
+              tag, (INTN)gc, cap, (INTN)(cap & 0xF),
+              (INTN)((cap >> 4) & 0x3F), sta, (INTN)(sta & 0xF),
+              (INTN)((sta >> 4) & 0x3F), (INTN)((sta >> 10) & 0x3F),
+              (INTN)((sta >> 16) & 0xF), (INTN)(ctl & 0xFFFF),
+              (INTN)((ctl >> 4) & 1u), (INTN)((ctl >> 5) & 1u),
+              (INTN)(ctl2 & 0xFFFF), (INTN)(ctl2 & 0xF));
+    } else {
+        ulogf(L"XCK DIAG %s GPU    pcie_cap NOT FOUND\n", tag);
+    }
+
+    if (find_bridge_to(gBus, &bb, &bd, &bf) && (bc = find_pcie_cap(bb, bd, bf))) {
+        cap  = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x0C);
+        sta  = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x12);
+        ctl  = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+        ctl2 = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
+        ulogf(L"XCK DIAG %s BRIDGE cap@0x%02lx LNKCAP=0x%08x SLS=%u SLW=%u | "
+              L"LNKSTA=0x%08x CLS=%u NLW=%u MLS=%u XLS=%u | LNKCTL=0x%04x "
+              L"dis=%u retrain=%u | LNKCTL2=0x%04x TLS=%u\n",
+              tag, (INTN)bc, cap, (INTN)(cap & 0xF),
+              (INTN)((cap >> 4) & 0x3F), sta, (INTN)(sta & 0xF),
+              (INTN)((sta >> 4) & 0x3F), (INTN)((sta >> 10) & 0x3F),
+              (INTN)((sta >> 16) & 0xF), (INTN)(ctl & 0xFFFF),
+              (INTN)((ctl >> 4) & 1u), (INTN)((ctl >> 5) & 1u),
+              (INTN)(ctl2 & 0xFFFF), (INTN)(ctl2 & 0xF));
+    } else {
+        ulogf(L"XCK DIAG %s BRIDGE NOT FOUND\n", tag);
+    }
+}
+#endif /* XP3G_LINK_DIAG */
+
 static void
 xg_link_probe(const CHAR16 *tag)
 {
@@ -7445,6 +7525,9 @@ xg_link_probe(const CHAR16 *tag)
     ulogf(L"XCK === BEFORE: the link is about to be touched for the first "
            L"time in this project ===\n");
     xg_snap("before");
+#if defined(XP3G_LINK_DIAG)
+    xg_link_diag("pre");
+#endif
 
 #if defined(XP3G_XVE_MASK)
     /* --- Шаг 0 (E-F): открыть XVE-маску PCIe-домена ДО ретрейна ----------
@@ -7760,7 +7843,79 @@ xg_link_probe(const CHAR16 *tag)
     }
 #endif /* XP3G_LINK_STIMULUS */
 
-    /* --- Шаг 4: Retrain Link на мосте. Единственный дёргающий момент. --- */
+    /* --- Шаг 4: Retrain Link на мосте. Единственный дёргающий момент. ---
+     *
+     * В XP3G_LINK_DISABLE сначала идёт полное Disable/Enable, и только затем
+     * Retrain. Обоснование — в комментарии блока ниже. */
+#if defined(XP3G_LINK_DISABLE)
+    /* --- Шаг 4a (E-J): Disable Link -> пауза -> Enable -> пауза -> Retrain.
+     *
+     * ЧЕМ ЭТО ОТЛИЧАЕТСЯ ОТ RETRAIN. Retrain Link (бит 5) - это ПРОСЬБА
+     * «перетренируйся в рамках текущей конфигурации»: контроллер остаётся в
+     * Common Configuration и пересобирает линк, не выходя из него. Disable Link
+     * (бит 4) - это выход из конфигурации с полным выключением линка и новым
+     * входом. Это принципиально разные механизмы, и мы пробовали только первый.
+     *
+     * ПОЧЕМУ ИМЕННО СЕЙЧАС. TLS подтверждён на обоих концах (xgate7), кик
+     * LTSSM применяет запись (тоже xgate7), ретрейн выполнен дважды - и
+     * скорость 1. Значит «подождать дольше» и «сказать то же самое ещё раз»
+     * уже исчерпаны. Осталась ровно одна не tried-механика: полное
+     * пересобирание линка через Disable/Enable.
+     *
+     * ПОРЯДОК. Сначала мост, потом GPU: вниз по дереву. Между disable и
+     * enable - 100 мс, чтобы линок реально погас; после enable - 500 мс, чтобы
+     * он успел подняться в Gen1, и только потом Retrain, потому что бит
+     * ставится на уже живой линок.
+     *
+     * ЧТО ПЕЧАТАЕТСЯ ПОСЛЕ КАЖДОЙ ЗАПИСИ. Не только «ок», а фактические
+     * значения LNKCTL на обоих концах: если запись не встала (бывает при
+     * закрытом домене), это видно сразу, а не через три шага.
+     *
+     * РИСК. Disable Link ненадолго уронит линк. Анлок от линка не зависит:
+     * GFX_SPEED_SELECT и compute работают на Gen1, это измерено на всех
+     * прогонах проекта. POST вернёт линк в сток в любом случае. */
+    {
+        UINT32 d, g;
+
+        /* Мост: disable -> пауза -> enable -> пауза */
+        d = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, d |  (1u << 4));
+        ulogf(L"XCK step4a BRIDGE LNKCTL %04x -> %04x readback %04x "
+               L"(Disable Link bit4)\n", (INTN)(d & 0xFFFF),
+              (INTN)((d | (1u << 4)) & 0xFFFF),
+              (INTN)(pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10) & 0xFFFF));
+        uefi_call_wrapper(BS->Stall, 1, 100000);
+
+        d = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, d & ~(1u << 4));
+        ulogf(L"XCK step4a BRIDGE LNKCTL %04x -> %04x readback %04x "
+               L"(Enable Link)\n", (INTN)(d & 0xFFFF),
+              (INTN)((d & ~(1u << 4)) & 0xFFFF),
+              (INTN)(pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10) & 0xFFFF));
+        uefi_call_wrapper(BS->Stall, 1, 500000);
+
+        /* GPU: то же самое */
+        g = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
+        pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x10, g |  (1u << 4));
+        ulogf(L"XCK step4a GPU    LNKCTL %04x -> %04x readback %04x "
+               L"(Disable Link bit4)\n", (INTN)(g & 0xFFFF),
+              (INTN)((g | (1u << 4)) & 0xFFFF),
+              (INTN)(pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10) & 0xFFFF));
+        uefi_call_wrapper(BS->Stall, 1, 100000);
+
+        g = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
+        pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x10, g & ~(1u << 4));
+        ulogf(L"XCK step4a GPU    LNKCTL %04x -> %04x readback %04x "
+               L"(Enable Link)\n", (INTN)(g & 0xFFFF),
+              (INTN)((g & ~(1u << 4)) & 0xFFFF),
+              (INTN)(pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10) & 0xFFFF));
+        uefi_call_wrapper(BS->Stall, 1, 500000);
+#if defined(XP3G_LINK_DIAG)
+        xg_link_diag("post-dis");
+#endif
+    }
+#endif /* XP3G_LINK_DISABLE */
+
     {
         UINT32 lk  = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
         UINT32 set = lk | (1u << 5);
@@ -7836,6 +7991,9 @@ xg_link_probe(const CHAR16 *tag)
 
     ulogf(L"XCK === AFTER ===\n");
     xg_snap("after");
+#if defined(XP3G_LINK_DIAG)
+    xg_link_diag("post");
+#endif
 
     /* Вердикт. Скорость ниже и ширина ниже - это НЕ провал анлока: линок
      * зафиксировался на ближайшем к тренировке состоянии, и Gen1 рабоч.
@@ -15955,3 +16113,4 @@ done:
     log_flush_sector(FALSE);
     return EFI_SUCCESS;
 }
+
