@@ -631,6 +631,53 @@ build_one xgate8              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DXP3G_LINK_ORDER -DXP3G_LINK_STIMULUS \
                               -DXP3G_LINK_DIAG -DXP3G_LINK_DISABLE
 
+# E-K (2026-10-10) - три правки, все из разбора xgate8. Новых гипотез нет,
+# кроме одной: Retrain Link надо инициировать с GPU.
+#
+# 1. ПОРЯДОК DISABLE/ENABLE БЫЛ ОБРАТНЫМ.
+#    xgate8 делал: Disable мост -> Enable мост -> Disable GPU -> Enable GPU.
+#    В итоге Disable Link на GPU НЕ ВСТАЛ (0050 -> readback 0040, бит
+#    отвергнут), на мосте встал. Причина простая: к моменту попытки на GPU
+#    апстрим уже был включён снова, и устройство не считает, что имеет право
+#    выключить линок. Disable Link идёт по дереву от конца к началу.
+#    Теперь: Disable GPU -> Disable мост -> Enable мост -> Enable GPU.
+#
+# 2. РЕТРЕЙН ТОЛЬКО НА МОСТЕ, НИ РАЗУ НА GPU. Это отдельная находка из того
+#    же лога: за все прогоны проекта Retrain Link ставился исключительно на
+#    апстрим-мосте. По PCIe это W1S-бит, и инициатором перехода обычно
+#    выступает downstream. Теперь сначала GPU, затем мост.
+#
+# 3. LNKSTA ЧИТАЛАСЬ НЕ ТЕМ ПУТЁМ. В xgate8 xg_link_diag брала LNKSTA по
+#    bc+0x12 через config space, и там у ОБОИХ концов было 0xFFFFFFFF -
+#    то есть этот путь просто не отвечает. BAR0-зеркало 0x88088 при этом
+#    отдаёт осмысленное 0x11010040. Теперь печатаются оба источника, чтобы
+#    расхождение было видно, а не спрятано за выбором одного.
+#
+# ЧТО ПРИНЦИПИАЛЬНО НОВОГО ЗДЕСЬ ПО УДЕЛУ. Из xgate8:
+#   LNKCAP GPU SLS изменился 0x00453D01 -> 0x00453D02 ВМЕСТЕ С TLS.
+#   То есть SLS отражает ЦЕЛЬ, а не заявленную поддержку, и судить по нему
+#   о потолке нельзя. Настоящий потолок - BAR0 LNKSTA XLS = 1 (5.0 GT/s).
+#   То есть устройство ГЕН2 ТЯНЕТ. Вопрос "может ли" закрыт.
+#
+# Итог: маска открывается ботером (xgate5), TLS применяется киком LTSSM
+# (xgate7), устройство тянет Gen2 (xgate8). Открыт ровно один вопрос - что
+# удерживает линок. Именно его и бьёт E-K: порядок отключения и инициатор
+# ретрейна - два способа сказать контроллеру "пересобери линок", которых мы
+# ещё не использовали.
+#
+# Приёмка:
+#   XCK step4a GPU    LNKCTL 0040 -> 0050 readback 0050   <- главное
+#   XCK step4  GPU    LNKCTL .... -> .... (Retrain Link, DOWNSTREAM INITIATOR)
+#   XCK DIAG post GPU bar-LNKSTA=0x... CLS=1 ... XLS=1
+#   XCK step5/step6 ... speed=2 | XCK VERDICT: RETRAIN-OK
+# Разбор - docs/70HX-XP3G-GATE-V67.md §4a.11.16.
+build_one xgate9              -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                              -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                              -DCHIP_SIZE_SCAN=1 -DXP3G_GATE_V67 -DXP3G_GATE_POLICY \
+                              -DXP3G_LINK_RETRAIN -DXP3G_XVE_BOOTER \
+                              -DXP3G_LINK_ORDER -DXP3G_LINK_STIMULUS \
+                              -DXP3G_LINK_DIAG -DXP3G_LINK_DISABLE -DXP3G_LINK_K
+
 # E-D (2026-10-09) - разбор причины NO-PCIE-CAP. ТОЛЬКО ЧТЕНИЕ, линок не
 # трогаем: E-C вышел по страховке, потому что find_pcie_cap() вернул 0 на обоих
 # концах. Ни в одном прогоне проекта обход capability ничего не находил:

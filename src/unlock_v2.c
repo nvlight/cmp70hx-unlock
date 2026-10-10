@@ -7433,6 +7433,27 @@ xg_link_diag(const char *tag)
         sta  = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x12);
         ctl  = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
         ctl2 = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
+#if defined(XP3G_LINK_K)
+        ulogf(L"XCK DIAG %s GPU    cap@0x%02lx cfg-LNKSTA=0x%08x (0xFFFFFFFF "
+              L"means this path does not answer)\n", tag, (INTN)gc, sta);
+        /* Фактический источник - BAR0-зеркало LC_STATUS 0x88088. В прогоне
+         * xgate8 config space отдавал по этому смещению 0xFFFFFFFF у ОБОИХ
+         * концов, то есть LNKSTA оттуда недоступен; BAR0-зеркало при этом
+         * отдаёт осмысленное 0x11010040. Печатаем оба, чтобы расхождение
+         * источников было видно, а не спрятано за выбором одного. */
+        sta = mmio_read32(0x00088088U);
+        ulogf(L"XCK DIAG %s GPU    bar-LNKSTA=0x%08x CLS=%u NLW=%u MLS=%u XLS=%u "
+              L"| LNKCAP=0x%08x SLS=%u SLW=%u | LNKCTL=0x%04x dis=%u retrain=%u "
+              L"| LNKCTL2=0x%04x TLS=%u\n",
+              tag, sta, (INTN)(sta & 0xF), (INTN)((sta >> 4) & 0x3F),
+              (INTN)((sta >> 10) & 0x3F), (INTN)((sta >> 16) & 0x7),
+              cap, (INTN)(cap & 0xF), (INTN)((cap >> 4) & 0x3F),
+              (INTN)(ctl & 0xFFFF), (INTN)((ctl >> 4) & 1u),
+              (INTN)((ctl >> 5) & 1u), (INTN)(ctl2 & 0xFFFF),
+              (INTN)(ctl2 & 0xF));
+#else
+        /* Без XP3G_LINK_K текст не трогаем: xgate8 прогнан на железе именно
+         * с прежней строкой, его отпечаток ad160343 обязан воспроизводиться. */
         ulogf(L"XCK DIAG %s GPU    cap@0x%02lx LNKCAP=0x%08x SLS=%u SLW=%u | "
               L"LNKSTA=0x%08x CLS=%u NLW=%u MLS=%u XLS=%u | LNKCTL=0x%04x "
               L"dis=%u retrain=%u | LNKCTL2=0x%04x TLS=%u\n",
@@ -7442,6 +7463,7 @@ xg_link_diag(const char *tag)
               (INTN)((sta >> 16) & 0xF), (INTN)(ctl & 0xFFFF),
               (INTN)((ctl >> 4) & 1u), (INTN)((ctl >> 5) & 1u),
               (INTN)(ctl2 & 0xFFFF), (INTN)(ctl2 & 0xF));
+#endif
     } else {
         ulogf(L"XCK DIAG %s GPU    pcie_cap NOT FOUND\n", tag);
     }
@@ -7877,7 +7899,52 @@ xg_link_probe(const CHAR16 *tag)
     {
         UINT32 d, g;
 
-        /* Мост: disable -> пауза -> enable -> пауза */
+#if defined(XP3G_LINK_K)
+        /* ПОРЯДОК ИСПРАВЛЕН (E-K). Disable Link идёт ПО ДЕРЕВУ, от конца к
+         * началу: сначала endpoint (GPU), потом корень (мост); включение —
+         * в обратном порядке.
+         *
+         * В xgate8 было наоборот: Disable моста, Enable моста, и только потом
+         * Disable GPU. В итоге Disable Link на GPU НЕ ВСТАЛ (0050 -> readback
+         * 0040, бит отвергнут), тогда как на мосте встал. Объяснение простое:
+         * к моменту попытки на GPU линок со стороны моста уже был включён
+         * снова, то есть апстрим живой, и устройство не считает, что имеет
+         * право выключить линок. Порядок не был случайной опечаткой - он
+         * был выбран неявно, порядком вызовов, и никто его не проверял. */
+        g = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
+        pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x10, g | (1u << 4));
+        ulogf(L"XCK step4a GPU    LNKCTL %04x -> %04x readback %04x "
+               L"(Disable Link bit4, DOWNSTREAM FIRST)\n", (INTN)(g & 0xFFFF),
+              (INTN)((g | (1u << 4)) & 0xFFFF),
+              (INTN)(pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10) & 0xFFFF));
+        uefi_call_wrapper(BS->Stall, 1, 100000);
+
+        d = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, d | (1u << 4));
+        ulogf(L"XCK step4a BRIDGE LNKCTL %04x -> %04x readback %04x "
+               L"(Disable Link bit4)\n", (INTN)(d & 0xFFFF),
+              (INTN)((d | (1u << 4)) & 0xFFFF),
+              (INTN)(pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10) & 0xFFFF));
+        uefi_call_wrapper(BS->Stall, 1, 100000);
+
+        d = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, d & ~(1u << 4));
+        ulogf(L"XCK step4a BRIDGE LNKCTL %04x -> %04x readback %04x "
+               L"(Enable Link, ROOT FIRST)\n", (INTN)(d & 0xFFFF),
+              (INTN)((d & ~(1u << 4)) & 0xFFFF),
+              (INTN)(pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10) & 0xFFFF));
+        uefi_call_wrapper(BS->Stall, 1, 500000);
+
+        g = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
+        pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x10, g & ~(1u << 4));
+        ulogf(L"XCK step4a GPU    LNKCTL %04x -> %04x readback %04x "
+               L"(Enable Link, DOWNSTREAM LAST)\n", (INTN)(g & 0xFFFF),
+              (INTN)((g & ~(1u << 4)) & 0xFFFF),
+              (INTN)(pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10) & 0xFFFF));
+        uefi_call_wrapper(BS->Stall, 1, 500000);
+#else
+        /* Прежний порядок, оставлен как был: xgate8 прогнан на железе именно
+         * с ним, и его отпечаток ad160343 обязан воспроизводиться. */
         d = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
         pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, d |  (1u << 4));
         ulogf(L"XCK step4a BRIDGE LNKCTL %04x -> %04x readback %04x "
@@ -7894,7 +7961,6 @@ xg_link_probe(const CHAR16 *tag)
               (INTN)(pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10) & 0xFFFF));
         uefi_call_wrapper(BS->Stall, 1, 500000);
 
-        /* GPU: то же самое */
         g = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
         pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x10, g |  (1u << 4));
         ulogf(L"XCK step4a GPU    LNKCTL %04x -> %04x readback %04x "
@@ -7910,6 +7976,7 @@ xg_link_probe(const CHAR16 *tag)
               (INTN)((g & ~(1u << 4)) & 0xFFFF),
               (INTN)(pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10) & 0xFFFF));
         uefi_call_wrapper(BS->Stall, 1, 500000);
+#endif /* XP3G_LINK_K */
 #if defined(XP3G_LINK_DIAG)
         xg_link_diag("post-dis");
 #endif
@@ -7917,11 +7984,30 @@ xg_link_probe(const CHAR16 *tag)
 #endif /* XP3G_LINK_DISABLE */
 
     {
-        UINT32 lk  = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
-        UINT32 set = lk | (1u << 5);
-        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, set);
+        UINT32 lk;
+#if defined(XP3G_LINK_K)
+        /* РЕТРЕЙН С ОБОИХ КОНЦОВ (E-K). До сих пор Retrain Link ставился
+         * ТОЛЬКО на мосте, ни на одном прогоне проекта - на GPU он не
+         * ставился никогда. По PCIe это W1S-бит, и инициатором перехода
+         * обычно выступает downstream-устройство; если инициатор только
+         * upstream, GPU может не пойти на пересборку.
+         *
+         * Порядок: сначала GPU (инициатор), затем мост - чтобы к моменту
+         * запроса от моста GPU уже был готов. */
+        {
+            UINT32 gs = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10);
+            pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x10, gs | (1u << 5));
+            ulogf(L"XCK step4 GPU    LNKCTL %04x -> %04x readback %04x "
+                   L"(Retrain Link bit5, DOWNSTREAM INITIATOR)\n",
+                  (INTN)(gs & 0xFFFF), (INTN)((gs | (1u << 5)) & 0xFFFF),
+                  (INTN)(pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x10) & 0xFFFF));
+        }
+        uefi_call_wrapper(BS->Stall, 1, 200000);
+#endif
+        lk  = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, lk | (1u << 5));
         ulogf(L"XCK step4 BRIDGE LNKCTL %04x -> %04x (Retrain Link bit5 set)\n",
-              (INTN)(lk & 0xFFFF), (INTN)(set & 0xFFFF));
+              (INTN)(lk & 0xFFFF), (INTN)((lk | (1u << 5)) & 0xFFFF));
         Print(L"xck: Retrain Link issued\n");
     }
 
