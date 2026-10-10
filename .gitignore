@@ -35,6 +35,7 @@ dist/
 .idea/
 .mcp.json
 .claude/
+.codex/
 
 # Local mailmap. It maps the real author address to the GitHub noreply one, so
 # the real address sits in it in plain text - committing it would publish the

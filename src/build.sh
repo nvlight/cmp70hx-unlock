@@ -1237,8 +1237,8 @@ OUT_SZ=$(stat -c%s unlock_v3r.efi)
 cat <<EOF
 
 ================================================================================
-Deploy to USB (FAT32, EFI/BOOT/BOOTX64.EFI) + gsp_ga10x.bin from the
-NVIDIA 610.43.03 package next to it.
+Deploy to USB as FAT32/EFI/BOOT/BOOTX64.EFI.
+gsp_ga10x.bin is not required: GSP_FW_LBA=0 and the loader never reads it.
 
   ЕДИНСТВЕННЫЙ БИНАРНИК:  unlock_v3r.efi
       md5 $OUT_MD5, $OUT_SZ байт

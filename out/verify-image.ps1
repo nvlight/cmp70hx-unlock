@@ -24,7 +24,7 @@
 
     Usage:
         powershell -ExecutionPolicy Bypass -File out\verify-image.ps1
-        powershell -ExecutionPolicy Bypass -File out\verify-image.ps1 -Image dist\cmp70hx-unlock-1.0.0.img
+        powershell -ExecutionPolicy Bypass -File out\verify-image.ps1 -Image dist\cmp70hx-unlock-1.0.1.img
         powershell -ExecutionPolicy Bypass -File out\verify-image.ps1 -Efi D:\some\unlock_v3r.efi
 
     Код возврата: 0 — PASS, 1 — есть FAIL (образ публиковать нельзя).

@@ -1,82 +1,51 @@
-# КАРТА РЕГИСТРОВ — что открываем и чем
+# Карта ключевых регистров CMP 70HX
 
-Все адреса — BAR0 MMIO. ⚠️ **Инструмента чтения BAR0 из этого дерева нет**:
-прежний `research/rm_reg` (Linux) удалён вместе с каталогом `research/`, а
-Windows-хелпера до сих пор не написано. Практический способ увидеть значения —
-лог прогона (`G2RMS …`, `PROBE …`, `STG …`, `GEOM …`), читаемый хостовым
-`out\read-log.ps1`; процедура — [FLASH-AND-LOG.md](FLASH-AND-LOG.md).
-Хелипер чтения BAR0 из Windows остаётся в списке задач — см.
-[KNOWN-ISSUES.md](../KNOWN-ISSUES.md) и `docs/DIAG-REPORT-2026-08-25-CODE43.md` §7.
+Все адреса — BAR0 MMIO, если не указано `cfg`.
 
-**Область применимости.** Смещения изначально сняты на **CMP 90HX / GA102**,
-но адреса лежат в двух окнах, общих для всех GA10x: priv-домен
-feature-override `0x82xxxx` и priv-домен `0x8Exxx`, плюс XVE-окно PCIe
-`0x88xxxx`. Драйвер отдаёт GA102 и GA104 из одного HAL
-(`kernel_gsp_ga102.c`) и одних header'ов `published/ampere/ga102`.
-**Значения «открыто» на 70HX теперь ПОДТВЕРЖДЕНЫ** (2026-09-30, v3.10/v3.11):
-8 из 8 масок открыты, `0x823800=0xFFFFFFFF`, `GFX_SPEED_SELECT=0x00000004`,
-50 fps / 135 Вт — см. `docs/70HX-PORT-STATUS.md` §1t/§1u. Признак «открыто»
-один и тот же: точный `0xFFFFFFFF` против битовой маски (`FFFFFFCF` /
-`FFFFFF8F`) или `0xBADFxxxx` (PLM-прикрыто). Если адрес вернул `0xBADFxxxx` —
-он в порядке, просто PLM ещё не открыт, и в таблице масок он должен идти
-ПОСЛЕ `0x823804`.
+## Compute и WPR2
 
-## Compute (открывает early-unlock V67, переживает загрузку ОС)
-
-| Адрес | Имя | Открыто | Закрыто | Примечание |
-|---|---|---|---|---|
-| `0x823804` | PLM страницы SS | `FFFFFFFF` | — | V67-ROP пишет первым |
-| `0x82381C` | **SS0** (SM speed select) | `88888888` | `0` | главный compute-бин; применяется ЖИВО, без ресета |
-| `0x823820` | **SS1** | `00000008` | `0` | пара к SS0 |
-
-## Render / движки (открывает ТОЛЬКО таблица масок через ботер#2)
-
-| Адрес | Имя | Открыто | Закрыто | Примечание |
-|---|---|---|---|---|
-| `0x88FE8` | XVE mask | `FFFFFFFF` | `FFFFFFCF` | |
-| `0x88FEC` | XVE+4 | `FFFFFFFF` | `FFFFFFCF` | |
-| `0x88AB4` | упрямец #1 | `FFFFFFFF` | `FFFFFF8F` | иногда нужен 2-й проход |
-| `0x823800` | PLM стр. 0x8238xx | `FFFFFFFF` | `FFFFFF8F` | без него GFX_SEL не пишется |
-| `0x823830` | **GFX_SPEED_SELECT** | `0x00000004` | `0x3` сток | **главный рычаг рендера (~19×)**; верифицировать readback ×5 |
-| `0x8E1B0..BC` | PLM-маски (4 шт) | `FFFFFFFF` | `FFFFFF8F`/`CF` | открывают записи в 0x8e1xx |
-| `0x8E1DC` | семейство RO | `FFFFFF8F` | `FFFFFF8F` | НЕ держит точный FF — семейство живое/статусное, на функцию не влияет |
-
-## PCIe Gen2 (gen2-config + phase3)
-
-| Адрес | Имя | Gen2 значение | Примечание |
-|---|---|---|---|
-| `0x88084` | LINK_CAP | `0x00453D01` | совпадает с config `LNKCAP`. См. строку ниже |
-| `0x880A8` | LC2 TLS | TLS=2 (5GT/s) | под живым GSP запись ОТБРАСЫВАЕТСЯ — писать только до загрузки ОС |
-| `0x8841C` | PRIV_MISC_1 | биты 11,13=1; 12,14=0 (`e0b62d00`) | рецепт из nv_cmp90hx_gen2_config |
-| `0x8C2C0` | CYA_0 | bit2=0 (`00802001`) | |
-| `0x8C040` | LINK_CONFIG_0 | MAX_RATE[19:18]=2 (`80085800`) | |
-| `0x8E110/0x8E120` | XP3G OVR0/VAL0 | 1 / 0 | |
-| `0x8E11C/0x8E12C` | XP3G OVR3/VAL3 | 4 / 0x00200000 | |
-| cfg GPU `CAP_EXP+30.w` | LNKCTL2 TLS | 5GT/s | офсет **+30** = `PCI_EXP_LNKCTL2`; **+2c** = `PCI_EXP_LNKCAP2`, RO. См. ниже |
-| cfg bridge `CAP_EXP+30.w` + `+10.w\|=0x20` | TLS + Retrain Link | — | phase3 делает через ECAM из EFI до загрузки ОС |
-
-Офсеты привязаны к `include/uapi/linux/pci_regs.h`, а не к чужим скриптам:
-
-| офсет от базы capability | макрос | RW |
+| Адрес | Назначение | Рабочее значение |
 |---|---|---|
-| `0x10` | `PCI_EXP_LNKCTL` (`_RL = 0x0020` — Retrain Link) | **да** |
-| `0x2C` | `PCI_EXP_LNKCAP2` | RO |
-| **`0x30`** | **`PCI_EXP_LNKCTL2`** (`_TLS = 0x000f`) | **да** |
-| `0x32` | `PCI_EXP_LNKSTA2` | RO |
+| `0x001FA824` | WPR2_LO | зависит от стадии; ожидаемое FRTS `0x01F7E000` |
+| `0x001FA828` | WPR2_HI | `0x01F7EE00` при установке окна |
+| `0x001FA7CC` | WPR2 privilege mask | защищает WPR2 |
+| `0x00823804` | PLM страницы SS | `0xFFFFFFFF` |
+| `0x0082381C` | SS0 | `0x88888888` |
+| `0x00823820` | SS1 | `0x00000008` |
+| `0x00504204` | issue-rate modifier | `0x00000005` после анлока |
 
-> Внешняя проверка: `iatethelogs/cmp90hx_pwner` пишет `CAP_EXP+2c.w=0x0002`, то
-> есть в RO-регистр, и его Gen2 держится на одном `Retrain Link`. **Выравнивать
-> офсет под него нельзя.** Разбор — [KNOWN-ISSUES.md §51.5](../KNOWN-ISSUES.md).
->
-> Наша запись `pci_cfg_wr_bdf(…, gc+0x30, lc2)` идёт **dword**'ом и задевает
-> ещё и `LNKSTA2` на `0x32`. При возврате фазы писать надо word-ом.
+## Render
 
-## Законы жизни масок (эмпирика)
+| Адрес | Назначение | Рабочее значение |
+|---|---|---|
+| `0x00823800` | маска страницы GFX selector | `0xFFFFFFFF` |
+| `0x00823B04` | вторая необходимая render-маска | `0xFFFFFFFF` |
+| `0x00823830` | GFX_SPEED_SELECT | `0x00000004` |
 
-- **FLR:** маски ПЕРЕЖИВАЮТ
-- **POST/VBIOS reinit (тёплый/холодный ресет):** маски ГИБНУТ (кроме SS-страницы:
-  селекторы в fuse-shadow живут дольше — на реальном HW SS0/SS1 пережили бут ОС)
-- **rmmod ВАНИЛЬНОГО драйвера:** всё сохраняется; rmmod старого
-  модифицированного (stockflow) — чистил ВСЁ
-- Под работающим GSP прямые записи в закрытые PLM-страницы молча отбрасываются
-  (readback = старое значение); открытые страницы (SS) пишутся свободно
+Release-цикл открывает ровно две render-маски. Старые XVE/XP3G адреса были
+исключены из release-списка после аппаратного A/B.
+
+## PCIe
+
+| Регистр | Значение/роль |
+|---|---|
+| BAR0 `0x880A8` | зеркало LC2/TLS, отдельный protected domain |
+| BAR0 `0x8841C` | PRIV_MISC_1 policy |
+| BAR0 `0x8C040` | LINK_CONFIG_0 / MAX_RATE |
+| BAR0 `0x8E110..0x8E12C` | XP3G override/value policy |
+| cfg `cap+0x10` | LNKCTL, bit Retrain Link |
+| cfg `cap+0x2C` | LNKCAP2, read-only |
+| cfg `cap+0x30` | LNKCTL2, Target Link Speed |
+| cfg `cap+0x32` | LNKSTA2, read-only |
+
+Capability Pointer читается по cfg offset `0x34`. TLS=2 был подтверждён на GPU
+и bridge, но LNKSTA остался Gen1 x4; см. [`STATUS.md`](STATUS.md).
+
+## Эмпирические правила
+
+- нужные selector/mask значения переживают FLR рабочего цикла;
+- POST/VBIOS reinit уничтожает анлок;
+- закрытые PLM-страницы молча отбрасывают host write;
+- точный readback нужен, но сам по себе не доказывает производительность.
+
+Полная прежняя таблица: [`history/REGISTERS.md`](history/REGISTERS.md).
