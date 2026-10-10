@@ -7248,6 +7248,99 @@ xg_win_unlock(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
 }
 #endif /* XP3G_WIN_UNLOCK && XP3G_GATE_V67 */
 
+#if defined(XP3G_MASK_FAM) && defined(XP3G_GATE_V67)
+#if defined(XP3G_WIN_SCAN)
+static void xg_win_scan(const char *tag);
+#endif
+
+/* ==== ЭКСПЕРИМЕНТ E-N: ОСТАЛЬНЫЕ ЧЕТЫРЕ МАСКИ СЕМЕЙСТВА 0x88FExx ========
+ *
+ * ПРОБЕЛ В ДАННЫХ, КОТОРЫЙ ОСТАЛСЯ ОТ xgate4. Мы открывали ботером только
+ * ПЕРВУЮ маску семейства, 0x88FE8. Остальные четыре - 0x88FEC, 0x88FF0,
+ * 0x88FF4, 0x88FF8 - пробовались исключительно ХОСТ-MMIO, а этот путь мы
+ * уже доказали нерабочим для этой задачи (E-F, xgate4: все четыре остались
+ * 0xFFFFFFCF / 0xFFFFFF8F). С момента E-G известно, что маски этого семейства
+ * ботером берутся, но проверяли это мы ровно на одном адресе.
+ *
+ *     0x88FE8   открывается ботером    <- единственный проверенный
+ *     0x88FEC   ботером НЕ пробовался  <- только хост-MMIO (не берётся)
+ *     0x88FF0   ботером НЕ пробовался  <- только хост-MMIO (не берётся)
+ *     0x88FF4   ботером НЕ пробовался  <- только хост-MMIO (не берётся)
+ *     0x88FF8   ботером НЕ пробовался  <- только хост-MMIO (не берётся)
+ *
+ * ЗАЧЕМ ПРОВЕРЯТЬ ЕЩЁ И 0x88094/0x88098. Разведка E-L нашла два адреса рядом
+ * с LC_STATUS, закрытых маркером 0xBADF5040. E-M попробовала открыть их
+ * ботером напрямую и не смогла: осталось 0xBADF5040 после 400 polls.
+ * Значит либо у них своя маска, либо она лежит среди этих четырёх - и в этом
+ * случае открытие семейства даст и их. Проверка после каждого выстрела
+ * стоит ноль: это два чтения.
+ *
+ * РАЗБОР ИСХОДОВ:
+ *   хоть одна открылась и 0x88094 перестал быть 0xBADF -> семейство расширено,
+ *        дальше искать зеркало LNKCTL под этими двумя;
+ *   ни одна не открылась -> 0x88FE8 единственная открываемая маска, BAR0-путь
+ *        закрыт окончательно;
+ *   открылись, но 0x88094 всё ещё 0xBADF -> защита от другой причины, это
+ *        отдельная задача, а не вопрос к маскам семейства.
+ *
+ * БЕЗОПАСНОСТЬ. Как и в E-G/E-M: запись 0xFFFFFFFF плюс немедленный readback,
+ * одна попытка на адрес. Лишних повторов и проходов «на всякий случай».
+ *
+ * ГДЕ СТОИТ. Между E-G и E-B - внутри xg_v67_write есть FLR, а policy set
+ * состоит из обычных регистров, не масок, и после E-B этот FLR мог бы её
+ * стереть. Здесь политика заливается последней, после всех FLR.
+ */
+static void
+xg_mask_family(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
+               UINT64 fwsecPhys, UINT64 v67Phys)
+{
+    /* Семейство масок XVE. Первый адрес НЕ включён: его открывает E-G, и
+     * второй выстрел в тот же адрес ничего бы не добавил. */
+    static const UINT32 fam[4] = {
+        0x00088fecU, 0x00088ff0U, 0x00088ff4U, 0x00088ff8U
+    };
+    /* Два кандидата из разведки E-L: проверяем их после КАЖДОГО выстрела,
+     * стоимость нулевая, а порядок, при котором откроется нужная маска,
+     * сразу виден. */
+    static const UINT32 probe[2] = { 0x00088094U, 0x00088098U };
+    UINTN  i, k, p, opened = 0;
+    UINT32 got, before;
+    UINT64 t;
+
+    t = fx_now_us();
+
+    for (i = 0; i < 4; i++) {
+        before = mmio_read32(fam[i]);
+        got = xg_v67_write(v67Phys, ucodePhys, fwsecPhys, wprMetaPhys,
+                           fam[i], 0xffffffffU, &p);
+        ulogf(L"XMF  0x%08x before=0x%08x wrote 0xffffffff gave 0x%08x %s "
+              L"(polls=%d)\n", fam[i], before, got,
+              (got == 0xffffffffU) ? L"OPEN" : L"NOT OPEN", (INTN)p);
+        Print(L"xmf: 0x%08x 0x%08x -> 0x%08x %s\n", fam[i], before, got,
+              (got == 0xffffffffU) ? L"OPEN" : L"NOT OPEN");
+        if (got == 0xffffffffU) opened++;
+
+        /* Сразу смотрим, не раскрылись ли кандидаты. */
+        for (k = 0; k < 2; k++) {
+            UINT32 pv = mmio_read32(probe[k]);
+            if (pv != 0xBADF5040U) {
+                ulogf(L"XMF  after 0x%08x: probe 0x%08x = 0x%08x "
+                      L"(NO LONGER 0xBADF5040 - something opened)\n",
+                      fam[i], probe[k], pv);
+            }
+        }
+    }
+    ulogf(L"XMF  summary: %d of 4 family masks opened\n", (INTN)opened);
+
+#if defined(XP3G_WIN_SCAN)
+    xg_win_scan("post-fam");
+#endif
+
+    ulogf(L"XMF  === E-N done: %s ===\n", tag);
+    fx_mk_acc(t, L"xmf: E-N family masks 0x88fec..0x88ff8 via V67");
+}
+#endif /* XP3G_MASK_FAM && XP3G_GATE_V67 */
+
 #ifdef XP3G_GATE_POLICY
 /* ==== ЭКСПЕРИМЕНТ E-B: заливается ли policy set, когда гейт открыт ==========
  *
@@ -15590,6 +15683,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * xg_v67_write есть FLR, а policy set состоит из обычных регистров.
          * Здесь политика заливается последней, уже после всех FLR. */
         xg_win_unlock(L"xwm", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+#endif
+#if defined(XP3G_MASK_FAM) && defined(XP3G_GATE_V67)
+        /* ЭКСПЕРИМЕНТ E-N. Тот же слот, что и E-G/E-M: после всех ботерных
+         * выстрелов и до заливки policy, потому что внутри xg_v67_write есть
+         * FLR, а policy состоит из обычных регистров. */
+        xg_mask_family(L"xmf", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
 #endif
 #ifdef XP3G_GATE_POLICY
         /* ЭКСПЕРИМЕНТ E-B. Идёт сразу за E-A и тем же местом — до блока
