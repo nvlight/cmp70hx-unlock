@@ -7525,10 +7525,65 @@ xg_link_probe(const CHAR16 *tag)
     }
 #endif /* XP3G_XVE_MASK */
 
-    /* --- Шаг 1: TLS = 2 (5 GT/s) на GPU, через PCI config. Readback. --- */
+    /* --- Шаг 1: TLS = 2 (5 GT/s) на GPU, через PCI config. ---
+     *
+     * ЧТО ИСПРАВЛЕНО. До 2026-10-10 шаг был «записать и прочитать сразу».
+     * Readback показывал 0x0001, и три прогона подряд это печаталось как
+     * DROPPED. Прогон xgate5 доказал обратное: та же запись К ФИНАЛЬНОМУ
+     * снимку давала LNKCTL2=0x0002 TLS=2 в config space и LC2-inner=0x00000002
+     * в BAR0-зеркале. То есть запись НЕ отбрасывается, а применяется
+     * асинхронно, и мгновенный readback ловил её до вступления в силу.
+     *
+     * ПОЧЕМУ ЭТО ЛОМАЛО ВСЁ. Шаг 4 (Retrain Link) выполнялся сразу после
+     * шагов 1-3, то есть вероятнее всего ДО того, как TLS=2 вступил в силу.
+     * Мы ретрейнили линок со старым значением скорости и получали Gen1 —
+     * и считали, что запись не проходит. Теперь порядок другой: сначала
+     * доказываем, что TLS встал, и только потом дёргаем линок.
+     *
+     * Опрос 40 x 100 мс = 4 с. Порядок величины взят у референса: там до
+     * 13 попыток с паузой до 13 с, так что 4 с - скромно. Если TLS не встал
+     * за это время, линк не трогаем: ретрейн без зафиксированной скорости
+     * бессмыслен и просто тратит 10 с опроса.
+     */
     {
         UINT32 lc2 = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
         UINT32 set = (lc2 & 0xFFFF0000u) | ((lc2 & 0xFFFFu & ~0xFu) | 2u);
+#if defined(XP3G_LINK_ORDER)
+        UINT32 got, inst;
+        UINTN  tp;
+        pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x30, set);
+        got = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
+        ulogf(L"XCK step1 GPU LNKCTL2(cap+0x30) %04x -> %04x readback %04x "
+              "TLS=%u (instant readback)\n", (INTN)(lc2 & 0xFFFF),
+              (INTN)(set & 0xFFFF), (INTN)(got & 0xFFFF), (INTN)(got & 0xF));
+
+        /* Ожидание фактического вступления в силу. Это единственный критерий
+         * для шага 4: пока TLS не 2, ретрейнить нельзя. */
+        inst = got;
+        for (tp = 0; ((got & 0xFu) != 2u) && tp < 40; tp++) {
+            uefi_call_wrapper(BS->Stall, 1, 100000);
+            got = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
+        }
+        ulogf(L"XCK step1b GPU TLS %s after %d polls x 100ms "
+              "(instant readback was TLS=%u - ASYNCHRONOUS WRITE, this is what "
+              "three earlier runs misread as DROPPED)\n",
+              ((got & 0xFu) == 2u) ? "SET" : "NOT-SET", (INTN)tp,
+              (INTN)(inst & 0xF));
+        Print(L"xck: GPU TLS -> %u %s (%d polls)\n", (INTN)(got & 0xF),
+              ((got & 0xFu) == 2u) ? "OK" : "NOT SET", (INTN)tp);
+
+        if ((got & 0xFu) != 2u) {
+            ulogf(L"XCK VERDICT: TLS-NOT-SET on the GPU after %d polls - link "
+                   "NOT touched, a retrain with no target speed would be "
+                   "meaningless\n", (INTN)tp);
+            Print(L"xck: VERDICT TLS-NOT-SET\n");
+            return;
+        }
+#else
+        /* Старый путь: записать и прочитать СРАЗУ. Именно он три прогона
+         * подряд печатал DROPPED на запись, которая на самом деле вставала
+         * асинхронно (доказано прогоном xgate5, см. §4a.11.13). Оставлен
+         * нетронутым, чтобы xgate5 собирался побайтово тем же. */
         UINT32 got;
         pci_cfg_wr_bdf(gBus, gDev, gFn, gc + 0x30, set);
         got = pci_cfg_rd_bdf(gBus, gDev, gFn, gc + 0x30);
@@ -7538,13 +7593,43 @@ xg_link_probe(const CHAR16 *tag)
               ((got & 0xFu) == 2u) ? "OK" : "NOT SET");
         Print(L"xck: GPU TLS -> %u %s\n", (INTN)(got & 0xF),
               ((got & 0xFu) == 2u) ? "OK" : "NOT SET");
+#endif
     }
 
     /* --- Шаг 2: TLS = 2 на АПСТРИМ-БРИДЖЕ. Обязателен: ретрейн без него
-     * не даст Gen2, потому что мост останется целиться в Gen1. --- */
+     * не даст Gen2, потому что мост останется целиться в Gen1. Тот же опрос,
+     * что и на шаге 1: до 2026-10-10 мост читался мгновенно и выглядел
+     * синхронным, но это не было проверено, а расхождение с GPU было. --- */
     {
         UINT32 lc2 = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
         UINT32 set = (lc2 & 0xFFFF0000u) | ((lc2 & 0xFFFFu & ~0xFu) | 2u);
+#if defined(XP3G_LINK_ORDER)
+        UINT32 got;
+        UINTN  tp;
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x30, set);
+        got = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
+        ulogf(L"XCK step2 BRIDGE LNKCTL2(cap+0x30) %04x -> %04x readback %04x "
+              "TLS=%u (instant readback)\n", (INTN)(lc2 & 0xFFFF),
+              (INTN)(set & 0xFFFF), (INTN)(got & 0xFFFF), (INTN)(got & 0xF));
+
+        for (tp = 0; ((got & 0xFu) != 2u) && tp < 40; tp++) {
+            uefi_call_wrapper(BS->Stall, 1, 100000);
+            got = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
+        }
+        ulogf(L"XCK step2b BRIDGE TLS %s after %d polls x 100ms\n",
+              ((got & 0xFu) == 2u) ? "SET" : "NOT-SET", (INTN)tp);
+        Print(L"xck: BRIDGE TLS -> %u %s (%d polls)\n", (INTN)(got & 0xF),
+              ((got & 0xFu) == 2u) ? "OK" : "NOT SET", (INTN)tp);
+
+        if ((got & 0xFu) != 2u) {
+            ulogf(L"XCK VERDICT: TLS-NOT-SET on the bridge after %d polls - "
+                   "link NOT touched\n", (INTN)tp);
+            Print(L"xck: VERDICT TLS-NOT-SET bridge\n");
+            return;
+        }
+#else
+        /* Старый путь, см. шаг 1: оставлен нетронутым ради побайтовой
+         * воспроизводимости xgate5. */
         UINT32 got;
         pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x30, set);
         got = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x30);
@@ -7554,14 +7639,34 @@ xg_link_probe(const CHAR16 *tag)
               ((got & 0xFu) == 2u) ? "OK" : "NOT SET");
         Print(L"xck: BRIDGE TLS -> %u %s\n", (INTN)(got & 0xF),
               ((got & 0xFu) == 2u) ? "OK" : "NOT SET");
+#endif
     }
 
-    /* --- Шаг 3: кик LTSSM. ПОСЛЕДНИМ из записей, он и есть adoption. --- */
+    /* --- Шаг 3: кик LTSSM. При XP3G_LINK_ORDER идёт ПОСЛЕ подтверждения TLS
+     * на обоих концах; иначе — на прежнем месте, как было. ---
+     *
+     * ЧТО ИЗМЕНЕНО ПО СУТИ (E-H). Раньше комментарий здесь говорил «ПОСЛЕДНИМ
+     * из записей», и это было верно для той последовательности: шаги 1-2
+     * считались выполненными сразу после мгновенного readback. С опросом
+     * TLS кик приходит ПОСЛЕ того, как целевая скорость зафиксирована. Это
+     * его правильное место: adoption говорит контроллеру «пересобери линок»,
+     * и говорить это до установки цели бессмысленно.
+     *
+     * НАБЛЮДЕНИЕ ИЗ xgate5. Кик не вставал ни в одном прогоне (readback=
+     * 0x00000000), пока домен 0x88xxx был закрыт. С открытой маской 0x88FE8
+     * он встал: readback=0x00000006. То есть кик был исправен всегда, и
+     * «кик не работает» было ещё одним следствием неверного пути доступа. */
     kick = mmio_read32(0x0008872cU);
     ulogf(L"XCK step3 LTSSM_OVR(0x8872c) before=0x%08x\n", kick);
     mmio_write32(0x0008872cU, 6u);
+#if defined(XP3G_LINK_ORDER)
+    ulogf(L"XCK step3 LTSSM_OVR wrote 6, readback=0x%08x %s\n",
+          mmio_read32(0x0008872cU),
+          (mmio_read32(0x0008872cU) == 6u) ? "STUCK" : "NOT STUCK");
+#else
     ulogf(L"XCK step3 LTSSM_OVR wrote 6, readback=0x%08x\n",
           mmio_read32(0x0008872cU));
+#endif
     Print(L"xck: LTSSM kick written\n");
 
     /* Даём LTSSM время перечитать кик, прежде чем ретрейнить. */
@@ -7587,23 +7692,96 @@ xg_link_probe(const CHAR16 *tag)
     ulogf(L"XCK step5 polled %d x 250ms, LNKSTA=0x%08x speed=%d width=%d\n",
           polls, st, (INTN)((st >> 16) & 0xF), (INTN)((st >> 4) & 0x3F));
 
+#if defined(XP3G_LINK_ORDER)
+    /* --- Шаг 6 (E-H): ВТОРОЙ ретрейн, только если первый не дал Gen2.
+     *
+     * ЗАЧЕМ. В прогоне xgate5 мы увидели, что TLS=2 вступает в силу
+     * АСИНХРОННО: мгновенный readback давал 0x0001, финальный снимок —
+     * 0x0002. Значит первый ретрейн вполне мог пройти ДО того, как целевая
+     * скорость зафиксировалась, и поэтому видел только Gen1. Шаги 1b/2b
+     * теперь ждут подтверждения, так что это окно сузилось, но не исчезло
+     * полностью: подтверждение читается из config space, а решение
+     * принимает LTSSM, и их моменты могут не совпасть.
+     *
+     * УСЛОВИЕ ПОВТОРА. Не «попробовать ещё раз на всякий случай», а строго
+     * «первый дал speed<2 при ПОДТВЕРЖДЁННОМ TLS=2». Если TLS не встал, мы
+     * вышли на шаге 1b/2b и сюда не дошли вовсе. Повтор печатается явно
+     * (RETRY), чтобы по логу было видно, что попытка была вторая.
+     *
+     * ПРЕДЕЛ. Один повтор, не цикл. Референс делает до 13 попыток с
+     * нарастающей паузой, но каждая у него идёт с ПОДТВЕРЖДЕНИЕМ результата;
+     * слепой повтор без проверки читался бы как «стараемся», а не как замер.
+     */
+    if (((st >> 16) & 0xF) < 2u) {
+        UINT32 lk2;
+        ulogf(L"XCK step6 first retrain stayed at speed=%d with TLS=2 CONFIRMED "
+               "- repeating once, because the target speed may have landed "
+               "after the first kick\n", (INTN)((st >> 16) & 0xF));
+        Print(L"xck: RETRY retrain (first attempt stayed at speed=%d)\n",
+              (INTN)((st >> 16) & 0xF));
+
+        /* Кик LTSSM повторно: ретраи без повторного adoption имеет смысл
+         * только если контроллеру снова сказали «пересобери линок». */
+        mmio_write32(0x0008872cU, 6u);
+        ulogf(L"XCK step6 LTSSM_OVR wrote 6, readback=0x%08x\n",
+              mmio_read32(0x0008872cU));
+        uefi_call_wrapper(BS->Stall, 1, 500000);
+
+        lk2 = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, bc + 0x10);
+        pci_cfg_wr_idx(gBrIdx, bb, bd, bf, bc + 0x10, lk2 | (1u << 5));
+        ulogf(L"XCK step6 BRIDGE LNKCTL %04x -> %04x (RETRY, Retrain Link "
+               "bit5 set)\n", (INTN)(lk2 & 0xFFFF),
+              (INTN)((lk2 | (1u << 5)) & 0xFFFF));
+
+        for (polls = 0; polls < 40; polls++) {
+            uefi_call_wrapper(BS->Stall, 1, 250000);
+            st = mmio_read32(0x00088088U);
+            if (((st >> 16) & 0xF) >= 2u) break;
+        }
+        ulogf(L"XCK step6 polled %d x 250ms, LNKSTA=0x%08x speed=%d width=%d\n",
+              polls, st, (INTN)((st >> 16) & 0xF), (INTN)((st >> 4) & 0x3F));
+    } else {
+        ulogf(L"XCK step6 skipped - first retrain already gave speed=%d\n",
+              (INTN)((st >> 16) & 0xF));
+    }
+#endif /* XP3G_LINK_ORDER */
+
     ulogf(L"XCK === AFTER ===\n");
     xg_snap("after");
 
     /* Вердикт. Скорость ниже и ширина ниже - это НЕ провал анлока: линок
-     * зафиксировался на ближайшем к тренировке состоянии, и Gen1 рабоч. */
+     * зафиксировался на ближайшем к тренировке состоянии, и Gen1 рабоч.
+     *
+     * ФОРМУЛИРОВКА ПРИ ОТКАЗЕ ИЗМЕНЕНА. До 2026-10-10 здесь стояло «no further
+     * attempts are made» — но это было написано для прогона, где TLS не
+     * вставал вовсе. Теперь TLS подтверждён ДО ретрейна, и «повторов нет»
+     * было бы уже неправдой: один повтор выполнен. */
     if (((st >> 16) & 0xF) >= 2u) {
         ulogf(L"XCK VERDICT: RETRAIN-OK - negotiated speed=%d; measure the "
                "bandwidth with src/tools/pcie-bw.py, LNKSTA alone is not the "
                "criterion\n", (INTN)((st >> 16) & 0xF));
         Print(L"xck: VERDICT RETRAIN-OK speed=%d\n", (INTN)((st >> 16) & 0xF));
     } else {
+#if defined(XP3G_LINK_ORDER)
+        ulogf(L"XCK VERDICT: RETRAIN-FAIL - stayed at speed=%d WITH TLS=2 "
+               "CONFIRMED on both ends. This is NOT an unlock failure: Gen1 is "
+               "fully working. One repeat was performed; further attempts are "
+               "not made, POST returns the link to stock anyway\n",
+              (INTN)((st >> 16) & 0xF));
+        Print(L"xck: VERDICT RETRAIN-FAIL speed=%d (TLS=2 confirmed)\n",
+              (INTN)((st >> 16) & 0xF));
+#else
+        /* Прежняя формулировка «no further attempts are made» была верна для
+         * прогона без подтверждения TLS. Здесь она сохранена как есть: под
+         * XP3G_LINK_ORDER повтор действительно делается, и об этом сказано
+         * выше строкой step6. */
         ulogf(L"XCK VERDICT: RETRAIN-FAIL - stayed at speed=%d. This is NOT "
                "an unlock failure: Gen1 is fully working. No further attempts "
                "are made; POST returns the link to stock anyway\n",
               (INTN)((st >> 16) & 0xF));
         Print(L"xck: VERDICT RETRAIN-FAIL speed=%d\n",
               (INTN)((st >> 16) & 0xF));
+#endif
     }
 
     ulogf(L"XCK === E-C done: %s ===\n", tag);
