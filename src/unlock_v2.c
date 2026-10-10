@@ -7341,6 +7341,102 @@ xg_mask_family(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
 }
 #endif /* XP3G_MASK_FAM && XP3G_GATE_V67 */
 
+#if defined(XP3G_WIN_RETRY) && defined(XP3G_GATE_V67)
+#if defined(XP3G_WIN_SCAN)
+static void xg_win_scan(const char *tag);
+#endif
+
+/* ==== ЭКСПЕРИМЕНТ E-O: ПОВТОР ПОСЛЕ ОТКРЫТИЯ СЕМЕЙСТВА ===================
+ *
+ * ЗАЧЕМ, ЕСЛИ E-M УЖЕ ЭТО ДЕЛАЛ. Делал - и не открыл. Разница в ПОРЯДКЕ, и
+ * это моя ошибка планирования, а не железа.
+ *
+ * Порядок стадий до E-O:
+ *     E-G  открыть 0x88FE8
+ *     E-M  открыть 0x88094 / 0x88098 напрямую        <- здесь условия ЕЩЁ НЕ ТЕ
+ *     E-N  открыть 0x88FEC .. 0x88FF8 (семейство)   <- семейство открылось тут
+ *
+ * E-M пробовал ботерный выстрел в 0x88094, когда из семейства открыта была
+ * только 0x88FE8. Вывод "защита не отзывается на ботерный выстрел" был сделан
+ * на попытке, проведённой ДО открытия остальных четырёх масок. Это ровно тот
+ * же класс ошибки, что find_pcie_cap, E-F и вывод про LNKCTL: заключение с
+ *делано раньше, чем проверено всё, что могло его изменить.
+ *
+ * В E-N эти адреса только ЧИТАЛИСЬ как probe, но не записывались. Значит повтор
+ * здесь - не повтор, а первая попытка при открытом семействе.
+ *
+ * ЧТО ПРОВЕРЯЕТ. Если защита 0x88094 сидит в одной из масок 0x88FEC..0x88FF8,
+ * то теперь, когда все пять открыты, адрес должен открыться. Если не откроется
+ * при ПОЛНОСТЬЮ открытом семействе - BAR0-путь закрыт, и гипотеза о том,
+ * что зеркало LNKCTL лежит под этими двумя адресами, опровергнута.
+ *
+ * Это, по сути, последняя содержательная попытка в этом направлении: всё
+ * остальное, что можно сделать с BAR0 - это гадать о назначении регистров,
+ * которых нет в regmap GA102.
+ *
+ * РАЗБОР ИСХОДОВ:
+ *   открылись  -> защита была в семействе; дальше смотреть, что под ними;
+ *   остались 0xBADF5040 при открытом семействе -> BAR0 закрыт окончательно,
+ *        остаётся серия ретрейнов по рецепту референса;
+ *   открылись, но не в 0xFFFFFFFF -> частично, печатаем фактическое и
+ *        не трактуем как успех.
+ *
+ * БЕЗОПАСНОСТЬ. Запись 0xFFFFFFFF плюс немедленный readback, одна попытка на
+ * адрес - ровно как в E-G, E-M и E-N.
+ */
+static void
+xg_win_retry(const CHAR16 *tag, UINT64 wprMetaPhys, UINT64 ucodePhys,
+              UINT64 fwsecPhys, UINT64 v67Phys)
+{
+    static const UINT32 probe[2] = { 0x00088094U, 0x00088098U };
+    UINTN  i, p, opened = 0;
+    UINT32 got, before;
+    UINT64 t;
+
+    t = fx_now_us();
+
+    /* Печатаем состояние семейства ДО попытки: без этого утверждение
+     * "при открытом семействе" было бы декларацией, а не измерением. */
+    ulogf(L"XWR  family state before retry: 0x88fe8=0x%08x 0x88fec=0x%08x "
+          L"0x88ff0=0x%08x 0x88ff4=0x%08x 0x88ff8=0x%08x\n",
+          mmio_read32(0x00088fe8U), mmio_read32(0x00088fecU),
+          mmio_read32(0x00088ff0U), mmio_read32(0x00088ff4U),
+          mmio_read32(0x00088ff8U));
+
+    for (i = 0; i < 2; i++) {
+        before = mmio_read32(probe[i]);
+        got = xg_v67_write(v67Phys, ucodePhys, fwsecPhys, wprMetaPhys,
+                           probe[i], 0xffffffffU, &p);
+        ulogf(L"XWR  0x%08x before=0x%08x wrote 0xffffffff gave 0x%08x %s "
+              L"(polls=%d, AFTER family opened)\n", probe[i], before, got,
+              (got == 0xffffffffU) ? L"OPEN" : L"NOT OPEN", (INTN)p);
+        Print(L"xwr: 0x%08x 0x%08x -> 0x%08x %s\n", probe[i], before, got,
+              (got == 0xffffffffU) ? L"OPEN" : L"NOT OPEN");
+        if (got == 0xffffffffU) opened++;
+    }
+
+    if (opened == 0) {
+        ulogf(L"XWR  VERDICT: STILL-LOCKED with the whole 0x88FExx family open - "
+               "the protection on these two addresses is NOT one of the family "
+               "masks. The BAR0 route to an LNKCTL mirror is closed\n");
+        Print(L"xwr: VERDICT STILL-LOCKED (family open)\n");
+    } else {
+        ulogf(L"XWR  VERDICT: OPENED-WITH-FAMILY - %d of 2 opened, so the "
+               "protection WAS in the family masks and the earlier E-M attempt "
+               "failed only because it ran before the family was open\n",
+              (INTN)opened);
+        Print(L"xwr: VERDICT OPENED-WITH-FAMILY %d/2\n", (INTN)opened);
+    }
+
+#if defined(XP3G_WIN_SCAN)
+    xg_win_scan("post-retry");
+#endif
+
+    ulogf(L"XWR  === E-O done: %s ===\n", tag);
+    fx_mk_acc(t, L"xwr: E-O retry 0x88094/0x88098 after family");
+}
+#endif /* XP3G_WIN_RETRY && XP3G_GATE_V67 */
+
 #ifdef XP3G_GATE_POLICY
 /* ==== ЭКСПЕРИМЕНТ E-B: заливается ли policy set, когда гейт открыт ==========
  *
@@ -15689,6 +15785,13 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * выстрелов и до заливки policy, потому что внутри xg_v67_write есть
          * FLR, а policy состоит из обычных регистров. */
         xg_mask_family(L"xmf", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
+#endif
+#if defined(XP3G_WIN_RETRY) && defined(XP3G_GATE_V67)
+        /* ЭКСПЕРИМЕНТ E-O. ИДЁТ ПОСЛЕ E-N, и это весь смысл стадии: те же два
+         * адреса, что и в E-M, но теперь при ПОЛНОСТЬЮ открытом семействе
+         * 0x88FExx. В E-M условия ещё не были те, и вывод по его результату
+         * был сделан раньше, чем открылось то, что могло его изменить. */
+        xg_win_retry(L"xwr", wprMetaPhys, ucodePhys, fwsecPhys, v67Phys);
 #endif
 #ifdef XP3G_GATE_POLICY
         /* ЭКСПЕРИМЕНТ E-B. Идёт сразу за E-A и тем же местом — до блока
