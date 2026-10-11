@@ -1,0 +1,433 @@
+{
+  "errors": {
+    "gpc0_tpc_reconfig": "rm_control returned 86: NV_ERR_NOT_SUPPORTED",
+    "gpc1_tpc_reconfig": "rm_control returned 86: NV_ERR_NOT_SUPPORTED",
+    "gpc2_tpc_reconfig": "rm_control returned 86: NV_ERR_NOT_SUPPORTED",
+    "gpc3_tpc_reconfig": "rm_control returned 86: NV_ERR_NOT_SUPPORTED",
+    "gpc4_tpc_reconfig": "rm_control returned 86: NV_ERR_NOT_SUPPORTED",
+    "gpc5_tpc_reconfig": "rm_control returned 86: NV_ERR_NOT_SUPPORTED",
+    "phys_gpc_mask": "rm_control returned 27: NV_ERR_INSUFFICIENT_PERMISSIONS"
+  },
+  "format": 1,
+  "kernel": "7.0.0-30-generic",
+  "queries": {
+    "gfx_gpc_tpc": {
+      "numGfxTpc": 15,
+      "physGfxGpcMask": "0x0000003C"
+    },
+    "global_sm_order": {
+      "numSm": 30,
+      "numTpc": 15,
+      "order": [
+        {
+          "globalTpcId": 0,
+          "gpcId": 1,
+          "localSmId": 0,
+          "localTpcId": 0,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 0
+        },
+        {
+          "globalTpcId": 0,
+          "gpcId": 1,
+          "localSmId": 1,
+          "localTpcId": 0,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 0
+        },
+        {
+          "globalTpcId": 1,
+          "gpcId": 2,
+          "localSmId": 0,
+          "localTpcId": 0,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 0
+        },
+        {
+          "globalTpcId": 1,
+          "gpcId": 2,
+          "localSmId": 1,
+          "localTpcId": 0,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 0
+        },
+        {
+          "globalTpcId": 2,
+          "gpcId": 3,
+          "localSmId": 0,
+          "localTpcId": 0,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 0
+        },
+        {
+          "globalTpcId": 2,
+          "gpcId": 3,
+          "localSmId": 1,
+          "localTpcId": 0,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 0
+        },
+        {
+          "globalTpcId": 3,
+          "gpcId": 0,
+          "localSmId": 0,
+          "localTpcId": 1,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 1
+        },
+        {
+          "globalTpcId": 3,
+          "gpcId": 0,
+          "localSmId": 1,
+          "localTpcId": 1,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 1
+        },
+        {
+          "globalTpcId": 4,
+          "gpcId": 1,
+          "localSmId": 0,
+          "localTpcId": 2,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 1
+        },
+        {
+          "globalTpcId": 4,
+          "gpcId": 1,
+          "localSmId": 1,
+          "localTpcId": 2,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 1
+        },
+        {
+          "globalTpcId": 5,
+          "gpcId": 2,
+          "localSmId": 0,
+          "localTpcId": 2,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 1
+        },
+        {
+          "globalTpcId": 5,
+          "gpcId": 2,
+          "localSmId": 1,
+          "localTpcId": 2,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 1
+        },
+        {
+          "globalTpcId": 6,
+          "gpcId": 3,
+          "localSmId": 0,
+          "localTpcId": 2,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 1
+        },
+        {
+          "globalTpcId": 6,
+          "gpcId": 3,
+          "localSmId": 1,
+          "localTpcId": 2,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 1
+        },
+        {
+          "globalTpcId": 7,
+          "gpcId": 0,
+          "localSmId": 0,
+          "localTpcId": 0,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 0
+        },
+        {
+          "globalTpcId": 7,
+          "gpcId": 0,
+          "localSmId": 1,
+          "localTpcId": 0,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 0
+        },
+        {
+          "globalTpcId": 8,
+          "gpcId": 1,
+          "localSmId": 0,
+          "localTpcId": 1,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 2
+        },
+        {
+          "globalTpcId": 8,
+          "gpcId": 1,
+          "localSmId": 1,
+          "localTpcId": 1,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 2
+        },
+        {
+          "globalTpcId": 9,
+          "gpcId": 2,
+          "localSmId": 0,
+          "localTpcId": 1,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 2
+        },
+        {
+          "globalTpcId": 9,
+          "gpcId": 2,
+          "localSmId": 1,
+          "localTpcId": 1,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 2
+        },
+        {
+          "globalTpcId": 10,
+          "gpcId": 3,
+          "localSmId": 0,
+          "localTpcId": 1,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 2
+        },
+        {
+          "globalTpcId": 10,
+          "gpcId": 3,
+          "localSmId": 1,
+          "localTpcId": 1,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 2
+        },
+        {
+          "globalTpcId": 11,
+          "gpcId": 0,
+          "localSmId": 0,
+          "localTpcId": 2,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 2
+        },
+        {
+          "globalTpcId": 11,
+          "gpcId": 0,
+          "localSmId": 1,
+          "localTpcId": 2,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 2
+        },
+        {
+          "globalTpcId": 12,
+          "gpcId": 1,
+          "localSmId": 0,
+          "localTpcId": 3,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 3
+        },
+        {
+          "globalTpcId": 12,
+          "gpcId": 1,
+          "localSmId": 1,
+          "localTpcId": 3,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 3
+        },
+        {
+          "globalTpcId": 13,
+          "gpcId": 2,
+          "localSmId": 0,
+          "localTpcId": 3,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 3
+        },
+        {
+          "globalTpcId": 13,
+          "gpcId": 2,
+          "localSmId": 1,
+          "localTpcId": 3,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 3
+        },
+        {
+          "globalTpcId": 14,
+          "gpcId": 3,
+          "localSmId": 0,
+          "localTpcId": 3,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 3
+        },
+        {
+          "globalTpcId": 14,
+          "gpcId": 3,
+          "localSmId": 1,
+          "localTpcId": 3,
+          "migratableTpcId": 0,
+          "physicalCpcId": 0,
+          "ugpuId": 0,
+          "virtualGpcId": 0,
+          "virtualTpcId": 3
+        }
+      ]
+    },
+    "gpc0_tpc_mask": {
+      "gpcId": 0,
+      "tpcMask": "0x00000000"
+    },
+    "gpc0_zcull_mask": {
+      "gpcId": 0,
+      "zcullMask": "0x00000000"
+    },
+    "gpc1_tpc_mask": {
+      "gpcId": 1,
+      "tpcMask": "0x00000000"
+    },
+    "gpc1_zcull_mask": {
+      "gpcId": 1,
+      "zcullMask": "0x00000000"
+    },
+    "gpc2_tpc_mask": {
+      "gpcId": 2,
+      "tpcMask": "0x0000000E"
+    },
+    "gpc2_zcull_mask": {
+      "gpcId": 2,
+      "zcullMask": "0x0000000F"
+    },
+    "gpc3_tpc_mask": {
+      "gpcId": 3,
+      "tpcMask": "0x0000000F"
+    },
+    "gpc3_zcull_mask": {
+      "gpcId": 3,
+      "zcullMask": "0x0000000F"
+    },
+    "gpc4_tpc_mask": {
+      "gpcId": 4,
+      "tpcMask": "0x0000000F"
+    },
+    "gpc4_zcull_mask": {
+      "gpcId": 4,
+      "zcullMask": "0x0000000F"
+    },
+    "gpc5_tpc_mask": {
+      "gpcId": 5,
+      "tpcMask": "0x0000000F"
+    },
+    "gpc5_zcull_mask": {
+      "gpcId": 5,
+      "zcullMask": "0x0000000F"
+    },
+    "gpc_mask": {
+      "gpcMask": "0x0000003C"
+    },
+    "rop_info": {
+      "ropOperationsCount": 64,
+      "ropOperationsFactor": 8,
+      "ropUnitCount": 8
+    },
+    "zcull_info": {
+      "aliquotTotal": 5120,
+      "heightAlignPixels": 32,
+      "pixelSquaresByAliquots": 3840,
+      "subregionCount": 16,
+      "subregionHeightAlignPixels": 64,
+      "subregionWidthAlignPixels": 240,
+      "widthAlignPixels": 240,
+      "zcullRegionByteMultiplier": 128,
+      "zcullRegionHeaderSize": 224,
+      "zcullSubregionHeaderSize": 1344
+    }
+  },
+  "target": {
+    "bdf": "0000:01:00.0",
+    "device_id": "0x248A",
+    "index": 0,
+    "vendor_id": "0x10DE"
+  },
+  "tinygrad": {
+    "head": "2ff83c7f9081aef1f6e557d4b842f465885fdd5f",
+    "pinned": true
+  }
+}

@@ -56,6 +56,36 @@ FS_STATUS. Исходник исправлен после прогона; исп
 собран из явно указанного незакоммиченного состояния до исправления трёх
 строковых подписей. Релизный эталон этим экспериментом не менялся.
 
+## Native Linux RM topology
+
+| EFI | Среда | UEFI-лог | RM-доказательство | Итог |
+|---|---|---|---|---|
+| release `3C076AF7...`, 680960 | Ubuntu 24.04, kernel 7.0.0-30, NVIDIA 580.178.04 | `usb-log-linux-rm-r0.txt`, PASS, 4 918 мс | `rm-topology-cmp70hx.json` | 15 GFX TPC / 30 SM, полный доступный GR |
+
+Сохранены также `nvidia-smi-q.txt`, `lspci.txt` и `uname.txt`; tinygrad был на
+зафиксированном commit `2ff83c7f...`. RM вернул `gpcMask=0x3C`,
+`physGfxGpcMask=0x3C`, TPC masks `0,0,E,F,F,F`, `numGfxTpc=15`, global order
+`15 TPC / 30 SM`, 8 ROP units / 64 operations. Это совпадает с отдельным UEFI
+census и закрывает гипотезу дополнительной runtime GFX-маски.
+
+Probe завершился кодом 2 только потому, что старая версия считала ошибкой
+любой необязательный отказ: physical GPC mask потребовал privilege, а TPC
+reconfiguration не поддерживается. Обязательные topology-запросы прошли.
+
+UEFI перечислил две записи `10de:248a` с одним BAR0, тогда как `lspci` и NVML
+видят одну карту `01:00.0`. Это зафиксировано как duplicate firmware
+enumeration данного стенда, а не как доказательство двух физических GPU.
+
+SHA-256 доказательств:
+
+```text
+CEEB656F3D0EFB6798397829709A87F5EAAC3A09B463852618A894F75B34B9C8  rm-topology-cmp70hx.json
+2D737A9A501AEFF58D32194693487AEB3CDAE3457F2292A51179667AF943BE2B  nvidia-smi-q.txt
+9D95F54BA53B556DF9E9DA38480DB7ADB689D8FE0BB4ED3F07BDDAE8734A7E5F  lspci.txt
+DBB06C6D95A372B72444E77770F5C7A8AFCAD86A641B164A4402EF993C39662D  uname.txt
+07ABF24D2DEE879077664FFEB072348C7FD1DC9E24410E0C7CD5CDA459D6E274  usb-log-linux-rm-r0.txt
+```
+
 ## Правило регистрации
 
 Новая строка появляется здесь только после аппаратного прогона. Записывайте

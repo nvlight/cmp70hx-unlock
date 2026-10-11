@@ -1,0 +1,4 @@
+01:00.0 3D controller [0302]: NVIDIA Corporation GA104 [CMP 70HX] [10de:248a] (rev a1)
+	Subsystem: NVIDIA Corporation GA104 [CMP 70HX] [10de:248a]
+	Kernel driver in use: nvidia
+	Kernel modules: nvidiafb, nouveau, nvidia_drm, nvidia

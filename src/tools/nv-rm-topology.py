@@ -178,10 +178,23 @@ def main() -> int:
     query("global_sm_order", nv.NV2080_CTRL_CMD_GR_GET_GLOBAL_SM_ORDER,
           nv.NV2080_CTRL_GR_GET_GLOBAL_SM_ORDER_PARAMS(), global_sm)
 
+    # These answers are sufficient to compare RM's graphics topology with the
+    # UEFI census.  GET_PHYS_GPC_MASK may require elevated privileges and
+    # GET_TPC_RECONFIG_MASK is not implemented on every GA104 RM branch; those
+    # failures remain visible in JSON but do not make a complete core census
+    # fail.  ROP/ZCULL are useful ancillary facts, not part of the 15-TPC
+    # acceptance criterion.
+    required = {"gpc_mask", "gfx_gpc_tpc", "global_sm_order"}
+    required.update(f"gpc{gpc}_tpc_mask" for gpc in range(GPC_COUNT))
+    missing = sorted(required - results["queries"].keys())
+    results["verdict"] = {
+        "coreTopologyComplete": not missing,
+        "missingRequiredQueries": missing,
+        "optionalQueryErrors": sorted(results["errors"].keys()),
+    }
+
     print(json.dumps(results, indent=2, sort_keys=True))
-    # Some driver branches deny selected public GET controls.  Preserve all
-    # successful answers, but make a partial census visible to automation.
-    return 2 if results["errors"] else 0
+    return 2 if missing else 0
 
 
 if __name__ == "__main__":

@@ -67,9 +67,11 @@ python3 src/tools/nv-rm-topology.py --tinygrad /path/to/tinygrad \
 
 Если CMP не является первым NVIDIA GPU, укажите `--index N`. Другой commit
 tinygrad отклоняется; `--allow-unpinned` предназначен только для осознанной
-проверки совместимости структур. Код возврата `0` означает, что все запросы
-ответили; `2` сохраняет частичный JSON, но означает отказ хотя бы одной
-команды.
+проверки совместимости структур. Код возврата `0` означает, что полный набор
+обязательных topology-запросов ответил; `2` означает отсутствие хотя бы одного
+обязательного ответа. Необязательные `GET_PHYS_GPC_MASK`, TPC reconfiguration,
+ROP/ZCULL сохраняют ошибки в JSON, но сами по себе не делают core census
+неполным.
 
 ## Что спрашивается
 
@@ -88,3 +90,32 @@ floorsweep. Если значение меньше 15, остаётся отде
 JSON надо сохранить как доказательство вместе с версией драйвера и выводом
 `nvidia-smi`; без фактического native Linux прогона ветка RM остаётся
 непроверенной.
+
+## Результат 2026-10-11
+
+Native Ubuntu 24.04, kernel `7.0.0-30-generic`, NVIDIA `580.178.04`, pinned
+tinygrad `2ff83c7f...`. Сопутствующий release-прогон на USB завершился за
+4 918 мс и прошёл `verify-log.ps1` с compute+render и финальным `END`.
+
+RM сообщил:
+
+```text
+gpcMask        = 0x0000003C
+physGfxGpcMask = 0x0000003C
+numGfxTpc      = 15
+TPC masks      = 0, 0, E, F, F, F
+global order   = 15 TPC / 30 SM
+ROP            = 8 units / 64 operations
+```
+
+Это точно совпадает с UEFI census: все 15 физически активных TPC включены в
+graphics. Дополнительной RM/GSP GFX-маски нет; доступный 30-SM render открыт
+полностью. Получение 48 SM потребовало бы обхода раннего OTP/fuse floorsweep и
+не следует из этого результата.
+
+Код старой версии probe был `2` только из-за необязательных ответов:
+`GET_PHYS_GPC_MASK` вернул `NV_ERR_INSUFFICIENT_PERMISSIONS`, а шесть
+`GET_TPC_RECONFIG_MASK` — `NV_ERR_NOT_SUPPORTED`. Все обязательные запросы
+прошли; критерий exit code после этого прогона исправлен. Доказательства:
+`../out/rm-topology-cmp70hx.json`, `nvidia-smi-q.txt`, `lspci.txt`, `uname.txt`
+и `usb-log-linux-rm-r0.txt`.
