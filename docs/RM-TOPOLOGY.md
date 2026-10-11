@@ -23,6 +23,22 @@ BootOrder является Windows. Для этого опыта сначала 
 через отдельную перезагрузку после уже загруженной Windows — POST сотрёт
 волатильный анлок.
 
+Для Ubuntu 24.04 сначала установите базовые инструменты и заголовки текущего
+ядра:
+
+```bash
+sudo apt update
+sudo apt install git python3 pciutils linux-headers-$(uname -r) ubuntu-drivers-common
+ubuntu-drivers devices
+```
+
+Для зафиксированных tinygrad-структур предпочтительна доступная в Ubuntu
+ветка 580. Сначала проверьте имя пакета через `apt-cache policy
+nvidia-driver-580-open nvidia-driver-580-server-open nvidia-driver-580`, затем
+установите вариант с ненулевым `Candidate` (для GA104 предпочтителен `-open`).
+После установки перезагрузитесь и проверьте `nvidia-smi`; CUDA Toolkit для
+этого опыта не нужен.
+
 Проверенная схема структур зафиксирована на tinygrad commit:
 
 ```text
@@ -40,9 +56,14 @@ git -C tinygrad checkout 2ff83c7f9081aef1f6e557d4b842f465885fdd5f
 
 ```bash
 set -o pipefail
-sudo python3 src/tools/nv-rm-topology.py --tinygrad /path/to/tinygrad \
+python3 src/tools/nv-rm-topology.py --tinygrad /path/to/tinygrad \
   | tee rm-topology-cmp70hx.json
 ```
+
+Обычные NVIDIA device nodes обычно доступны без root. Если получен именно
+`Permission denied`, сначала проверьте права `/dev/nvidiactl` и
+`/dev/nvidia-uvm`; не переходите к `sudo`, пока не сохранён точный текст
+ошибки.
 
 Если CMP не является первым NVIDIA GPU, укажите `--index N`. Другой commit
 tinygrad отклоняется; `--allow-unpinned` предназначен только для осознанной
