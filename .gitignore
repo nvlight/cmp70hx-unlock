@@ -20,6 +20,7 @@ blobs/
 # nothing needs them in the repository, and a stale .exe is a trap for readers
 # ("which of these three binaries is the current one?").
 *.exe
+*.sys
 unlock_v2_test.*
 
 # Local scratch

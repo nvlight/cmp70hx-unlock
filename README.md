@@ -161,6 +161,8 @@ END   ---- end of log ----
 - [`docs/FLASH-AND-LOG.md`](docs/FLASH-AND-LOG.md) — работа с USB и журналом;
 - [`docs/LOGGING.md`](docs/LOGGING.md) — формат raw-журнала;
 - [`docs/REGISTERS.md`](docs/REGISTERS.md) — карта регистров;
+- [`docs/GR-DRIVER-PATCH.md`](docs/GR-DRIVER-PATCH.md) — статический перенос и
+  аппаратная A/B-матрица экспериментального GR-патча 616.92;
 - [`out/BUILDS.md`](out/BUILDS.md) — актуальные MD5 и аппаратные эталоны;
 - [`docs/history/`](docs/history/README.md) — полная хронология исследований.
 
