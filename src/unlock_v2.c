@@ -826,6 +826,40 @@ fx_pr_console_dump(void)
 #define REG_FEAT_OVR_SM_SPD     0x0082381CUL   /* SS0: 0x88888888 = full */
 #define REG_FEAT_OVR_SM_SPD_1   0x00823820UL   /* SS1: 0x00000008 = full */
 
+/* Read-only GR topology/floorsweep census.  These offsets are named in the
+ * public NVIDIA GA10x register headers and cross-checked against the GA100
+ * floorsweep work in Consensus-Protocol/cmp170hx.  They are deliberately
+ * compiled out of the release binary: until a hardware log exists, none of
+ * the values below is a write target.
+ *
+ * Build the diagnostic explicitly with FX_DIAG_GR_TOPOLOGY=1.  The PRE and
+ * POST snapshots bracket this loader's FWSEC/selector work and therefore tell
+ * us whether the effective topology was already fixed by POST or changes in
+ * our controlled interval. */
+#ifndef FX_DIAG_GR_TOPOLOGY
+#define FX_DIAG_GR_TOPOLOGY 0
+#endif
+
+#if FX_DIAG_GR_TOPOLOGY
+#define REG_FUSE_EN_SW_OVERRIDE  0x00820040UL
+#define REG_FUSE_DIS_SW_OVR      0x00820084UL
+#define REG_FUSE_OPT_GPC_DIS     0x00820350UL
+#define REG_FUSE_OPT_GPC_DEF     0x008205C4UL
+#define REG_FUSE_CTRL_OPT_GPC    0x0082081CUL
+#define REG_FUSE_STATUS_OPT_GPC  0x00820C1CUL
+#define REG_FUSE_CTRL_TPC_GPC0   0x00820838UL
+#define REG_FUSE_STATUS_TPC_GPC0 0x00820C38UL
+#define REG_FUSE_RECONF_GPC0     0x00820A40UL
+#define REG_RING_ENUM_GPC        0x00120078UL
+#define REG_PTOP_NUM_GPCS        0x00022430UL
+#define REG_PTOP_NUM_TPC_GPC     0x00022434UL
+#define REG_PTOP_NUM_FBPS        0x00022438UL
+#define REG_PTOP_NUM_FBPAS       0x0002243CUL
+#define REG_PTOP_NUM_LTCS        0x00022454UL
+#define REG_PTOP_FS_STATUS       0x00022470UL
+#define GRTOPO_GPC_COUNT         6U
+#endif
+
 /* ==== SM_ISSUE_RATE_MOD — эксперимент 2026-09-29 ===================
  *
  * Источник: отчёт bendy2 «CMP 90HX 相对 GA102 消费卡的图形阉割分析报告»,
@@ -4603,6 +4637,55 @@ wpr2_probe(const CHAR16 *tag)
           mmio_read32(GSP_CPUCTL));
 #endif /* RENDER_MASKS */
 }
+
+#if FX_DIAG_GR_TOPOLOGY
+/* No writes, delays, polling or inferred bit meanings here.  Preserve the raw
+ * dwords so the first CMP 70HX run can be compared with NVIDIA RM's GPC/TPC
+ * controls before we decide whether any software floorsweep bit is safe to
+ * clear.  Six GPC rows are emitted because GA104 physically exposes six GPC
+ * slots; PTOP_NUM_GPCS remains the independent on-card geometry reading. */
+static void
+gr_topology_snapshot(const CHAR16 *stage)
+{
+    UINTN i;
+
+    ulogf(L"GRTOPOFMT 1\n");
+    ulogf(L"GRTOPO BEGIN %s read-only\n", stage);
+    ulogf(L"GRTOPO %s FUSE en_sw=0x%08x dis_sw=0x%08x "
+          L"gpc_disable=0x%08x gpc_defective=0x%08x\n",
+          stage,
+          mmio_read32(REG_FUSE_EN_SW_OVERRIDE),
+          mmio_read32(REG_FUSE_DIS_SW_OVR),
+          mmio_read32(REG_FUSE_OPT_GPC_DIS),
+          mmio_read32(REG_FUSE_OPT_GPC_DEF));
+    ulogf(L"GRTOPO %s EFFECTIVE ctrl_gpc=0x%08x status_gpc=0x%08x "
+          L"ring_gpc=0x%08x\n",
+          stage,
+          mmio_read32(REG_FUSE_CTRL_OPT_GPC),
+          mmio_read32(REG_FUSE_STATUS_OPT_GPC),
+          mmio_read32(REG_RING_ENUM_GPC));
+    ulogf(L"GRTOPO %s PTOP gpcs=0x%08x tpc_per_gpc=0x%08x "
+          L"fbps=0x%08x fbpas=0x%08x ltcs=0x%08x fs_status=0x%08x\n",
+          stage,
+          mmio_read32(REG_PTOP_NUM_GPCS),
+          mmio_read32(REG_PTOP_NUM_TPC_GPC),
+          mmio_read32(REG_PTOP_NUM_FBPS),
+          mmio_read32(REG_PTOP_NUM_FBPAS),
+          mmio_read32(REG_PTOP_NUM_LTCS),
+          mmio_read32(REG_PTOP_FS_STATUS));
+    for (i = 0; i < GRTOPO_GPC_COUNT; i++) {
+        ulogf(L"GRTOPO %s GPC%u ctrl_tpc=0x%08x status_tpc=0x%08x "
+              L"reconf=0x%08x\n",
+              stage, (UINT32)i,
+              mmio_read32(REG_FUSE_CTRL_TPC_GPC0 + (UINT32)i * 4U),
+              mmio_read32(REG_FUSE_STATUS_TPC_GPC0 + (UINT32)i * 4U),
+              mmio_read32(REG_FUSE_RECONF_GPC0 + (UINT32)i * 4U));
+    }
+    ulogf(L"GRTOPO %s CORR cfg0=0x%08x cfg1=0x%08x\n", stage,
+          mmio_read32(0x008C440UL), mmio_read32(0x008C448UL));
+    ulogf(L"GRTOPO END %s\n", stage);
+}
+#endif
 
 /* v3n: ДАМП ОКНА SEC2 ВОКРУГ 0x840310 (2026-09-29).
  *
@@ -14467,6 +14550,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     gBar0Base = cfg_read32(0x10) & ~0xF;
     Print(L"BAR0 = 0x%08x\n", gBar0Base);
     enable_mem_decode();
+#if FX_DIAG_GR_TOPOLOGY
+    gr_topology_snapshot(L"PRE");
+#endif
     dump_regs(L"[POST]");
     /* v2.57-4: зонд предзагрузки — ПЕРВЫМ (до любых сбросов/DMA!) */
     /* v2.89: ПРЕДЗАГРУЗКА bootmgfw в ОЗУ ДО разблокировки (SFS не трогаем) */
@@ -16270,6 +16356,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
          * показания после него недоступны. Значит всё, что хотим узнать,
          * снимаем здесь — тогда результат эксперимента не зависит от того,
          * доживёт ли приложение до маркера END. */
+#if FX_DIAG_GR_TOPOLOGY
+        gr_topology_snapshot(L"POST");
+#endif
         ulogf(L"PREFLR PLM=0x%08x SS0=0x%08x SS1=0x%08x WPR2=0x%08x/0x%08x "
               L"GFW=0x%08x dbg=0x%08x cpuctl=0x%08x scratch0e=0x%08x\n",
               mmio_read32(REG_FEAT_OVR_PLM),

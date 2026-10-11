@@ -228,6 +228,17 @@ build_one() {
 build_one unlock_v3r          -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
                               -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS -DCHIP_SIZE_SCAN=1
 
+# Read-only GA104 floorsweep/topology census.  This is intentionally absent
+# from the ordinary release build so unlock_v3r.efi remains the byte-for-byte
+# rollback target.  It adds logging only; no new MMIO write is compiled in.
+#
+#   GR_TOPOLOGY=1 BLOBS=/path/to/blobs bash build.sh
+if [ "${GR_TOPOLOGY:-0}" = "1" ]; then
+    build_one unlock_grtopo    -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                               -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                               -DCHIP_SIZE_SCAN=1 -DFX_DIAG_GR_TOPOLOGY=1
+fi
+
 # ---- ОПЦИОНАЛЬНАЯ МАТРИЦА (по умолчанию выключена, 2026-10-06) --------------
 if [ -n "$RENDER_MATRIX" ]; then
 #

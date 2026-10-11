@@ -6,6 +6,7 @@
         powershell -ExecutionPolicy Bypass -File out\flash-build.ps1
         powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -Stick X:
         powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -AllowNewBuild
+        powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -TopologyProbe
 
     There is ONE binary. unlock_v3r.efi is both what you flash and the rollback;
     the compute-only build that used to sit next to it was retired 2026-10-01
@@ -48,7 +49,11 @@ param(
 
     # Acknowledge that the tree intentionally no longer builds the reference
     # md5. This retires the previous rollback — see the header before using it.
-    [switch]$AllowNewBuild
+    [switch]$AllowNewBuild,
+
+    # Flash unlock_grtopo.efi, the explicitly built read-only topology census.
+    # Unlike -AllowNewBuild this does not replace or retire the release anchor.
+    [switch]$TopologyProbe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,8 +62,8 @@ $root   = Split-Path -Parent $PSScriptRoot
 $outDir = $PSScriptRoot              # this script lives in out\
 $srcDir = Join-Path $root 'src'
 
-$srcEfi = Join-Path $srcDir 'unlock_v3r.efi'
-$outEfi = Join-Path $outDir 'unlock_v3r_CMP70HX.efi'
+$srcEfi = Join-Path $srcDir $(if ($TopologyProbe) { 'unlock_grtopo.efi' } else { 'unlock_v3r.efi' })
+$outEfi = Join-Path $outDir $(if ($TopologyProbe) { 'unlock_grtopo_CMP70HX.efi' } else { 'unlock_v3r_CMP70HX.efi' })
 $gspRef = Join-Path $outDir 'gsp_ga10x.bin'
 
 # The single reference: the fingerprint of the source state we LAST proved on
@@ -112,6 +117,15 @@ $REQUIRED = @(
     # на железе ничего не доказывает.
     @{ name = 'canary';    text = 'G2RCC'            }
 )
+if ($TopologyProbe) {
+    $REQUIRED += @(
+        @{ name = 'gtfmt';  text = 'GRTOPOFMT 1'               },
+        @{ name = 'gtbeg';  text = 'GRTOPO BEGIN %s read-only' },
+        @{ name = 'gtfuse'; text = 'GRTOPO %s FUSE'            },
+        @{ name = 'gtgpc';  text = 'GRTOPO %s GPC%u'           },
+        @{ name = 'gtend';  text = 'GRTOPO END %s'             }
+    )
+}
 # Strings that must NOT be there: the 90HX profile means the wrong card. The port
 # is 70HX-only as of 2026-10-01.
 $FORBIDDEN = @(
@@ -218,7 +232,7 @@ $srcMd5  = Get-MD5 $srcEfi
 $outMd5  = Get-MD5 $outEfi
 $outSize = (Get-Item $outEfi).Length
 if ($srcMd5 -ne $outMd5) { Die "out\ reference md5 does not match src\ after copy." }
-Good "src\unlock_v3r.efi  = $srcMd5  ($outSize bytes)"
+Good ("src\" + (Split-Path $srcEfi -Leaf) + " = $srcMd5  ($outSize bytes)")
 
 # Check the markers BEFORE touching the stick. Verifying after the write leaves a
 # bad loader on the stick and then reports failure, which is strictly worse than
@@ -227,8 +241,14 @@ Test-Blob $outEfi 'out\'
 
 # ------------------------------------------------------------ 2. rollback check
 Say ""
-Say "[2/5] rollback: the rebuild must reproduce the reference md5 ..."
-if ($outMd5 -eq $REF_MD5) {
+Say "[2/5] rollback/reference policy ..."
+if ($TopologyProbe) {
+    if ($outMd5 -eq $REF_MD5) {
+        Die "topology probe unexpectedly equals the release md5; diagnostic code is missing."
+    }
+    Good "explicit read-only topology experiment selected"
+    Good "release rollback remains $REF_MD5 at git tag $ROLLBACK_TAG"
+} elseif ($outMd5 -eq $REF_MD5) {
     Good "matches $REF_MD5, verified on hardware twice"
     Good "rollback anchor: git tag $ROLLBACK_TAG"
 } elseif ($AllowNewBuild) {
@@ -316,7 +336,10 @@ Write-Host " FLASHED AND VERIFIED" -ForegroundColor Green
 Write-Host "================================================================================" -ForegroundColor Green
 Write-Host "  loader   $stickMd5  ($outSize bytes)"
 Write-Host "  out\     $outMd5"
-if ($outMd5 -eq $REF_MD5) {
+if ($TopologyProbe) {
+    Write-Host "  rollback remains the release file at git tag $ROLLBACK_TAG" -ForegroundColor Green
+    Write-Host "  experiment is NOT a new rollback anchor" -ForegroundColor Yellow
+} elseif ($outMd5 -eq $REF_MD5) {
     Write-Host "  rollback same file; anchor is git tag $ROLLBACK_TAG" -ForegroundColor Green
 } else {
     Write-Host "  rollback RETIRED - retag after this build is tested" -ForegroundColor Yellow
@@ -329,7 +352,13 @@ Write-Host "    3. out\pull-log.ps1 -Tag <name>" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  The change is NOT tested until that log comes back and shows" -ForegroundColor Yellow
 Write-Host "  'G2GFX ... GFX_SPEED_SELECT=0x00000004 SET'." -ForegroundColor Yellow
-if ($outMd5 -ne $REF_MD5) {
+if ($TopologyProbe) {
+    Write-Host ""
+    Write-Host "  Topology census acceptance additionally requires:" -ForegroundColor Yellow
+    Write-Host "    GRTOPO BEGIN/END PRE with exactly GPC0..5" -ForegroundColor Yellow
+    Write-Host "    GRTOPO BEGIN/END POST with exactly GPC0..5" -ForegroundColor Yellow
+    Write-Host "  out\verify-log.ps1 checks both blocks strictly." -ForegroundColor Yellow
+} elseif ($outMd5 -ne $REF_MD5) {
     Write-Host ""
     Write-Host "  This build differs from the reference md5. Check these lines in the log" -ForegroundColor Yellow
     Write-Host "  (PLAN-SPEED.md has the budget and why each step exists):" -ForegroundColor Yellow

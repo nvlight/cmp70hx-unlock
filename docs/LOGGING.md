@@ -18,6 +18,28 @@ LBA 4 000 000. Поэтому он доступен даже после сбое
 `END` нельзя заменять промежуточным успехом. Лог с правильными SS/GFX строками,
 но без финального `END`, считается оборванным.
 
+### GR topology census
+
+Сборка с `GR_TOPOLOGY=1` добавляет read-only формат `GRTOPOFMT 1`. Она
+обязана содержать два полных блока:
+
+```text
+GRTOPO BEGIN PRE read-only
+GRTOPO PRE FUSE ...
+GRTOPO PRE EFFECTIVE ...
+GRTOPO PRE PTOP ...
+GRTOPO PRE GPC0 ...
+...
+GRTOPO PRE GPC5 ...
+GRTOPO PRE CORR ...
+GRTOPO END PRE
+```
+
+Второй блок имеет стадию `POST` и снимается перед финальным FLR. Наличие
+`GRTOPOFMT 1` делает оба блока обязательными для `verify-log.ps1`; в обычном
+release-логе без формата проверка остаётся необязательной. Эти строки
+доказывают только прочитанные значения MMIO, но не исправность скрытых блоков.
+
 ## Жизненный цикл
 
 ```powershell

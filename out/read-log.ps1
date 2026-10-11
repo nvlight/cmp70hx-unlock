@@ -288,7 +288,7 @@ Write-Host "--- ключевые строки ---" -ForegroundColor Yellow
 # Порядок ниже — это порядок стадий прогона, а не алфавит.
 $keyPrefixes = 'FIND|PICK|BARSCN|VROM|PROBE|MC|TIME|MEM|BUF|META|GEOM|FBIOS|' +
                'G2NVR|PRE|FBP|FWSEC|DMA2|IVER|DMA|BROM|WAIT|OKCHK|BOOTER|GEN2|' +
-               'STG|FUSE|PROBE|PREFLR|FLRX|END'
+               'STG|FUSE|PROBE|GRTOPOFMT|GRTOPO|PREFLR|FLRX|END'
 $text -split "`n" | Where-Object { $_ -match "^($keyPrefixes)\b" } |
     ForEach-Object { "  " + $_.TrimEnd() }
 

@@ -487,6 +487,39 @@ if (-not $f.Success) {
     }
 }
 
+# --- 9d. read-only GR topology census ------------------------------------
+# Optional for release/old logs, strict when GRTOPOFMT announces the format.
+# Every stage must be complete; a partial PRE/POST pair cannot distinguish a
+# firmware-time change from a truncated raw log.
+$gtFmt = [regex]::Matches($text, '(?m)^GRTOPOFMT\s+1\s*$')
+if ($gtFmt.Count -eq 0) {
+    Note "нет GRTOPOFMT - read-only topology census в этой сборке выключен"
+} else {
+    foreach ($stage in @('PRE', 'POST')) {
+        $begin = [regex]::Matches($text, "(?m)^GRTOPO BEGIN $stage read-only\s*$")
+        $end = [regex]::Matches($text, "(?m)^GRTOPO END $stage\s*$")
+        $fuse = [regex]::Matches($text, "(?m)^GRTOPO $stage FUSE ")
+        $effective = [regex]::Matches($text, "(?m)^GRTOPO $stage EFFECTIVE ")
+        $ptop = [regex]::Matches($text, "(?m)^GRTOPO $stage PTOP ")
+        $corr = [regex]::Matches($text, "(?m)^GRTOPO $stage CORR ")
+        $gpcs = [regex]::Matches($text, "(?m)^GRTOPO $stage GPC([0-5]) ")
+        $ids = @($gpcs | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+
+        if ($begin.Count -eq 1 -and $end.Count -eq 1 -and
+            $fuse.Count -eq 1 -and $effective.Count -eq 1 -and
+            $ptop.Count -eq 1 -and $corr.Count -eq 1 -and
+            $gpcs.Count -eq 6 -and $ids.Count -eq 6) {
+            Ok ("GRTOPO " + $stage + ": полный read-only снимок, GPC0..5")
+        } else {
+            Bad ("GRTOPO " + $stage + ": неполный снимок (begin=" + $begin.Count +
+                 " end=" + $end.Count + " fuse=" + $fuse.Count +
+                 " effective=" + $effective.Count + " ptop=" + $ptop.Count +
+                 " gpc=" + $gpcs.Count + " unique=" + $ids.Count +
+                 " corr=" + $corr.Count + ")")
+        }
+    }
+}
+
 # --- 10. время прогона -----------------------------------------------------
 $last = [regex]::Matches($text, 'TIME  t=(\d+)ms')
 if ($last.Count -gt 0) { Note ("счётчик прогона: " + $last[$last.Count-1].Groups[1].Value + " мс") }
