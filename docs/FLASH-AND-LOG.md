@@ -19,6 +19,17 @@ powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -TopologyProbe
 и не требует `-AllowNewBuild`. Обычный запуск без `-TopologyProbe` по-прежнему
 записывает только проверенный `unlock_v3r.efi`.
 
+Для read-only ReBAR/XVE probe сначала соберите `REBAR_PROBE=1`, затем
+используйте отдельный режим:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -RebarProbe
+```
+
+Он требует полный набор строк `RBPROBE` внутри EFI, не принимает
+`-TopologyProbe` одновременно, не требует `-AllowNewBuild` и не меняет
+release-эталон.
+
 Скрипт проверяет MD5, размер, профиль CMP 70HX и обязательные UTF-16-маркеры,
 удаляет старый `EFI\BOOT\BOOTX64.EFI`, записывает новый и сверяет содержимое.
 При неоднозначном поиске укажите `-Stick X:`. `-AllowNewBuild` допустим только

@@ -73,6 +73,18 @@ GEN2_LINK_TRY RENDER_MASKS CHIP_SIZE_SCAN=1
 релиза. В частности, отсутствие `RENDER_MASKS` оставляет рабочий compute, но
 ломает графику — поэтому такой дефект легко пропустить.
 
+Read-only ReBAR/XVE census собирается только явно:
+
+```bash
+REBAR_PROBE=1 BLOBS=/path/to/blobs bash build.sh
+```
+
+Скрипт сначала воспроизводит обычный `unlock_v3r.efi`, затем создаёт отдельный
+`unlock_rebar_probe.efi`. Обычная release-цель не получает код или строки
+`RBPROBE`. Для записи используйте `out\flash-build.ps1 -RebarProbe`, а не
+`-AllowNewBuild`. `REBAR_EXPERIMENT=1` намеренно заблокирован до полного
+аппаратного RBPROBE-журнала и отдельного review write/rollback-пути.
+
 ### PE-секции
 
 Финальный `objcopy` обязан явно сохранять:

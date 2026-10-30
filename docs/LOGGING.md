@@ -40,6 +40,33 @@ GRTOPO END PRE
 release-логе без формата проверка остаётся необязательной. Эти строки
 доказывают только прочитанные значения MMIO, но не исправность скрытых блоков.
 
+### Read-only ReBAR probe
+
+Сборка `REBAR_PROBE=1` добавляет формат `RBPROBE format=1`. Диагностика не
+делает PCI/MMIO-записей и отсутствует вместе со строками маркеров в обычном
+release-бинарнике. Полный блок имеет однозначные границы и стадии:
+
+```text
+RBPROBE BEGIN format=1 read-only ...
+RBPROBE STATE ...
+RBPROBE BRIDGE ...
+RBPROBE APERTURE ...
+RBPROBE VERDICT ...
+RBPROBE END read-only
+```
+
+`STATE` содержит BAR1/BAR3, XVE `0x88724`, `0x88BBC`, `0x88BC0`, `0x88DCC`
+и стандартную PCIe Extended Capability Resizable BAR. `BRIDGE` фиксирует
+upstream bridge и его 64-битное prefetchable-окно. `APERTURE` перечисляет
+дескрипторы `EfiMemoryMappedIO` и отдельно сообщает, покрывает ли один из них
+8-ГиБ выровненный диапазон внутри окна моста.
+
+`VERDICT CANDIDATE` означает только согласованность capability и адресного
+окна; это не доказательство безопасной записи и не разрешение включать
+`REBAR_EXPERIMENT`. При наличии `RBPROBE BEGIN` проверяющий требует ровно по
+одному `BEGIN`, `BRIDGE`, `VERDICT`, `END` и полный набор стадий. В старых и
+release-логах без `RBPROBE` проверка остаётся необязательной.
+
 ## Жизненный цикл
 
 ```powershell

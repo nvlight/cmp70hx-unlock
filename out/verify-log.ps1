@@ -520,6 +520,28 @@ if ($gtFmt.Count -eq 0) {
     }
 }
 
+# --- 9e. read-only ReBAR/XVE/bridge census --------------------------------
+$rbBegin = [regex]::Matches($text, '(?m)^RBPROBE BEGIN format=1 read-only ')
+if ($rbBegin.Count -eq 0) {
+    Note "нет RBPROBE - read-only ReBAR probe в этой сборке выключен"
+} else {
+    $rbEnd = [regex]::Matches($text, '(?m)^RBPROBE END read-only\s*$')
+    $rbState = [regex]::Matches($text, '(?m)^RBPROBE STATE ')
+    $rbBridge = [regex]::Matches($text, '(?m)^RBPROBE BRIDGE ')
+    $rbAperture = [regex]::Matches($text, '(?m)^RBPROBE APERTURE ')
+    $rbVerdict = [regex]::Matches($text, '(?m)^RBPROBE VERDICT [^\r\n]+\r?$')
+    if ($rbBegin.Count -eq 1 -and $rbEnd.Count -eq 1 -and
+        $rbState.Count -ge 3 -and $rbBridge.Count -eq 1 -and
+        $rbAperture.Count -ge 2 -and $rbVerdict.Count -eq 1) {
+        Ok ("RBPROBE: полный read-only снимок, verdict='" + $rbVerdict[0].Value.TrimEnd() + "'")
+    } else {
+        Bad ("RBPROBE: неполный снимок (begin=" + $rbBegin.Count +
+             " end=" + $rbEnd.Count + " state=" + $rbState.Count +
+             " bridge=" + $rbBridge.Count + " aperture=" + $rbAperture.Count +
+             " verdict=" + $rbVerdict.Count + ")")
+    }
+}
+
 # --- 10. время прогона -----------------------------------------------------
 $last = [regex]::Matches($text, 'TIME  t=(\d+)ms')
 if ($last.Count -gt 0) { Note ("счётчик прогона: " + $last[$last.Count-1].Groups[1].Value + " мс") }

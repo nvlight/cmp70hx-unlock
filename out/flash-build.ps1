@@ -7,6 +7,7 @@
         powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -Stick X:
         powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -AllowNewBuild
         powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -TopologyProbe
+        powershell -ExecutionPolicy Bypass -File out\flash-build.ps1 -RebarProbe
 
     There is ONE binary. unlock_v3r.efi is both what you flash and the rollback;
     the compute-only build that used to sit next to it was retired 2026-10-01
@@ -53,7 +54,11 @@ param(
 
     # Flash unlock_grtopo.efi, the explicitly built read-only topology census.
     # Unlike -AllowNewBuild this does not replace or retire the release anchor.
-    [switch]$TopologyProbe
+    [switch]$TopologyProbe,
+
+    # Flash unlock_rebar_probe.efi, the explicitly built read-only ReBAR/XVE
+    # census. This never acknowledges or replaces the release anchor.
+    [switch]$RebarProbe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,8 +67,14 @@ $root   = Split-Path -Parent $PSScriptRoot
 $outDir = $PSScriptRoot              # this script lives in out\
 $srcDir = Join-Path $root 'src'
 
-$srcEfi = Join-Path $srcDir $(if ($TopologyProbe) { 'unlock_grtopo.efi' } else { 'unlock_v3r.efi' })
-$outEfi = Join-Path $outDir $(if ($TopologyProbe) { 'unlock_grtopo_CMP70HX.efi' } else { 'unlock_v3r_CMP70HX.efi' })
+if ($TopologyProbe -and $RebarProbe) {
+    throw '-TopologyProbe and -RebarProbe are mutually exclusive.'
+}
+$diagProbe = $TopologyProbe -or $RebarProbe
+$srcName = if ($TopologyProbe) { 'unlock_grtopo.efi' } elseif ($RebarProbe) { 'unlock_rebar_probe.efi' } else { 'unlock_v3r.efi' }
+$outName = if ($TopologyProbe) { 'unlock_grtopo_CMP70HX.efi' } elseif ($RebarProbe) { 'unlock_rebar_probe_CMP70HX.efi' } else { 'unlock_v3r_CMP70HX.efi' }
+$srcEfi = Join-Path $srcDir $srcName
+$outEfi = Join-Path $outDir $outName
 $gspRef = Join-Path $outDir 'gsp_ga10x.bin'
 
 # The single reference: the fingerprint of the source state we LAST proved on
@@ -124,6 +135,16 @@ if ($TopologyProbe) {
         @{ name = 'gtfuse'; text = 'GRTOPO %s FUSE'            },
         @{ name = 'gtgpc';  text = 'GRTOPO %s GPC%u'           },
         @{ name = 'gtend';  text = 'GRTOPO END %s'             }
+    )
+}
+if ($RebarProbe) {
+    $REQUIRED += @(
+        @{ name = 'rbbeg'; text = 'RBPROBE BEGIN format=1 read-only' },
+        @{ name = 'rbstate'; text = 'RBPROBE STATE' },
+        @{ name = 'rbbridge'; text = 'RBPROBE BRIDGE' },
+        @{ name = 'rbaperture'; text = 'RBPROBE APERTURE' },
+        @{ name = 'rbverdict'; text = 'RBPROBE VERDICT' },
+        @{ name = 'rbend'; text = 'RBPROBE END read-only' }
     )
 }
 # Strings that must NOT be there: the 90HX profile means the wrong card. The port
@@ -242,11 +263,11 @@ Test-Blob $outEfi 'out\'
 # ------------------------------------------------------------ 2. rollback check
 Say ""
 Say "[2/5] rollback/reference policy ..."
-if ($TopologyProbe) {
+if ($diagProbe) {
     if ($outMd5 -eq $REF_MD5) {
-        Die "topology probe unexpectedly equals the release md5; diagnostic code is missing."
+        Die "diagnostic probe unexpectedly equals the release md5; diagnostic code is missing."
     }
-    Good "explicit read-only topology experiment selected"
+    Good $(if ($TopologyProbe) { "explicit read-only topology experiment selected" } else { "explicit read-only ReBAR experiment selected" })
     Good "release rollback remains $REF_MD5 at git tag $ROLLBACK_TAG"
 } elseif ($outMd5 -eq $REF_MD5) {
     Good "matches $REF_MD5, verified on hardware twice"
@@ -336,7 +357,7 @@ Write-Host " FLASHED AND VERIFIED" -ForegroundColor Green
 Write-Host "================================================================================" -ForegroundColor Green
 Write-Host "  loader   $stickMd5  ($outSize bytes)"
 Write-Host "  out\     $outMd5"
-if ($TopologyProbe) {
+if ($diagProbe) {
     Write-Host "  rollback remains the release file at git tag $ROLLBACK_TAG" -ForegroundColor Green
     Write-Host "  experiment is NOT a new rollback anchor" -ForegroundColor Yellow
 } elseif ($outMd5 -eq $REF_MD5) {
@@ -358,6 +379,11 @@ if ($TopologyProbe) {
     Write-Host "    GRTOPO BEGIN/END PRE with exactly GPC0..5" -ForegroundColor Yellow
     Write-Host "    GRTOPO BEGIN/END POST with exactly GPC0..5" -ForegroundColor Yellow
     Write-Host "  out\verify-log.ps1 checks both blocks strictly." -ForegroundColor Yellow
+} elseif ($RebarProbe) {
+    Write-Host ""
+    Write-Host "  ReBAR census acceptance additionally requires:" -ForegroundColor Yellow
+    Write-Host "    one complete RBPROBE BEGIN/STATE/BRIDGE/APERTURE/VERDICT/END block" -ForegroundColor Yellow
+    Write-Host "  out\verify-log.ps1 checks the block strictly." -ForegroundColor Yellow
 } elseif ($outMd5 -ne $REF_MD5) {
     Write-Host ""
     Write-Host "  This build differs from the reference md5. Check these lines in the log" -ForegroundColor Yellow

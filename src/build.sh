@@ -239,6 +239,25 @@ if [ "${GR_TOPOLOGY:-0}" = "1" ]; then
                                -DCHIP_SIZE_SCAN=1 -DFX_DIAG_GR_TOPOLOGY=1
 fi
 
+# Read-only GA104 Resizable BAR/XVE/bridge aperture census. The ordinary
+# release target above is still built first and receives neither this code nor
+# its RBPROBE strings.
+#
+#   REBAR_PROBE=1 BLOBS=/path/to/blobs bash build.sh
+if [ "${REBAR_PROBE:-0}" = "1" ]; then
+    build_one unlock_rebar_probe -DRELEASE_BUILD -DMULTI_CARD -DPCIE_GEN2_REJOIN \
+                                 -DFULL_NOGEN2 -DGEN2_LINK_TRY -DRENDER_MASKS \
+                                 -DCHIP_SIZE_SCAN=1 -DREBAR_PROBE=1
+fi
+
+# A write-capable target is intentionally unavailable until a complete CMP
+# 70HX RBPROBE log demonstrates the GA104 capability layout and a safe 8-GiB
+# host aperture. Do not turn this into an alias for -DREBAR_EXPERIMENT.
+if [ "${REBAR_EXPERIMENT:-0}" = "1" ]; then
+    echo "ERROR: REBAR_EXPERIMENT is blocked pending a recorded CMP 70HX RBPROBE PASS" >&2
+    exit 2
+fi
+
 # ---- ОПЦИОНАЛЬНАЯ МАТРИЦА (по умолчанию выключена, 2026-10-06) --------------
 if [ -n "$RENDER_MATRIX" ]; then
 #

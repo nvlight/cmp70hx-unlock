@@ -840,6 +840,20 @@ fx_pr_console_dump(void)
 #define FX_DIAG_GR_TOPOLOGY 0
 #endif
 
+/* Read-only Resizable BAR/XVE census. Keep every byte (including marker
+ * strings) out of the release image unless the dedicated diagnostic target
+ * is requested. A write experiment is deliberately fail-closed until a
+ * complete RBPROBE hardware log proves the GA104 layout and host aperture. */
+#ifndef REBAR_PROBE
+#define REBAR_PROBE 0
+#endif
+#ifndef REBAR_EXPERIMENT
+#define REBAR_EXPERIMENT 0
+#endif
+#if REBAR_EXPERIMENT
+#error "REBAR_EXPERIMENT is blocked until a CMP 70HX RBPROBE PASS is recorded"
+#endif
+
 #if FX_DIAG_GR_TOPOLOGY
 #define REG_FUSE_EN_SW_OVERRIDE  0x00820040UL
 #define REG_FUSE_DIS_SW_OVR      0x00820084UL
@@ -1641,6 +1655,226 @@ find_bridge_to(UINTN target_bus, UINTN *ob, UINTN *od, UINTN *of)
                 }
     return FALSE;
 }
+
+#if REBAR_PROBE
+#define PCI_EXT_CAP_ID_REBAR       0x0015U
+#define PCI_REBAR_CAP              0x04U
+#define PCI_REBAR_CTRL             0x08U
+#define PCI_REBAR_CAP_SIZES        0xFFFFFFF0U
+#define PCI_REBAR_CTRL_BAR_IDX     0x00000007U
+#define PCI_REBAR_CTRL_NBAR_MASK   0x000000E0U
+#define PCI_REBAR_CTRL_NBAR_SHIFT  5U
+#define PCI_REBAR_CTRL_SIZE_MASK   0x00001F00U
+#define PCI_REBAR_CTRL_SIZE_SHIFT  8U
+#define PCI_REBAR_SIZE_8G          13U /* 1 MiB << 13 */
+
+static UINTN
+rebar_find_ext_cap(UINT16 wanted)
+{
+    UINTN pos = 0x100, guard = 0;
+    while (pos >= 0x100 && pos < 0x1000 && guard++ < 256) {
+        UINT32 hdr = cfg_read32(pos);
+        UINTN next;
+        if (hdr == 0 || hdr == 0xFFFFFFFFU) return 0;
+        if ((hdr & 0xFFFFU) == wanted) return pos;
+        next = (hdr >> 20) & 0xFFFU;
+        if (next < 0x100 || (next & 3U) || next == pos) return 0;
+        pos = next;
+    }
+    return 0;
+}
+
+static UINT64
+rebar_bar_base(UINTN reg, UINT32 *loOut, UINT32 *hiOut, BOOLEAN *is64Out)
+{
+    UINT32 lo = cfg_read32(reg), hi = 0;
+    BOOLEAN is64 = ((lo & 1U) == 0) && ((lo & 6U) == 4U);
+    if (is64) hi = cfg_read32(reg + 4);
+    if (loOut) *loOut = lo;
+    if (hiOut) *hiOut = hi;
+    if (is64Out) *is64Out = is64;
+    if (lo & 1U) return 0;
+    return ((UINT64)hi << 32) | (UINT64)(lo & ~0xFU);
+}
+
+/* The measured CMP 70HX host uses 00:1b.0.  The shared Gen2 helper's short
+ * candidate list covers 00:01/1c but not 1b and otherwise falls back to a
+ * full 256-bus scan.  Probe bus 0 exhaustively first so this read-only census
+ * does not add minutes merely because the bridge is at device 27. */
+static BOOLEAN
+rebar_find_upstream(UINTN targetBus, UINTN *ob, UINTN *od, UINTN *of)
+{
+    UINTN ri, d, f;
+    rb_collect();
+    for (ri = 0; ri < gRbAllN; ri++)
+        for (d = 0; d < 32; d++)
+            for (f = 0; f < 8; f++) {
+                UINT32 id = pci_cfg_rd_idx((INTN)ri, 0, d, f, 0x00);
+                UINT32 ht, buses;
+                if (id == 0 || id == 0xFFFFFFFFU) continue;
+                ht = pci_cfg_rd_idx((INTN)ri, 0, d, f, 0x0C);
+                if (((ht >> 16) & 0x7FU) != 1U) continue;
+                buses = pci_cfg_rd_idx((INTN)ri, 0, d, f, 0x18);
+                if (((buses >> 8) & 0xFFU) != targetBus) continue;
+                *ob = 0; *od = d; *of = f;
+                gBrIdx = (INTN)ri;
+                return TRUE;
+            }
+    return find_bridge_to(targetBus, ob, od, of);
+}
+
+/* The UEFI memory map describes reserved/assigned MMIO, not arbitrary free
+ * PCI address space. We therefore report descriptors and only call a range
+ * a placement candidate when one 8-GiB aligned span is already covered by an
+ * EfiMemoryMappedIO descriptor inside the upstream prefetch window. */
+static BOOLEAN
+rebar_probe_memory_map(UINT64 brBase, UINT64 brLimit, UINT64 *candidate)
+{
+    EFI_STATUS st;
+    UINTN mapSize = 0, mapKey = 0, descSize = 0;
+    UINT32 descVersion = 0;
+    EFI_MEMORY_DESCRIPTOR *map = NULL;
+    UINTN off, shown = 0, total = 0;
+    BOOLEAN found = FALSE;
+
+    st = uefi_call_wrapper(BS->GetMemoryMap, 5, &mapSize, map, &mapKey,
+                           &descSize, &descVersion);
+    if (st != EFI_BUFFER_TOO_SMALL || descSize == 0) {
+        ulogf(L"RBPROBE APERTURE memmap_unavailable status=0x%llx\n",
+              (UINT64)st);
+        return FALSE;
+    }
+    mapSize += 4 * descSize;
+    if (EFI_ERROR(uefi_call_wrapper(BS->AllocatePool, 3, EfiBootServicesData,
+                                    mapSize, (VOID **)&map)) || !map) {
+        ulogf(L"RBPROBE APERTURE memmap_allocation_failed bytes=0x%llx\n",
+              (UINT64)mapSize);
+        return FALSE;
+    }
+    st = uefi_call_wrapper(BS->GetMemoryMap, 5, &mapSize, map, &mapKey,
+                           &descSize, &descVersion);
+    if (EFI_ERROR(st)) {
+        ulogf(L"RBPROBE APERTURE memmap_read_failed status=0x%llx\n",
+              (UINT64)st);
+        uefi_call_wrapper(BS->FreePool, 1, map);
+        return FALSE;
+    }
+    for (off = 0; off + descSize <= mapSize; off += descSize) {
+        EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)map + off);
+        UINT64 start, bytes, end, aligned;
+        if (d->Type != EfiMemoryMappedIO || d->NumberOfPages == 0) continue;
+        total++;
+        start = d->PhysicalStart;
+        bytes = LShiftU64(d->NumberOfPages, 12);
+        end = (bytes - 1 > ~start) ? ~0ULL : start + bytes - 1;
+        if (shown++ < 32)
+            ulogf(L"RBPROBE APERTURE efi_mmio start=0x%llx end=0x%llx pages=0x%llx\n",
+                  start, end, d->NumberOfPages);
+        if (found || brLimit < brBase) continue;
+        aligned = (start + 0x1FFFFFFFFULL) & ~0x1FFFFFFFFULL;
+        if (aligned < start || aligned < brBase)
+            aligned = (brBase + 0x1FFFFFFFFULL) & ~0x1FFFFFFFFULL;
+        if (aligned >= start && aligned >= brBase &&
+            aligned <= end && aligned <= brLimit &&
+            end - aligned >= 0x1FFFFFFFFULL &&
+            brLimit - aligned >= 0x1FFFFFFFFULL) {
+            *candidate = aligned;
+            found = TRUE;
+        }
+    }
+    ulogf(L"RBPROBE APERTURE efi_mmio_total=%d logged=%d descriptor_candidate=%d base=0x%llx\n",
+          (INTN)total, (INTN)(shown > 32 ? 32 : shown), found ? 1 : 0,
+          found ? *candidate : 0ULL);
+    uefi_call_wrapper(BS->FreePool, 1, map);
+    return found;
+}
+
+static void
+rebar_probe_run(void)
+{
+    UINT32 cmd = cfg_read32(0x04);
+    UINT32 b1lo, b1hi, b3lo, b3hi;
+    BOOLEAN b1is64, b3is64;
+    UINT64 bar1 = rebar_bar_base(0x14, &b1lo, &b1hi, &b1is64);
+    UINT64 bar3 = rebar_bar_base(0x1C, &b3lo, &b3hi, &b3is64);
+    UINTN ext = rebar_find_ext_cap(PCI_EXT_CAP_ID_REBAR);
+    UINTN bb = 0, bd = 0, bf = 0, entries = 0, i;
+    UINT32 bar1Sizes = 0, bar1Selector = 0xFFFFFFFFU;
+    BOOLEAN haveBridge = FALSE, bridge64 = FALSE, mapCandidate = FALSE;
+    UINT64 brBase = 0, brLimit = 0, candidate = 0;
+
+    ulogf(L"RBPROBE BEGIN format=1 read-only bdf=%02x:%02x.%x\n",
+          (INTN)gBus, (INTN)gDev, (INTN)gFn);
+    ulogf(L"RBPROBE STATE command=0x%08x bar1=0x%llx raw=%08x/%08x type64=%d bar3=0x%llx raw=%08x/%08x type64=%d\n",
+          cmd, bar1, b1lo, b1hi, b1is64 ? 1 : 0,
+          bar3, b3lo, b3hi, b3is64 ? 1 : 0);
+    ulogf(L"RBPROBE STATE xve88724=0x%08x xve88bbc=0x%08x xve88bc0=0x%08x xve88dcc=0x%08x\n",
+          mmio_read32(0x00088724U), mmio_read32(0x00088BBCU),
+          mmio_read32(0x00088BC0U), mmio_read32(0x00088DCCU));
+
+    if (ext) {
+        UINT32 ctrl0 = cfg_read32(ext + PCI_REBAR_CTRL);
+        entries = ((ctrl0 & PCI_REBAR_CTRL_NBAR_MASK) >>
+                   PCI_REBAR_CTRL_NBAR_SHIFT) + 1U;
+        if (entries > 6) entries = 6;
+        for (i = 0; i < entries; i++) {
+            UINT32 cap = cfg_read32(ext + PCI_REBAR_CAP + i * 8U);
+            UINT32 ctrl = cfg_read32(ext + PCI_REBAR_CTRL + i * 8U);
+            UINT32 idx = ctrl & PCI_REBAR_CTRL_BAR_IDX;
+            UINT32 selector = (ctrl & PCI_REBAR_CTRL_SIZE_MASK) >>
+                              PCI_REBAR_CTRL_SIZE_SHIFT;
+            ulogf(L"RBPROBE STATE rebar_entry=%d bar=%d sizes=0x%08x selector=%d ctrl=0x%08x\n",
+                  (INTN)i, (INTN)idx, cap & PCI_REBAR_CAP_SIZES,
+                  (INTN)selector, ctrl);
+            if (idx == 1U) {
+                bar1Sizes = cap & PCI_REBAR_CAP_SIZES;
+                bar1Selector = selector;
+            }
+        }
+    } else {
+        ulogf(L"RBPROBE STATE rebar_cap=absent\n");
+    }
+
+    haveBridge = rebar_find_upstream(gBus, &bb, &bd, &bf);
+    if (haveBridge) {
+        UINT32 buses = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, 0x18);
+        UINT32 pref = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, 0x24);
+        UINT32 prefBaseHi = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, 0x28);
+        UINT32 prefLimitHi = pci_cfg_rd_idx(gBrIdx, bb, bd, bf, 0x2C);
+        bridge64 = ((pref & 0xFU) == 1U) && (((pref >> 16) & 0xFU) == 1U);
+        brBase = ((UINT64)prefBaseHi << 32) | ((UINT64)(pref & 0xFFF0U) << 16);
+        brLimit = ((UINT64)prefLimitHi << 32) |
+                  ((UINT64)((pref >> 16) & 0xFFF0U) << 16) | 0xFFFFFULL;
+        ulogf(L"RBPROBE BRIDGE bdf=%02x:%02x.%x rb=%d buses=0x%08x pref=0x%08x upper=%08x/%08x type64=%d base=0x%llx limit=0x%llx\n",
+              (INTN)bb, (INTN)bd, (INTN)bf, gBrIdx, buses, pref, prefBaseHi,
+              prefLimitHi, bridge64 ? 1 : 0, brBase, brLimit);
+    } else {
+        ulogf(L"RBPROBE BRIDGE not_found target_bus=%02x\n", (INTN)gBus);
+    }
+
+    mapCandidate = rebar_probe_memory_map(brBase, brLimit, &candidate);
+    ulogf(L"RBPROBE APERTURE bar1_supports_8g=%d current_selector=%d bridge_span_8g=%d map_candidate=%d\n",
+          (bar1Sizes & (1U << PCI_REBAR_SIZE_8G)) ? 1 : 0,
+          (INTN)bar1Selector,
+          (haveBridge && bridge64 && brLimit >= brBase &&
+           brLimit - brBase >= 0x1FFFFFFFFULL) ? 1 : 0,
+          mapCandidate ? 1 : 0);
+
+    if (!ext || bar1Selector == 0xFFFFFFFFU)
+        ulogf(L"RBPROBE VERDICT REJECT no_bar1_rebar_capability\n");
+    else if (!(bar1Sizes & (1U << PCI_REBAR_SIZE_8G)))
+        ulogf(L"RBPROBE VERDICT REJECT bar1_8g_not_advertised\n");
+    else if (!haveBridge || !bridge64 || brLimit < brBase ||
+             brLimit - brBase < 0x1FFFFFFFFULL)
+        ulogf(L"RBPROBE VERDICT REJECT upstream_64bit_prefetch_window_too_small\n");
+    else if (!mapCandidate)
+        ulogf(L"RBPROBE VERDICT INCONCLUSIVE no_efi_mmio_descriptor_for_8g\n");
+    else
+        ulogf(L"RBPROBE VERDICT CANDIDATE structure_and_host_aperture_only base=0x%llx\n",
+              candidate);
+    ulogf(L"RBPROBE END read-only\n");
+}
+#endif /* REBAR_PROBE */
 
 /* Выделение страниц ниже 4ГБ для DMA.
  * ВАЖНО: для AllocateMaxAddress входное значение *Phys = МАКСИМАЛЬНЫЙ адрес,
@@ -14550,6 +14784,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     gBar0Base = cfg_read32(0x10) & ~0xF;
     Print(L"BAR0 = 0x%08x\n", gBar0Base);
     enable_mem_decode();
+#if REBAR_PROBE
+    rebar_probe_run();
+#endif
 #if FX_DIAG_GR_TOPOLOGY
     gr_topology_snapshot(L"PRE");
 #endif
